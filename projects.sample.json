@@ -1,0 +1,10 @@
+{
+    "contoh": {
+        "id": "contoh",
+        "name": "Contoh",
+        "path": "C:/xampp/htdocs/contoh",
+        "template_tour": "",
+        "deploy_url": "",
+        "assets_dir": "assets"
+    }
+}

@@ -1,0 +1,11 @@
+# data runtime & rahasia (jangan pernah di-commit)
+data/*
+!data/.gitkeep
+projects.json
+cms-settings.json
+templates/
+*.bak
+*.log
+node_modules/
+.skin-backups/
+.history/
