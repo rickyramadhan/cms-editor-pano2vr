@@ -40,7 +40,6 @@ $e = static fn(mixed $v): string => htmlspecialchars((string) $v, ENT_QUOTES, 'U
 ?><!doctype html>
 <html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <title><?= $setup ? 'Penyiapan Admin' : 'Masuk' ?> — CMS Virtual Tour</title>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/auth.css?v=<?= $e((string) @filemtime(__DIR__ . '/assets/css/auth.css')) ?>">
 </head><body class="auth-page">
 <main class="auth-card">

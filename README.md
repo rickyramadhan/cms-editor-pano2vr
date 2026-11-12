@@ -37,20 +37,3 @@ CMS web (PHP, tanpa database) untuk mengelola banyak virtual tour hasil export *
 
 ## Status
 Dikembangkan untuk pipeline virtual tour GoVirtual. Belum ada: login dua langkah, kunci sunting bersamaan, pengujian otomatis.
-
-## Integrasi AI Guide Hub (tab "AI Guide Hub")
-
-CMS menjadi pusat kendali: satu lokasi = satu identitas (id folder tur) di CMS, Smart Kit, dan AI Guide Hub
-(Hub memakai slug yang sama, `_` → `-`).
-
-```
-CMS (nama + welcome text)  ──sync──►  Hub knowledge.json (entri cms:location) + jawaban baku G03
-CMS ──register──►  Hub (daftar tour, impor pano, konten awal)
-CMS ──publish──►   Hub build paket ──► <folder tur>/govirtual-ai  ◄── Jali (smart-kit/companion.js) memanggil tour-chat.php
-```
-
-- Pengaturan per project: `projects.json › aiHub` `{ path, url, city, cityName, php }` (diisi dari tab AI Guide Hub).
-- CMS **tidak** menulis ke database Hub; ia menjalankan `ai-guide-hub/tools/cms-bridge.php` (CLI, server yang sama).
-- Langkah: **Daftar** → **Sinkron** → **Terbitkan** (`index.html` tur dicadangkan ke `.skin-backups` sebelum Hub menyisipkan blok AI).
-- Profil Smart Kit menyimpan tautan balik di `content.json › REGION.aiGuide { hubSlug, hubCity }`.
-- Hanya admin yang dapat mengubah pengaturan dan menjalankan langkah. Teks yang diubah di CMS perlu **Sinkron** (+ **Terbitkan**) ulang.

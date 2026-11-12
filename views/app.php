@@ -9,9 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/cms-components.css?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/css/cms-components.css')) ?>">
     <link rel="stylesheet" href="assets/css/smart-hub.css?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/css/smart-hub.css')) ?>">
-    <link rel="stylesheet" href="assets/css/ai-hub.css?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/css/ai-hub.css')) ?>">
     <link rel="stylesheet" href="assets/css/cms-redesign.css?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/css/cms-redesign.css')) ?>">
-    <link rel="stylesheet" href="assets/css/cms-refine.css?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/css/cms-refine.css')) ?>">
     <script src="assets/vendor/lucide.min.js" defer></script>
     <script defer>document.addEventListener('DOMContentLoaded',()=>window.lucide?.createIcons());</script>
 </head>
@@ -20,22 +18,21 @@
     <aside class="cms-navigation" id="cmsNavigation" aria-label="Navigasi utama">
         <div class="cms-brand"><span class="cms-brand-mark" aria-hidden="true">G</span><div><strong>Govirtual</strong><small>Tour Manager</small></div><button type="button" id="closeCmsNavigation" aria-label="Tutup menu"><i data-lucide="x" aria-hidden="true"></i></button></div>
         <nav class="main-tabs">
-            <?php if ($cmsRuntimeReady): ?><a class="<?= $activeTab === 'dashboard' ? 'active' : '' ?>" href="?tab=dashboard"><span aria-hidden="true"><i data-lucide="layout-dashboard"></i></span>Dashboard</a><?php endif; ?>
+            <a class="<?= $activeTab === 'dashboard' ? 'active' : '' ?>" href="?tab=dashboard"><span aria-hidden="true"><i data-lucide="layout-dashboard"></i></span>Dashboard</a>
             <span class="cms-nav-label">Workspace</span>
             <a class="<?= $activeTab === 'smart' ? 'active' : '' ?>" href="?tab=smart"><span aria-hidden="true"><i data-lucide="blocks"></i></span>Smart Hub</a>
-            <a class="<?= $activeTab === 'aihub' ? 'active' : '' ?>" href="?tab=aihub"><span aria-hidden="true"><i data-lucide="bot"></i></span>AI Guide Hub</a>
-            <?php if ($cmsRuntimeReady): ?><a class="<?= in_array($activeTab, ['lokasi', 'voice', 'video', 'optimizer', 'audit', 'object', 'config', 'skin'], true) ? 'active' : '' ?>" href="?tab=lokasi&lokasi=<?= e($selectedId) ?>"><span aria-hidden="true"><i data-lucide="settings-2"></i></span>Configuration</a><?php endif; ?>
+            <a class="<?= in_array($activeTab, ['lokasi', 'voice', 'video', 'optimizer', 'audit', 'object', 'config', 'skin'], true) ? 'active' : '' ?>" href="?tab=lokasi&lokasi=<?= e($selectedId) ?>"><span aria-hidden="true"><i data-lucide="settings-2"></i></span>Configuration</a>
             <span class="cms-nav-label">Media &amp; Tools</span>
-            <?php if ($cmsRuntimeReady): ?><a class="<?= in_array($activeTab, ['languages', 'translations'], true) ? 'active' : '' ?>" href="?tab=languages"><span aria-hidden="true"><i data-lucide="languages"></i></span>Bahasa &amp; Terjemahan</a><?php endif; ?>
-            <?php if ($cmsRuntimeReady): ?><a class="<?= $activeTab === 'video360' ? 'active' : '' ?>" href="?tab=video360"><span aria-hidden="true"><i data-lucide="circle-play"></i></span>Video 360</a><?php endif; ?>
+            <a class="<?= in_array($activeTab, ['languages', 'translations'], true) ? 'active' : '' ?>" href="?tab=languages"><span aria-hidden="true"><i data-lucide="languages"></i></span>Bahasa &amp; Terjemahan</a>
+            <a class="<?= $activeTab === 'video360' ? 'active' : '' ?>" href="?tab=video360"><span aria-hidden="true"><i data-lucide="circle-play"></i></span>Video 360</a>
             <a class="<?= $activeTab === 'loading' ? 'active' : '' ?>" href="?tab=loading"><span aria-hidden="true"><i data-lucide="gauge"></i></span>Optimasi Loading</a>
-            <?php if ($cmsRuntimeReady): ?><a class="<?= $activeTab === 'custom' ? 'active' : '' ?>" href="?tab=custom"><span aria-hidden="true"><i data-lucide="code-2"></i></span>Custom CSS</a><?php endif; ?>
+            <a class="<?= $activeTab === 'custom' ? 'active' : '' ?>" href="?tab=custom"><span aria-hidden="true"><i data-lucide="code-2"></i></span>Custom CSS</a>
         </nav>
         <?php $cmsMe = cmsCurrentUser(); ?><div class="cms-userbox"><span><i data-lucide="circle-user-round" aria-hidden="true"></i> <?= e($cmsMe['name'] ?? $cmsMe['username'] ?? '') ?></span><small><?= e(CMS_ROLES[$cmsMe['role'] ?? ''] ?? '') ?></small><a href="users.php"><?= cmsIsAdmin() ? 'Pengguna' : 'Akun saya' ?></a><a href="logout.php">Keluar</a></div><div class="cms-navigation-footer"><small>Project aktif</small><strong><?= e($activeProject['name']) ?></strong><span><?= e($projectRoot) ?></span><a href="projects.php"><i data-lucide="repeat-2" aria-hidden="true"></i> Ganti project</a></div>
     </aside>
     <div class="cms-navigation-scrim" id="cmsNavigationScrim" hidden></div>
     <main class="shell">
-    <?php $tabLabels = ['dashboard'=>'Dashboard','config'=>'Konfigurasi Global','languages'=>'Manajemen Bahasa','translations'=>'Translation Center','lokasi'=>'Data Lokasi','voice'=>'Voice Over','video'=>'Video','optimizer'=>'Media Optimizer','audit'=>'Audit','object'=>'Object Informasi','video360'=>'Video 360','custom'=>'Custom CSS','skin'=>'Template Skin','smart'=>'Smart Hub','aihub'=>'AI Guide Hub','loading'=>'Optimasi Loading']; $pageLabel = $tabLabels[$activeTab] ?? 'Data Lokasi'; ?>
+    <?php $tabLabels = ['dashboard'=>'Dashboard','config'=>'Konfigurasi Global','languages'=>'Manajemen Bahasa','translations'=>'Translation Center','lokasi'=>'Data Lokasi','voice'=>'Voice Over','video'=>'Video','optimizer'=>'Media Optimizer','audit'=>'Audit','object'=>'Object Informasi','video360'=>'Video 360','custom'=>'Custom CSS','skin'=>'Template Skin','smart'=>'Smart Hub','loading'=>'Optimasi Loading']; $pageLabel = $tabLabels[$activeTab] ?? 'Data Lokasi'; ?>
     <header class="topbar">
         <button type="button" class="cms-menu-button" id="openCmsNavigation" aria-controls="cmsNavigation" aria-expanded="false" aria-label="Buka menu"><i data-lucide="menu" aria-hidden="true"></i></button>
         <div class="cms-page-heading"><nav class="cms-breadcrumbs" aria-label="Breadcrumb"><a href="?tab=dashboard">CMS Virtual Tour</a><span>/</span><span aria-current="page"><?= e($pageLabel) ?></span></nav><h1><?= e($pageLabel) ?></h1><small><?= e($activeProject['name']) ?></small></div>
@@ -45,7 +42,7 @@
     <?php if ($message !== ''): ?><div class="alert success"><?= e($message) ?></div><?php endif; ?>
     <?php if ($error !== ''): ?><div class="alert error"><?= e($error) ?></div><?php endif; ?>
 
-    <?php if (!in_array($activeTab, ['dashboard', 'languages', 'translations', 'custom', 'video360', 'smart', 'aihub', 'loading'], true)): ?>
+    <?php if (!in_array($activeTab, ['dashboard', 'languages', 'translations', 'custom', 'video360', 'smart', 'loading'], true)): ?>
     <div class="layout">
         <aside class="sidebar card">
             <div class="sidebar-title"><div><h2>Lokasi</h2><small><?= count($detectedTours) ?> tur terdeteksi</small></div><a href="?tab=lokasi&lokasi=baru" class="add">＋ Baru</a></div>
@@ -266,7 +263,6 @@
                 <?php if ($selectedId !== 'baru' && isset($database[$selectedId])): ?>
                     <button class="danger" name="action" value="delete" formnovalidate data-cute-confirm data-confirm-icon="🗺️" data-confirm-title="Hapus lokasi ini?" data-confirm-message="Data lokasi akan dihapus dari database CMS. Pastikan lokasinya memang sudah tidak digunakan." data-confirm-action="Ya, hapus lokasi">Hapus lokasi</button>
                 <?php endif; ?>
-                <a class="ah-btn ah-btn--ghost" href="?tab=aihub" title="Sinkronkan nama &amp; teks sambutan ke AI Guide Hub setelah disimpan">Hubungkan ke AI Guide Hub</a>
                 <button class="save" name="action" value="save_location">Simpan data lokasi</button>
             </div>
         </form>
@@ -348,8 +344,6 @@
         <?php require __DIR__ . '/optimizer.php'; ?>
     <?php elseif ($activeTab === 'smart'): ?>
         <?php if ($smartHubState !== null) require __DIR__ . '/smart.php'; ?>
-    <?php elseif ($activeTab === 'aihub'): ?>
-        <?php if ($aiHubState !== null) require __DIR__ . '/aihub.php'; ?>
     <?php elseif ($activeTab === 'custom'): ?>
         <form method="post" class="editor custom-css-editor">
             <input type="hidden" name="csrf" value="<?= e($_SESSION['cms_csrf']) ?>">
@@ -473,7 +467,7 @@
             <?php endif; ?>
         </section>
     <?php endif; ?>
-    <?php if (!in_array($activeTab, ['dashboard', 'languages', 'translations', 'custom', 'video360', 'smart', 'aihub', 'loading'], true)): ?>
+    <?php if (!in_array($activeTab, ['dashboard', 'languages', 'translations', 'custom', 'video360', 'smart', 'loading'], true)): ?>
         </div>
     </div>
     <?php endif; ?>
@@ -864,7 +858,7 @@ if (bulkLocationCheckboxes.length) {
     }));
 
     const auditModal = document.getElementById('auditAllModal');
-    const auditData = <?= json_encode(array_map(static fn(array $tour): array => ['id'=>$tour['id'],'name'=>$tour['name'],'score'=>$tour['score'],'missing'=>$tour['missing'] ?? []], $dashboardTours), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    const auditData = <?= json_encode(array_map(static fn(array $tour): array => ['id'=>$tour['id'],'name'=>$tour['name'],'score'=>$tour['score'],'missing'=>$tour['missing']], $dashboardTours), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     const renderAuditAll = () => {
         const query=document.getElementById('auditAllSearch').value.trim().toLowerCase(),filter=document.getElementById('auditAllFilter').value;
         const results=auditData.filter(item=>(filter==='all'||(filter==='complete'?item.score===100:item.score<100))&&(!query||(item.name+' '+item.id+' '+item.missing.join(' ')).toLowerCase().includes(query)));
