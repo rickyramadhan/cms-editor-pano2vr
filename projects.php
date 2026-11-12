@@ -13,7 +13,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $registry = projectRegistry();
             if (!isset($registry[$id]) || !cmsCanAccessProject($id)) throw new RuntimeException('Project tidak ditemukan.');
             $assetsDirectory = projectRuntimeDirectory($registry[$id]);
-            if (!is_file($assetsDirectory . '/global-database.js')) throw new RuntimeException('Project belum memiliki asset CMS. Gunakan tombol Terapkan asset pada kartu project.');
+            if (!is_file($assetsDirectory . '/global-database.js') && !is_file($assetsDirectory . '/main-loader/global-database.js')) {
+                // Tanpa runtime CMS: tetap dapat dikelola lewat AI Guide Hub / Smart Hub.
+                $_SESSION['cms_project'] = $id;
+                header('Location: index.php?project=' . rawurlencode($id) . '&tab=aihub'); exit;
+            }
         } elseif (($_POST['action'] ?? '') === 'install_assets') {
             $id = (string) ($_POST['project_id'] ?? '');
             $result = installProjectAssets($id, (string) ($_POST['asset_strategy'] ?? ''));

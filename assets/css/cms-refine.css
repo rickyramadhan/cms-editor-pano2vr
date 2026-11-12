@@ -1,0 +1,99 @@
+/* cms-refine.css — lapisan penyempurna tampilan CMS. Dimuat paling akhir (setelah cms-redesign.css).
+   Tujuan: palet tenang (warna jenuh dikurangi, aksen hanya untuk aksi), hierarki bersih, gerak halus.
+   Tidak mengubah route, field, atau perilaku. Cabut tautan css ini di views/app.php untuk kembali ke tampilan sebelumnya. */
+
+:root {
+  --ui-bg: #f6f7f9;
+  --ui-surface: #ffffff;
+  --ui-text: #1c2530;
+  --ui-muted: #6c7684;
+  --ui-line: #e6e8ed;
+  --ui-accent: #2f7f74;
+  --ui-accent-strong: #256a61;
+  --ui-accent-soft: #ecf3f1;
+  /* Tint pastel warna-warni disatukan menjadi satu wash netral: warna hanya dipakai untuk makna (status). */
+  --ui-blue: #f1f3f6; --ui-mint: #f1f3f6; --ui-pink: #f1f3f6; --ui-lavender: #f1f3f6; --ui-peach: #f1f3f6;
+  --ui-danger: #b4473f;
+  --ui-radius: 14px;
+  --ui-radius-lg: 18px;
+  --ui-shadow: 0 1px 2px rgba(20, 28, 40, .04), 0 8px 24px rgba(20, 28, 40, .04);
+  --ui-shadow-float: 0 18px 48px rgba(20, 28, 40, .14);
+  --ui-ease: cubic-bezier(.22, 1, .36, 1);
+  --success: #2f7d62; --success-soft: #eaf4ef; --danger: #b4473f; --danger-soft: #fbeeec;
+}
+html, body { background: var(--ui-bg); }
+::selection { background: var(--ui-accent-soft); color: var(--ui-accent-strong); }
+:focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
+input[type=checkbox], input[type=radio] { accent-color: var(--ui-accent); }
+* { scrollbar-width: thin; scrollbar-color: #c9ced7 transparent; }
+
+/* permukaan: tanpa blur dekoratif, bayangan tipis berlapis */
+.card, .section, .dashboard-list, .sh-card, .sh-preview { background: var(--ui-surface); backdrop-filter: none; box-shadow: var(--ui-shadow); border-color: var(--ui-line); }
+.topbar, .dashboard-heading, .cms-navigation { backdrop-filter: none; }
+.topbar { background: var(--ui-bg); }
+.dashboard-heading { background: var(--ui-surface); }
+
+/* hapus hiasan: kicker di atas judul dan lencana nomor bagian */
+.eyebrow { display: none !important; }
+.section-heading .step, .config-hero-icon { display: none !important; }
+
+/* tombol */
+.save, .cms-create-action { background: var(--ui-accent) !important; box-shadow: 0 1px 2px rgba(20, 28, 40, .12) !important; transition: background-color .18s var(--ui-ease), box-shadow .18s var(--ui-ease), transform .18s var(--ui-ease); }
+.save:hover, .cms-create-action:hover { background: var(--ui-accent-strong) !important; box-shadow: 0 8px 18px rgba(37, 106, 97, .22) !important; transform: translateY(-1px); }
+.translate, .preview { transition: background-color .18s var(--ui-ease), border-color .18s var(--ui-ease), transform .18s var(--ui-ease); }
+.translate:hover, .preview:hover { background: #f6f7f9 !important; border-color: #cfd4dc !important; }
+button:active:not(:disabled), .save:active, .translate:active, .preview:active, .cms-create-action:active { transform: scale(.98); }
+.danger { background: var(--danger-soft) !important; border-color: #efd0cc !important; }
+
+/* formulir */
+input:focus, select:focus, textarea:focus { border-color: var(--ui-accent) !important; box-shadow: 0 0 0 4px rgba(47, 127, 116, .12) !important; }
+input:not([type=checkbox]):not([type=radio]), select, textarea { border-color: #dcdfe5 !important; }
+
+/* sidebar: satu permukaan gelap yang tenang; item aktif hanya sedikit lebih terang */
+.cms-navigation { background: #1b232d !important; border-color: rgba(255, 255, 255, .06) !important; box-shadow: 0 20px 56px rgba(20, 28, 40, .18) !important; }
+.main-tabs a { color: #b9c3cf; transition: background-color .18s var(--ui-ease), color .18s var(--ui-ease); }
+.main-tabs a:hover:not(.active) { background: rgba(255, 255, 255, .05); color: #fff; }
+.main-tabs a.active { background: rgba(255, 255, 255, .1) !important; box-shadow: none !important; color: #fff !important; }
+.main-tabs a.active > span { background: var(--ui-accent) !important; }
+.cms-nav-label { color: #77849a !important; }
+.cms-navigation-footer > a { color: #a6d4cb !important; background: rgba(255, 255, 255, .06); }
+
+/* dashboard: empat angka dalam satu strip, bukan empat kartu warna-warni */
+.dashboard-summary { gap: 0; border: 1px solid var(--ui-line); border-radius: var(--ui-radius-lg); background: var(--ui-surface); box-shadow: var(--ui-shadow); overflow: hidden; }
+.dashboard-summary article { min-height: 0; padding: 20px 24px; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.dashboard-summary article + article { border-left: 1px solid var(--ui-line); }
+.dashboard-summary article i, .dashboard-summary article:nth-child(n) i { width: 38px; height: 38px; border-radius: 11px; background: #f1f3f6; color: #4b5563; }
+.dashboard-summary article strong { font-size: 28px; font-variant-numeric: tabular-nums; letter-spacing: -.02em; }
+.dashboard-intro h2 { font-size: 26px; letter-spacing: -.02em; }
+@media (max-width: 900px) {
+  .dashboard-summary { display: grid; grid-template-columns: 1fr 1fr; }
+  .dashboard-summary article:nth-child(odd) { border-left: 0; }
+  .dashboard-summary article:nth-child(n+3) { border-top: 1px solid var(--ui-line); }
+}
+
+/* tabel */
+.dashboard-table th { background: #f8f9fb; color: var(--ui-muted); }
+.dashboard-table tbody tr { transition: background-color .2s var(--ui-ease); }
+.dashboard-table tbody tr:hover, .dashboard-table tbody tr:hover .dashboard-actions-column { background: #f8f9fb; }
+.dashboard-table td, .dashboard-table th { font-variant-numeric: tabular-nums; }
+.dashboard-category-tabs button.active { color: var(--ui-ink, var(--ui-text)); }
+
+/* aksi baris & toolbar: satu aksi utama berwarna, sisanya netral (sebelumnya tiap tombol punya warna sendiri) */
+.cms-brand-mark { background: var(--ui-accent) !important; }
+.bulk-production-button, .dashboard-manage, .dashboard-intro > a { background: var(--ui-accent) !important; color: #fff !important; border-color: var(--ui-accent) !important; box-shadow: 0 1px 2px rgba(20, 28, 40, .12) !important; }
+.bulk-production-button:hover, .dashboard-manage:hover { background: var(--ui-accent-strong) !important; }
+.bulk-toolbar button:not(.bulk-production-button), .audit-all, .dashboard-table tbody tr a, .dashboard-table tbody tr button:not(.dashboard-manage) { background: #fff !important; color: #3d4756 !important; border: 1px solid var(--ui-line) !important; box-shadow: none !important; }
+.bulk-toolbar button:not(.bulk-production-button):hover, .audit-all:hover, .dashboard-table tbody tr a:hover, .dashboard-table tbody tr button:not(.dashboard-manage):hover { background: #f6f7f9 !important; border-color: #cfd4dc !important; }
+.dashboard-table tbody tr a.dashboard-manage { background: var(--ui-accent) !important; color: #fff !important; border-color: var(--ui-accent) !important; }
+.smartkit-category { background: #f1f3f6 !important; color: #4b5563 !important; }
+.readiness-indicator.is-ready { background: var(--success-soft); color: var(--success); }
+
+/* Smart Hub memakai aksen yang sama dengan sisa CMS (sebelumnya biru sendiri) */
+.sh { --sh-accent: var(--ui-accent-strong); --sh-accent-soft: var(--ui-accent-soft); --sh-ink: var(--ui-text); --sh-muted: var(--ui-muted); --sh-line: var(--ui-line); }
+.sh code { background: #f1f3f6; color: #3d4756; }
+
+/* satu momen gerak: konten halaman masuk perlahan saat dibuka */
+@keyframes cms-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.shell > .dashboard, .shell > .layout, .shell > .sh, .shell > .ah, .shell > .language-section-tabs, .shell > form, .shell > section { animation: cms-in .5s var(--ui-ease) both; }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }

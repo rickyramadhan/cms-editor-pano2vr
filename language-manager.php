@@ -3,7 +3,10 @@ declare(strict_types=1);
 
 function languageRegistry(string $root): array
 {
-    return json_decode((string) file_get_contents(assetsRootForProjectPath($root) . '/languages.json'), true, 512, JSON_THROW_ON_ERROR);
+    $file = assetsRootForProjectPath($root) . '/languages.json';
+    // Project yang belum memakai runtime CMS (mis. Semarang) belum punya languages.json: pakai bawaan Indonesia saja.
+    if (!is_file($file)) return ['id' => ['label' => 'Indonesia']];
+    return json_decode((string) file_get_contents($file), true, 512, JSON_THROW_ON_ERROR);
 }
 
 function writeLanguageRegistry(string $root, array $languages): void
