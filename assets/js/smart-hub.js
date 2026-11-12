@@ -22,6 +22,7 @@
     for (const c of kids.flat(Infinity)) if (c != null && c !== false) e.append(c.nodeType ? c : document.createTextNode(String(c)));
     return e;
   };
+  const ico = (name) => h('i', { class: 'sh-icon', 'data-lucide': name, 'aria-hidden': 'true' });
   const clone = (o) => JSON.parse(JSON.stringify(o));
   const toast = (msg, bad) => { const t = document.getElementById('shToast'); t.textContent = msg; t.className = 'sh-toast' + (bad ? ' is-bad' : ''); t.hidden = false; clearTimeout(t._t); t._t = setTimeout(() => (t.hidden = true), bad ? 7000 : 3600); };
   const copy = (text) => { navigator.clipboard?.writeText(text).then(() => toast('Disalin ke clipboard')).catch(() => prompt('Salin:', text)); };
@@ -64,6 +65,7 @@
   }
 
   function render() {
+    document.getElementById('smartHub').classList.toggle('is-content-editor', tab === 'konten');
     document.querySelectorAll('[data-sh-tab]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.shTab === tab)));
     document.getElementById('shWilayah').textContent = 'wilayah: ' + (S.settings?.wilayah || '—');
     document.getElementById('shHubFile').textContent = S.hubExists ? '_hub.json tersimpan' : '_hub.json belum ada (memakai bawaan)';
@@ -71,6 +73,7 @@
     if (!S.kitOk && tab !== 'integrasi') { main.append(h('div', { class: 'card sh-card sh-warn' }, h('h3', null, 'Smart Kit belum terhubung'), h('p', null, 'Folder Smart Kit tidak ditemukan di ', h('code', null, S.settings.path), '. Atur di tab "Integrasi & Tampilan" › Pengaturan project.'), h('button', { class: 'save', onclick: () => { tab = 'integrasi'; render(); } }, 'Buka pengaturan'))); return; }
     ({ lokasi: viewLokasi, konten: () => window.SmartHubContent.konten(main), wilayah: () => window.SmartHubContent.wilayah(main), aksi: viewAksi, menu: viewMenu, data: viewData, integrasi: viewIntegrasi, panduan: viewPanduan })[tab]();
     renderPreviewSelect();
+    queueMicrotask(() => window.lucide?.createIcons({ attrs: { 'stroke-width': 2 } }));
   }
 
   /* ---------- 1. Lokasi & paket ---------- */
@@ -83,10 +86,9 @@
         h('td', null, cb),
         h('td', null, h('b', null, l.name), h('small', null, l.id + ' · ' + l.path)),
         h('td', null, l.pack.exists ? h('span', { class: 'sh-badge is-ok' }, l.pack.scenes + ' scene') : h('span', { class: 'sh-badge' }, 'belum dibangun')),
-        h('td', null, l.pack.content ? h('span', { class: 'sh-mini' }, `${c.layanan} layanan · ${c.fakta} fakta · ${c.acara} acara · ${c.rute} rute · ${c.stempel} stempel`) : h('span', { class: 'sh-mini is-muted' }, '—')),
-        h('td', null, l.applied ? h('span', { class: 'sh-badge is-ok', title: l.appliedSrc }, 'HUD Smart Kit') : h('span', { class: 'sh-badge is-muted' }, 'skin bawaan')),
-        h('td', { class: 'sh-actions' }, l.url ? h('a', { class: 'translate', href: l.url, target: '_blank', rel: 'noopener' }, 'Buka ↗') : null,
-          h('button', { type: 'button', class: 'translate', disabled: !l.applied || null, onclick: () => setPreview(l.id) }, 'Pratinjau')));
+        h('td', null, l.pack.content ? h('span', { class: 'sh-metrics' }, ...[['layanan', c.layanan], ['fakta', c.fakta], ['acara', c.acara], ['rute', c.rute], ['stempel', c.stempel]].map(([label, value]) => h('span', null, h('b', null, value), label))) : h('span', { class: 'sh-mini is-muted' }, 'Belum ada konten')),
+        h('td', null, h('span', { class: 'sh-statusline' }, h('small', null, 'Runtime'), l.runtimeReady ? h('span', { class: 'sh-badge is-ok' }, 'Terpasang') : h('span', { class: 'sh-badge is-muted' }, 'Belum dipasang')), h('span', { class: 'sh-statusline' }, h('small', null, 'HUD'), l.applied ? h('span', { class: 'sh-badge is-ok', title: l.appliedSrc }, 'Smart Kit') : h('span', { class: 'sh-badge is-muted' }, 'Skin bawaan'))),
+        h('td', { class: 'sh-actions sh-rowactions' }, h('button', { type: 'button', class: 'translate', disabled: !l.applied || null, title: l.applied ? 'Tampilkan di panel pratinjau' : 'Terapkan Smart Kit terlebih dahulu untuk mengaktifkan pratinjau', onclick: () => setPreview(l.id) }, ico('panel-right-open'), 'Pratinjau'), l.url ? h('a', { class: 'translate sh-iconbtn', href: l.url, target: '_blank', rel: 'noopener', title: 'Buka tur di tab baru', 'aria-label': 'Buka ' + l.name + ' di tab baru' }, ico('external-link')) : null));
     });
     const run = async (op, label) => {
       if (!chosen.size) return toast('Centang minimal satu lokasi.', true);
@@ -101,10 +103,10 @@
       S.locations.length ? h('div', { class: 'sh-tablewrap' }, h('table', { class: 'sh-table' }, h('thead', null, h('tr', null, h('th', null, ''), h('th', null, 'Lokasi'), h('th', null, 'Paket'), h('th', null, 'Konten'), h('th', null, 'Tampilan'), h('th', null, ''))), h('tbody', null, rows)))
         : h('div', { class: 'sh-empty' }, 'Belum ada folder tur (berisi pano.xml) di project ini.'),
       h('div', { class: 'sh-bar' },
-        h('button', { type: 'button', class: 'translate', onclick: () => run('build', 'Bangun paket') }, '⚙ Bangun / perbarui paket'),
-        h('button', { type: 'button', class: 'save', onclick: () => run('apply', 'Terapkan Smart Kit') }, '✓ Terapkan Smart Kit'),
-        h('button', { type: 'button', class: 'translate', onclick: () => run('unapply', 'Lepas Smart Kit') }, '↺ Lepas (kembali ke skin bawaan)')),
-      h('div', { class: 'sh-note' }, h('b', null, 'Alur per lokasi: '), '① Bangun paket (scenes, thumbnail, kerangka content.json) → ② isi konten (Studio/Excel) → ③ isi konten di tab 2–3, atur aksi, menu & data di tab 4–6 → ④ Terapkan. Konten lokasi tetap di ', h('code', null, `smart-kit/packs/${S.settings.wilayah}/<lokasi>/content.json`), '.')));
+        h('button', { type: 'button', class: 'translate', onclick: () => run('build', 'Bangun paket') }, ico('package-cog'), 'Bangun / perbarui paket'),
+        h('button', { type: 'button', class: 'save', onclick: () => run('apply', 'Terapkan Smart Kit') }, ico('check'), 'Terapkan Smart Kit'),
+        h('button', { type: 'button', class: 'translate', onclick: () => run('unapply', 'Lepas Smart Kit') }, ico('undo-2'), 'Lepas Smart Kit')),
+      h('div', { class: 'sh-note' }, h('b', null, 'Alur per lokasi: '), '① Bangun paket (scenes, thumbnail, content.json, serta memasang custom.css + main-loader.js dengan preload teaser; skin.js tidak ditimpa) → ② isi konten di tab 2–3 → ③ atur aksi, menu & data di tab 4–6 → ④ Terapkan Smart Kit. Sebelum index.html diubah, backup otomatis dibuat di ', h('code', null, '.skin-backups'), '. Konten lokasi tetap di ', h('code', null, `smart-kit/packs/${S.settings.wilayah}/<lokasi>/content.json`), '.')));
     const res = h('div', { id: 'shResults' }); main.append(res);
   }
   function showResults(j) {

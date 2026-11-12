@@ -15,14 +15,9 @@
     </header>
 
     <nav class="sh-tabs" role="tablist" aria-label="Bagian Smart Hub">
-        <button role="tab" data-sh-tab="lokasi" aria-selected="true">1 · Lokasi &amp; Paket</button>
-        <button role="tab" data-sh-tab="konten">2 · Isi Konten</button>
-        <button role="tab" data-sh-tab="wilayah">3 · Data Wilayah</button>
-        <button role="tab" data-sh-tab="aksi">4 · Aksi Tombol</button>
-        <button role="tab" data-sh-tab="menu">5 · Menu</button>
-        <button role="tab" data-sh-tab="data">6 · Sumber Data</button>
-        <button role="tab" data-sh-tab="integrasi">7 · Integrasi &amp; Tampilan</button>
-        <button role="tab" data-sh-tab="panduan">8 · Panduan Developer</button>
+        <div class="sh-tabgroup"><small>Persiapan</small><div><button role="tab" data-sh-tab="lokasi" aria-selected="true"><i>1</i> Lokasi &amp; Paket</button></div></div>
+        <div class="sh-tabgroup"><small>Konten</small><div><button role="tab" data-sh-tab="konten"><i>2</i> Isi Konten</button><button role="tab" data-sh-tab="wilayah"><i>3</i> Data Wilayah</button></div></div>
+        <div class="sh-tabgroup sh-tabgroup--grow"><small>Pengalaman &amp; integrasi</small><div><button role="tab" data-sh-tab="aksi"><i>4</i> Aksi Tombol</button><button role="tab" data-sh-tab="menu"><i>5</i> Menu</button><button role="tab" data-sh-tab="data"><i>6</i> Sumber Data</button><button role="tab" data-sh-tab="integrasi"><i>7</i> Integrasi &amp; Tampilan</button><button role="tab" data-sh-tab="panduan"><i>8</i> Panduan Pengembang</button></div></div>
     </nav>
 
     <div class="sh-layout">
@@ -33,7 +28,7 @@
                 <select id="shPreviewLoc" aria-label="Lokasi pratinjau"></select>
             </div>
             <div class="sh-preview__frame"><iframe id="shPreviewFrame" title="Pratinjau tur" allow="fullscreen; autoplay; gyroscope; accelerometer" loading="lazy"></iframe><div class="sh-preview__ph" id="shPreviewPh">Pilih lokasi yang sudah diterapkan Smart Kit untuk menguji aksi &amp; data secara langsung.</div></div>
-            <div class="sh-preview__bar"><button type="button" class="translate" id="shPreviewReload">↻ Muat ulang</button><a class="translate" id="shPreviewOpen" target="_blank" rel="noopener" href="#">Buka penuh ↗</a></div>
+            <div class="sh-preview__bar"><button type="button" class="translate" id="shPreviewReload"><i data-lucide="refresh-cw" aria-hidden="true"></i>Muat ulang</button><a class="translate" id="shPreviewOpen" target="_blank" rel="noopener" href="#"><i data-lucide="external-link" aria-hidden="true"></i>Buka penuh</a></div>
             <div class="sh-log" id="shLog" aria-label="Log event"><small>Event dari tur akan tampil di sini.</small></div>
         </aside>
     </div>

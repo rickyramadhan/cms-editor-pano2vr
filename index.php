@@ -527,6 +527,47 @@ function tourCategory(string $id): string
     return locationCategory($id, $database[$id] ?? []);
 }
 
+/** Dashboard readiness sourced exclusively from the Smart Kit package. */
+function smartKitDashboardTour(array $status, array $tour, array $settings): array
+{
+    global $activeProject;
+    $id = (string) $status['id'];
+    $contentFile = rtrim((string) $settings['path'], '/\\') . '/packs/' . $settings['wilayah'] . '/' . $id . '/content.json';
+    $content = is_file($contentFile) ? json_decode((string) file_get_contents($contentFile), true) : [];
+    $content = is_array($content) ? $content : [];
+    $region = is_array($content['REGION'] ?? null) ? $content['REGION'] : [];
+    $i18n = is_array($region['i18n'] ?? null) ? $region['i18n'] : [];
+
+    $checks = [
+        trim((string) ($region['name'] ?? '')) !== '',
+        trim((string) ($region['type'] ?? '')) !== '',
+        isset($region['center']['lat']) && is_numeric($region['center']['lat']),
+        isset($region['center']['lng']) && is_numeric($region['center']['lng']),
+        trim((string) ($region['about']['text'] ?? '')) !== '',
+        trim((string) ($region['hero'] ?? '')) !== '',
+    ];
+    foreach (array_keys(cmsLanguages()) as $code) {
+        $checks[] = trim((string) ($i18n[$code]['name'] ?? '')) !== '';
+        $checks[] = trim((string) ($i18n[$code]['welcomeText'] ?? '')) !== '';
+    }
+    $complete = count(array_filter($checks));
+    $score = $checks === [] ? 0 : (int) round(($complete / count($checks)) * 100);
+    $type = trim((string) ($region['type'] ?? '')) ?: 'umum';
+    $typeLabels = ['pantai' => 'Pantai', 'pura' => 'Pura & budaya', 'alam' => 'Alam', 'atraksi' => 'Atraksi', 'umum' => 'Umum'];
+    $name = trim((string) ($region['name'] ?? '')) ?: humanizeLocationId($id);
+    $path = (string) ($tour['path'] ?? $status['path'] ?? $id);
+
+    return [
+        'id' => $id, 'name' => $name, 'path' => $path, 'score' => $score,
+        'data_complete' => $score === 100, 'bundle_built' => !empty($status['pack']['exists']),
+        'implemented' => !empty($status['applied']), 'category' => $type,
+        'category_label' => $typeLabels[$type] ?? humanizeLocationId($type),
+        'local_url' => projectUrl(trim($path, '/') . '/'),
+        'deploy_url' => rtrim((string) ($activeProject['deploy_url'] ?? ''), '/') . '/' . $id,
+        'search_text' => strtolower($id . ' ' . $name . ' ' . $type . ' ' . json_encode($content, JSON_UNESCAPED_UNICODE)),
+    ];
+}
+
 // Smart Hub dan Optimasi Loading tidak memerlukan database CMS: project tanpa assets CMS (mis. Semarang) tetap dapat membukanya tanpa galat.
 $lightTab = in_array((string) ($_GET['tab'] ?? ''), ['smart', 'loading'], true) && !projectAssetsValid($assetsBaseRoot);
 try {
@@ -831,10 +872,14 @@ if ($activeTab === 'skin') {
 $dashboardTours = [];
 $sidebarTourStatus = [];
 if ($activeTab === 'dashboard') {
-    foreach ($detectedTours as $id => $tour) {
-        // Tile panorama dapat berjumlah puluhan ribu. Jangan scan seluruh file
-        // hanya untuk menghitung ukuran ketika dashboard dibuka.
-        $dashboardTours[] = analyzeTourCompletion($projectRoot, $id, $tour, $database[$id] ?? [], $oiDatabase[$id] ?? [], false);
+    if (!defined('SMART_HUB_INCLUDE_ONLY')) define('SMART_HUB_INCLUDE_ONLY', true);
+    require_once __DIR__ . '/smart-hub.php';
+    $dashboardSettings = shSettings($activeProject);
+    // shStatus membutuhkan bentuk data tur Smart Hub yang menyertakan path absolut `dir`.
+    $dashboardStatuses = shStatus($dashboardSettings, shTours($projectRoot));
+    foreach ($dashboardStatuses as $status) {
+        $id = (string) $status['id'];
+        $dashboardTours[] = smartKitDashboardTour($status, $detectedTours[$id] ?? [], $dashboardSettings);
     }
     usort($dashboardTours, static fn(array $a, array $b): int => $a['score'] <=> $b['score'] ?: strnatcasecmp((string) $a['name'], (string) $b['name']));
 } elseif (!in_array($activeTab, ['config', 'languages', 'translations', 'custom', 'skin', 'smart', 'loading', 'video360'], true)) {   // tab tanpa daftar status per lokasi: jangan mengurai pano.xml semua tur

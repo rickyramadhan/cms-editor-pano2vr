@@ -4,42 +4,45 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>CMS Virtual Tour — Govirtual</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/cms-components.css?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/css/cms-components.css')) ?>">
     <link rel="stylesheet" href="assets/css/smart-hub.css?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/css/smart-hub.css')) ?>">
+    <link rel="stylesheet" href="assets/css/cms-redesign.css?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/css/cms-redesign.css')) ?>">
+    <script src="assets/vendor/lucide.min.js" defer></script>
+    <script defer>document.addEventListener('DOMContentLoaded',()=>window.lucide?.createIcons());</script>
 </head>
 <body class="cms-app-body">
 <div class="cms-app-frame">
     <aside class="cms-navigation" id="cmsNavigation" aria-label="Navigasi utama">
-        <div class="cms-brand"><span class="cms-brand-mark" aria-hidden="true">G</span><div><strong>Govirtual</strong><small>Tour Manager</small></div><button type="button" id="closeCmsNavigation" aria-label="Tutup menu">×</button></div>
+        <div class="cms-brand"><span class="cms-brand-mark" aria-hidden="true">G</span><div><strong>Govirtual</strong><small>Tour Manager</small></div><button type="button" id="closeCmsNavigation" aria-label="Tutup menu"><i data-lucide="x" aria-hidden="true"></i></button></div>
         <nav class="main-tabs">
+            <a class="<?= $activeTab === 'dashboard' ? 'active' : '' ?>" href="?tab=dashboard"><span aria-hidden="true"><i data-lucide="layout-dashboard"></i></span>Dashboard</a>
             <span class="cms-nav-label">Workspace</span>
-            <a class="<?= $activeTab === 'dashboard' ? 'active' : '' ?>" href="?tab=dashboard"><span aria-hidden="true">▦</span>Dashboard</a>
-            <a class="<?= !in_array($activeTab, ['dashboard', 'config', 'languages', 'translations', 'custom', 'skin', 'video360', 'smart', 'loading'], true) ? 'active' : '' ?>" href="?tab=lokasi&lokasi=<?= e($selectedId) ?>"><span aria-hidden="true">⌖</span>Data Lokasi</a>
-            <a class="<?= in_array($activeTab, ['languages', 'translations'], true) ? 'active' : '' ?>" href="?tab=languages"><span aria-hidden="true">文</span>Bahasa &amp; Terjemahan</a>
-            <a class="<?= $activeTab === 'config' ? 'active' : '' ?>" href="?tab=config"><span aria-hidden="true">⚙</span>Konfigurasi Global</a>
-            <span class="cms-nav-label">Smart Tourism</span>
-            <a class="<?= $activeTab === 'smart' ? 'active' : '' ?>" href="?tab=smart"><span aria-hidden="true">✦</span>Smart Hub</a>
+            <a class="<?= $activeTab === 'smart' ? 'active' : '' ?>" href="?tab=smart"><span aria-hidden="true"><i data-lucide="blocks"></i></span>Smart Hub</a>
+            <a class="<?= in_array($activeTab, ['lokasi', 'voice', 'video', 'optimizer', 'audit', 'object', 'config', 'skin'], true) ? 'active' : '' ?>" href="?tab=lokasi&lokasi=<?= e($selectedId) ?>"><span aria-hidden="true"><i data-lucide="settings-2"></i></span>Configuration</a>
             <span class="cms-nav-label">Media &amp; Tools</span>
-            <a class="<?= $activeTab === 'loading' ? 'active' : '' ?>" href="?tab=loading"><span aria-hidden="true">⚡</span>Optimasi Loading</a>
-            <a class="<?= $activeTab === 'video360' ? 'active' : '' ?>" href="?tab=video360"><span aria-hidden="true">◉</span>Video 360</a>
-            <a class="<?= $activeTab === 'custom' ? 'active' : '' ?>" href="?tab=custom"><span aria-hidden="true">{ }</span>Custom CSS</a>
-            <a class="<?= $activeTab === 'skin' ? 'active' : '' ?>" href="?tab=skin"><span aria-hidden="true">◇</span>Template Skin</a>
+            <a class="<?= in_array($activeTab, ['languages', 'translations'], true) ? 'active' : '' ?>" href="?tab=languages"><span aria-hidden="true"><i data-lucide="languages"></i></span>Bahasa &amp; Terjemahan</a>
+            <a class="<?= $activeTab === 'video360' ? 'active' : '' ?>" href="?tab=video360"><span aria-hidden="true"><i data-lucide="circle-play"></i></span>Video 360</a>
+            <a class="<?= $activeTab === 'loading' ? 'active' : '' ?>" href="?tab=loading"><span aria-hidden="true"><i data-lucide="gauge"></i></span>Optimasi Loading</a>
+            <a class="<?= $activeTab === 'custom' ? 'active' : '' ?>" href="?tab=custom"><span aria-hidden="true"><i data-lucide="code-2"></i></span>Custom CSS</a>
         </nav>
-        <?php $cmsMe = cmsCurrentUser(); ?><div class="cms-userbox"><span>👤 <?= e($cmsMe['name'] ?? $cmsMe['username'] ?? '') ?></span><small><?= e(CMS_ROLES[$cmsMe['role'] ?? ''] ?? '') ?></small><a href="users.php"><?= cmsIsAdmin() ? 'Pengguna' : 'Akun saya' ?></a><a href="logout.php">Keluar</a></div><div class="cms-navigation-footer"><small>Project aktif</small><strong><?= e($activeProject['name']) ?></strong><span><?= e($projectRoot) ?></span><a href="projects.php">⇄ Ganti project</a></div>
+        <?php $cmsMe = cmsCurrentUser(); ?><div class="cms-userbox"><span><i data-lucide="circle-user-round" aria-hidden="true"></i> <?= e($cmsMe['name'] ?? $cmsMe['username'] ?? '') ?></span><small><?= e(CMS_ROLES[$cmsMe['role'] ?? ''] ?? '') ?></small><a href="users.php"><?= cmsIsAdmin() ? 'Pengguna' : 'Akun saya' ?></a><a href="logout.php">Keluar</a></div><div class="cms-navigation-footer"><small>Project aktif</small><strong><?= e($activeProject['name']) ?></strong><span><?= e($projectRoot) ?></span><a href="projects.php"><i data-lucide="repeat-2" aria-hidden="true"></i> Ganti project</a></div>
     </aside>
     <div class="cms-navigation-scrim" id="cmsNavigationScrim" hidden></div>
     <main class="shell">
     <?php $tabLabels = ['dashboard'=>'Dashboard','config'=>'Konfigurasi Global','languages'=>'Manajemen Bahasa','translations'=>'Translation Center','lokasi'=>'Data Lokasi','voice'=>'Voice Over','video'=>'Video','optimizer'=>'Media Optimizer','audit'=>'Audit','object'=>'Object Informasi','video360'=>'Video 360','custom'=>'Custom CSS','skin'=>'Template Skin','smart'=>'Smart Hub','loading'=>'Optimasi Loading']; $pageLabel = $tabLabels[$activeTab] ?? 'Data Lokasi'; ?>
     <header class="topbar">
-        <button type="button" class="cms-menu-button" id="openCmsNavigation" aria-controls="cmsNavigation" aria-expanded="false" aria-label="Buka menu">☰</button>
+        <button type="button" class="cms-menu-button" id="openCmsNavigation" aria-controls="cmsNavigation" aria-expanded="false" aria-label="Buka menu"><i data-lucide="menu" aria-hidden="true"></i></button>
         <div class="cms-page-heading"><nav class="cms-breadcrumbs" aria-label="Breadcrumb"><a href="?tab=dashboard">CMS Virtual Tour</a><span>/</span><span aria-current="page"><?= e($pageLabel) ?></span></nav><h1><?= e($pageLabel) ?></h1><small><?= e($activeProject['name']) ?></small></div>
-        <div class="topbar-actions"><?php if ($skinTemplateId !== ''): ?><a class="preview" href="<?= e(projectUrl($skinTemplateId . '/')) ?>" target="_blank" rel="noopener"><span aria-hidden="true">↗</span> Preview Tour</a><?php endif; ?><a class="cms-create-action" href="?tab=lokasi&lokasi=baru"><span aria-hidden="true">＋</span>Create New</a></div>
+        <div class="topbar-actions"><?php if ($skinTemplateId !== ''): ?><a class="preview" href="<?= e(projectUrl($skinTemplateId . '/')) ?>" target="_blank" rel="noopener"><span aria-hidden="true"><i data-lucide="external-link"></i></span>Pratinjau Tur</a><?php endif; ?><a class="cms-create-action" href="?tab=lokasi&lokasi=baru"><span aria-hidden="true"><i data-lucide="plus"></i></span>Buat Baru</a></div>
     </header>
 
     <?php if ($message !== ''): ?><div class="alert success"><?= e($message) ?></div><?php endif; ?>
     <?php if ($error !== ''): ?><div class="alert error"><?= e($error) ?></div><?php endif; ?>
 
-    <?php if (!in_array($activeTab, ['dashboard', 'config', 'languages', 'translations', 'custom', 'skin', 'video360', 'smart', 'loading'], true)): ?>
+    <?php if (!in_array($activeTab, ['dashboard', 'languages', 'translations', 'custom', 'video360', 'smart', 'loading'], true)): ?>
     <div class="layout">
         <aside class="sidebar card">
             <div class="sidebar-title"><div><h2>Lokasi</h2><small><?= count($detectedTours) ?> tur terdeteksi</small></div><a href="?tab=lokasi&lokasi=baru" class="add">＋ Baru</a></div>
@@ -66,6 +69,8 @@
                 <a class="<?= $activeTab === 'optimizer' ? 'active' : '' ?> <?= isset($detectedTours[$selectedId]) ? '' : 'disabled' ?>" href="?tab=optimizer&lokasi=<?= e($selectedId) ?>">Tools · Optimizer</a>
                 <a class="<?= $activeTab === 'audit' ? 'active' : '' ?> <?= isset($detectedTours[$selectedId]) ? '' : 'disabled' ?>" href="?tab=audit&lokasi=<?= e($selectedId) ?>">Tools · Audit</a>
                 <a class="<?= $activeTab === 'object' ? 'active' : '' ?> <?= isset($database[$selectedId]) ? '' : 'disabled' ?>" href="?tab=object&lokasi=<?= e($selectedId) ?>">Object Informasi</a>
+                <a class="<?= $activeTab === 'config' ? 'active' : '' ?>" href="?tab=config&lokasi=<?= e($selectedId) ?>">Konfigurasi Global</a>
+                <a class="<?= $activeTab === 'skin' ? 'active' : '' ?>" href="?tab=skin&lokasi=<?= e($selectedId) ?>">Template Skin</a>
             </nav>
             <?php if ($selectedId !== 'baru' && isset($detectedTours[$selectedId])): ?><a class="location-local-tour" href="<?= e(projectUrl(trim($detectedTours[$selectedId]['path'], '/') . '/')) ?>" target="_blank" rel="noopener">▶ Kunjungi URL Lokal</a><?php endif; ?>
             </div>
@@ -79,27 +84,34 @@
     <?php endif; ?>
 
     <?php if ($activeTab === 'dashboard'): ?>
-        <?php $completeTours = count(array_filter($dashboardTours, static fn(array $tour): bool => $tour['score'] === 100)); $averageScore = $dashboardTours === [] ? 0 : (int) round(array_sum(array_column($dashboardTours, 'score')) / count($dashboardTours)); ?>
+        <?php $completeTours = count(array_filter($dashboardTours, static fn(array $tour): bool => $tour['data_complete'])); $builtTours = count(array_filter($dashboardTours, static fn(array $tour): bool => $tour['bundle_built'])); $implementedTours = count(array_filter($dashboardTours, static fn(array $tour): bool => $tour['implemented'])); ?>
         <section class="dashboard" aria-labelledby="dashboardTitle">
             <div class="dashboard-intro"><div><span class="eyebrow">OVERVIEW</span><h2 id="dashboardTitle">Dashboard Produksi</h2><p>Pantau kesiapan konten dan kelola seluruh lokasi virtual tour dari satu tempat.</p></div><a href="?tab=lokasi&lokasi=baru"><span aria-hidden="true">＋</span> Buat Lokasi Baru</a></div>
             <div class="dashboard-summary">
-                <article class="card"><i aria-hidden="true">⌖</i><div><span>Total lokasi</span><strong><?= count($dashboardTours) ?></strong><small>Folder tur terdeteksi</small></div></article>
-                <article class="card"><i aria-hidden="true">✓</i><div><span>Siap tayang</span><strong><?= $completeTours ?></strong><small>Semua komponen lengkap</small></div></article>
-                <article class="card"><i aria-hidden="true">!</i><div><span>Perlu dilengkapi</span><strong><?= count($dashboardTours) - $completeTours ?></strong><small>Belum mencapai 100%</small></div></article>
-                <article class="card"><i aria-hidden="true">↗</i><div><span>Rata-rata progres</span><strong><?= $averageScore ?>%</strong><small>Dari seluruh lokasi</small></div></article>
+                <article class="card"><i aria-hidden="true"><span data-lucide="map-pin"></span></i><div><span>Total lokasi</span><strong><?= count($dashboardTours) ?></strong><small>Folder tur terdeteksi</small></div></article>
+                <article class="card"><i aria-hidden="true"><span data-lucide="circle-check"></span></i><div><span>Data lengkap</span><strong><?= $completeTours ?></strong><small>Profil Smart Kit lengkap</small></div></article>
+                <article class="card"><i aria-hidden="true"><span data-lucide="package-check"></span></i><div><span>Bundle dibuat</span><strong><?= $builtTours ?></strong><small>Paket scene tersedia</small></div></article>
+                <article class="card"><i aria-hidden="true"><span data-lucide="rocket"></span></i><div><span>Sudah implementasi</span><strong><?= $implementedTours ?></strong><small>Smart Kit aktif di tur</small></div></article>
             </div>
             <section class="card dashboard-list">
-                <div class="dashboard-heading"><div><h2>Daftar Produksi Virtual Tour</h2><p>Pencarian mencakup lokasi, node, hotspot, URL, infoID, dan route key.</p></div><div class="dashboard-controls"><label><span>Cari lokasi</span><input type="search" id="dashboardSearch" placeholder="Nama, ID, atau URL…"></label><label><span>Status</span><select id="dashboardFilter"><option value="all">Semua status</option><option value="incomplete">Belum lengkap</option><option value="complete">Siap tayang</option></select></label></div></div>
+                <div class="dashboard-heading"><div><h2>Daftar Produksi Virtual Tour</h2><p>Status dan kategori bersumber dari paket Smart Kit setiap lokasi.</p></div><div class="dashboard-controls"><label><span>Cari lokasi</span><input type="search" id="dashboardSearch" placeholder="Nama, ID, atau kategori…"></label><label><span>Status data</span><select id="dashboardFilter"><option value="all">Semua status</option><option value="incomplete">Belum lengkap</option><option value="complete">Data lengkap</option></select></label></div></div>
+                <?php $dashboardCategories = []; foreach ($dashboardTours as $item) { $dashboardCategories[$item['category']] = $item['category_label']; } asort($dashboardCategories, SORT_NATURAL | SORT_FLAG_CASE); ?>
+                <nav class="dashboard-category-tabs" aria-label="Kategori lokasi Smart Kit">
+                    <button type="button" class="active" data-dashboard-category="all" aria-pressed="true">Semua <span><?= count($dashboardTours) ?></span></button>
+                    <?php foreach ($dashboardCategories as $category => $label): $categoryCount = count(array_filter($dashboardTours, static fn(array $item): bool => $item['category'] === $category)); ?>
+                        <button type="button" data-dashboard-category="<?= e($category) ?>" aria-pressed="false"><?= e($label) ?> <span><?= $categoryCount ?></span></button>
+                    <?php endforeach; ?>
+                </nav>
                 <div class="bulk-toolbar"><label><input type="checkbox" id="bulkSelectVisible"> Pilih yang tampil</label><strong id="bulkSelectedCount">0 lokasi dipilih</strong><div><button type="button" class="bulk-production-button" id="runBulkProduction">▶ Bulk Production</button><button type="button" id="openBulkEdit">✎ Bulk Edit</button><button type="button" data-bulk-action="translate">✦ Auto Translate</button><button type="button" data-bulk-action="voice">♫ Generate Voice</button><button type="button" data-bulk-action="health">♡ Health Check</button><button type="button" class="audit-all" id="openAuditAll">Audit Semua</button></div></div>
                 <div class="bulk-progress" id="bulkProgress" hidden></div>
                 <div class="bulk-production-results" id="bulkProductionResults" hidden aria-live="polite"></div>
-                <div class="dashboard-table-wrap"><table class="dashboard-table"><thead><tr><th class="select-column"></th><th>Lokasi</th><th>Progres</th><th>Welcome Text</th><th>Translate</th><th>Link</th><th>Audio</th><th>Video</th><th>Object</th><th>URL Local</th><th>URL Deploy</th><th class="dashboard-actions-column">Aksi</th></tr></thead><tbody id="tourStatusList">
+                <div class="dashboard-table-wrap"><table class="dashboard-table"><thead><tr><th class="select-column"></th><th>Lokasi</th><th>Kategori Smart Kit</th><th>Kelengkapan data</th><th>Bundle</th><th>Implementasi</th><th>URL Local</th><th>URL Deploy</th><th class="dashboard-actions-column">Aksi</th></tr></thead><tbody id="tourStatusList">
                     <?php foreach ($dashboardTours as $tour): ?><tr class="tour-status-card" data-location-id="<?= e($tour['id']) ?>" data-dashboard-category-row="<?= e($tour['category']) ?>" data-dashboard-name="<?= e($tour['search_text']) ?>" data-dashboard-score="<?= $tour['score'] ?>">
-                        <td class="select-column"><input type="checkbox" class="bulk-location" value="<?= e($tour['id']) ?>" aria-label="Pilih <?= e($tour['name']) ?>"></td><td><strong><?= e($tour['name']) ?></strong><small><?= e($tour['id']) ?></small></td><td><span class="table-progress"><i style="--progress:<?= $tour['score'] ?>%"></i><b><?= $tour['score'] ?>%</b></span></td>
-                        <?php foreach (['welcome', 'translations', 'links', 'audio', 'video', 'objects'] as $key): $score = $tour['scores'][$key]; ?><td><span class="status-dot <?= $score === null ? 'empty' : ($score === 100 ? 'done' : ($score === 0 ? 'empty' : 'partial')) ?>" title="<?= $score === null ? 'Tidak ada WebElement' : $score . '%' ?>"><?= $score === null ? '—' : ($score === 100 ? '✓' : $score . '%') ?></span></td><?php endforeach; ?>
-                        <td><div class="dashboard-preview-links"><button type="button" data-tour-preview="<?= e($tour['local_url']) ?>" data-preview-title="<?= e($tour['name']) ?> · Local">Preview</button></div></td><td><div class="dashboard-preview-links"><button type="button" data-tour-preview="<?= e($tour['deploy_url']) ?>" data-preview-title="<?= e($tour['name']) ?> · Deploy">Preview</button></div></td><td class="dashboard-actions-column"><div class="dashboard-row-actions"><button type="button" data-open-location="<?= e($tour['path']) ?>" title="Buka folder di File Explorer">📂</button><button type="button" data-zip-location="<?= e($tour['id']) ?>" data-zip-path="<?= e($tour['path']) ?>" data-zip-score="<?= e($tour['score']) ?>" title="ZIP semua isi lokasi"><span>ZIP</span></button><a class="dashboard-manage" href="?tab=lokasi&lokasi=<?= e($tour['id']) ?>">Kelola</a></div></td>
+                        <td class="select-column"><input type="checkbox" class="bulk-location" value="<?= e($tour['id']) ?>" aria-label="Pilih <?= e($tour['name']) ?>"></td><td><strong><?= e($tour['name']) ?></strong><small><?= e($tour['id']) ?></small></td><td><span class="smartkit-category"><?= e($tour['category_label']) ?></span></td><td><span class="table-progress"><i style="--progress:<?= $tour['score'] ?>%"></i><b><?= $tour['score'] ?>%</b></span></td>
+                        <td><span class="readiness-indicator <?= $tour['bundle_built'] ? 'is-ready' : 'is-pending' ?>" title="<?= $tour['bundle_built'] ? 'Bundle Smart Kit sudah dibuat' : 'Bundle Smart Kit belum dibuat' ?>"><i data-lucide="<?= $tour['bundle_built'] ? 'check' : 'minus' ?>" aria-hidden="true"></i></span></td><td><span class="readiness-indicator <?= $tour['implemented'] ? 'is-ready' : 'is-pending' ?>" title="<?= $tour['implemented'] ? 'Smart Kit sudah diterapkan' : 'Smart Kit belum diterapkan' ?>"><i data-lucide="<?= $tour['implemented'] ? 'check' : 'minus' ?>" aria-hidden="true"></i></span></td>
+                        <td><div class="dashboard-preview-links"><button type="button" data-tour-preview="<?= e($tour['local_url']) ?>" data-preview-title="<?= e($tour['name']) ?> · Local">Preview</button></div></td><td><div class="dashboard-preview-links"><button type="button" data-tour-preview="<?= e($tour['deploy_url']) ?>" data-preview-title="<?= e($tour['name']) ?> · Deploy">Preview</button></div></td><td class="dashboard-actions-column"><div class="dashboard-row-actions"><button type="button" data-open-location="<?= e($tour['path']) ?>" title="Buka folder di File Explorer"><i data-lucide="folder-open" aria-hidden="true"></i></button><button type="button" data-zip-location="<?= e($tour['id']) ?>" data-zip-path="<?= e($tour['path']) ?>" data-zip-score="<?= e($tour['score']) ?>" title="ZIP semua isi lokasi"><span>ZIP</span></button><a class="dashboard-manage" href="?tab=lokasi&lokasi=<?= e($tour['id']) ?>">Kelola</a></div></td>
                     </tr><?php endforeach; ?>
-                    <tr id="dashboardEmpty" hidden><td colspan="12" class="dashboard-empty">Tidak ada lokasi pada kategori atau filter ini.</td></tr>
+                    <tr id="dashboardEmpty" hidden><td colspan="9" class="dashboard-empty">Tidak ada lokasi pada kategori atau filter ini.</td></tr>
                 </tbody></table></div>
             </section>
             <div class="tour-preview-modal" id="tourPreviewModal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="tourPreviewTitle">
@@ -140,6 +152,44 @@
                     <div id="healthDetailList" class="health-detail-list"></div>
                 </div>
             </div>
+            <script>
+            (() => {
+                const root = document.currentScript.closest('.dashboard');
+                const search = root.querySelector('#dashboardSearch');
+                const status = root.querySelector('#dashboardFilter');
+                const tabs = [...root.querySelectorAll('[data-dashboard-category]')];
+                const rows = [...root.querySelectorAll('.tour-status-card')];
+                const empty = root.querySelector('#dashboardEmpty');
+                let category = 'all';
+                const apply = () => {
+                    const query = search.value.trim().toLocaleLowerCase('id');
+                    let visible = 0;
+                    rows.forEach(row => {
+                        const score = Number(row.dataset.dashboardScore || 0);
+                        const matchesCategory = category === 'all' || row.dataset.dashboardCategoryRow === category;
+                        const matchesStatus = status.value === 'all' || (status.value === 'complete' ? score === 100 : score < 100);
+                        const matchesSearch = !query || (row.dataset.dashboardName || '').includes(query);
+                        const show = matchesCategory && matchesStatus && matchesSearch;
+                        row.hidden = !show;
+                        row.style.display = show ? '' : 'none';
+                        if (show) visible++;
+                    });
+                    empty.hidden = visible > 0;
+                    empty.style.display = visible > 0 ? 'none' : '';
+                };
+                tabs.forEach(tab => tab.addEventListener('click', () => {
+                    category = tab.dataset.dashboardCategory;
+                    tabs.forEach(item => {
+                        const active = item === tab;
+                        item.classList.toggle('active', active);
+                        item.setAttribute('aria-pressed', active ? 'true' : 'false');
+                    });
+                    apply();
+                }));
+                search.addEventListener('input', apply);
+                status.addEventListener('change', apply);
+            })();
+            </script>
         </section>
     <?php elseif ($activeTab === 'translations'): ?>
         <section class="translation-center" id="translationCenter">
@@ -417,7 +467,7 @@
             <?php endif; ?>
         </section>
     <?php endif; ?>
-    <?php if (!in_array($activeTab, ['dashboard', 'config', 'languages', 'translations', 'custom', 'skin', 'video360', 'smart', 'loading'], true)): ?>
+    <?php if (!in_array($activeTab, ['dashboard', 'languages', 'translations', 'custom', 'video360', 'smart', 'loading'], true)): ?>
         </div>
     </div>
     <?php endif; ?>
@@ -601,7 +651,37 @@ let allowEditorNavigation = false;
 const editorFormState = form => JSON.stringify(Array.from(form.elements).filter(field => field.name && !['submit', 'button'].includes(field.type)).map(field => [field.name, ['checkbox', 'radio'].includes(field.type) ? field.checked : field.value]));
 const initialEditorStates = new Map(guardedEditorForms.map(form => [form, editorFormState(form)]));
 const hasUnsavedEditorChanges = () => guardedEditorForms.some(form => editorFormState(form) !== initialEditorStates.get(form));
-guardedEditorForms.forEach(form => form.addEventListener('submit', () => { allowEditorNavigation = true; }));
+guardedEditorForms.forEach(form => {
+    const actionBar = form.querySelector(':scope > .actions, :scope > .config-save-bar');
+    const saveButtons = Array.from(form.querySelectorAll('button.save[type="submit"],button.save[name="action"]'));
+    let status = null;
+    if (actionBar) {
+        status = document.createElement('span');
+        status.className = 'form-change-status';
+        status.innerHTML = '<i></i><span>Tidak ada perubahan</span>';
+        actionBar.prepend(status);
+        const cancel = document.createElement('button');
+        cancel.type = 'button';
+        cancel.className = 'form-cancel-action';
+        cancel.textContent = 'Batal';
+        cancel.addEventListener('click', () => { form.reset(); requestAnimationFrame(syncDirtyState); });
+        const firstSave = actionBar.querySelector('.save');
+        firstSave ? actionBar.insertBefore(cancel, firstSave) : actionBar.append(cancel);
+    }
+    const syncDirtyState = () => {
+        const changed = editorFormState(form) !== initialEditorStates.get(form);
+        form.classList.toggle('has-unsaved-changes', changed);
+        saveButtons.forEach(button => { button.disabled = !changed; });
+        if (status) status.querySelector('span').textContent = changed ? 'Ada perubahan yang belum disimpan' : 'Tidak ada perubahan';
+    };
+    form.addEventListener('input', syncDirtyState);
+    form.addEventListener('change', syncDirtyState);
+    form.addEventListener('submit', () => {
+        allowEditorNavigation = true;
+        saveButtons.forEach(button => { if (!button.disabled) { button.disabled = true; button.dataset.label = button.textContent; button.textContent = 'Menyimpan…'; } });
+    });
+    syncDirtyState();
+});
 const unsavedModal = document.getElementById('unsavedModal');
 let pendingNavigationUrl = '';
 document.addEventListener('click', event => {
@@ -637,17 +717,23 @@ if (dashboardSearch) {
     let activeCategory = 'all';
     const filterDashboard = () => {
         const query = dashboardSearch.value.trim().toLowerCase();
-        const status = dashboardFilter.value;
+        const status = dashboardFilter?.value || 'all';
         let visible = 0;
         dashboardCards.forEach(card => {
             const score = Number(card.dataset.dashboardScore);
             const statusMatch = status === 'all' || (status === 'complete' ? score === 100 : score < 100);
-            const categoryMatch = query !== '' || activeCategory === 'all' || card.dataset.dashboardCategoryRow === activeCategory;
-            const show = categoryMatch && statusMatch && (!query || card.dataset.dashboardName.includes(query));
+            const categoryMatch = activeCategory === 'all' || card.dataset.dashboardCategoryRow === activeCategory;
+            const searchMatch = !query || (card.dataset.dashboardName || '').includes(query);
+            const show = categoryMatch && statusMatch && searchMatch;
             card.hidden = !show;
+            card.style.display = show ? '' : 'none';
             if (show) visible++;
         });
-        document.getElementById('dashboardEmpty').hidden = visible !== 0;
+        const emptyRow = document.getElementById('dashboardEmpty');
+        if (emptyRow) {
+            emptyRow.hidden = visible !== 0;
+            emptyRow.style.display = visible === 0 ? '' : 'none';
+        }
     };
     categoryButtons.forEach(button => button.addEventListener('click', () => {
         categoryButtons.forEach(item => item.classList.remove('active'));
@@ -656,7 +742,7 @@ if (dashboardSearch) {
         filterDashboard();
     }));
     dashboardSearch.addEventListener('input', filterDashboard);
-    dashboardFilter.addEventListener('change', filterDashboard);
+    dashboardFilter?.addEventListener('change', filterDashboard);
     filterDashboard();
     const showDashboardProgress = (message, type = '') => {
         const progress = document.getElementById('bulkProgress');

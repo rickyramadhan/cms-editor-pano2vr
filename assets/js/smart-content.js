@@ -32,8 +32,21 @@
         el = h('div', { class: 'sc-scene' }, h('select', { onchange: (e) => { upd(e.target.value); show(e.target.value); } }, h('option', { value: '' }, '— tidak ada —'), names.map((s) => h('option', { value: s.id, selected: val === s.id ? true : null }, `${s.name} (${s.id})`))), th);
         show(val); break;
       }
+      case 'image': {
+        const img = h('img', { class: 'sc-thumb', alt: '', hidden: !val, src: val ? ctx.assetUrl(val) : '' });
+        const file = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', hidden: true, onchange: async (e) => {
+          const picked = e.target.files?.[0]; if (!picked) return;
+          if (picked.size > 5 * 1024 * 1024) { A().toast('Gambar maksimal 5 MB.', true); e.target.value = ''; return; }
+          const reader = new FileReader(); reader.onload = async () => {
+            try { const j = await A().post('content_upload_image', { location: ctx.location, data: reader.result }); upd(j.ref); img.src = j.url; img.hidden = false; A().toast(j.message); }
+            catch (error) { A().toast(error.message, true); } finally { e.target.value = ''; }
+          }; reader.readAsDataURL(picked);
+        } });
+        el = h('div', { class: 'sc-scene' }, img, h('div', { class: 'sh-actions' }, h('button', { type: 'button', class: 'translate', onclick: () => file.click() }, val ? 'Ganti gambar' : 'Unggah gambar'), val ? h('button', { type: 'button', class: 'danger', onclick: () => { upd(undefined); img.hidden = true; } }, 'Hapus') : null), file);
+        break;
+      }
       case 'scenes': el = scenesPicker(val || [], names, (v) => upd(v.length ? v : undefined)); break;
-      case 'bool': return h('label', { class: 'sh-check sc-bool' }, h('input', { type: 'checkbox', checked: !!val, onchange: (e) => upd(e.target.checked || undefined) }), f.label);
+      case 'bool': return h('label', { class: 'sh-check sc-bool' }, h('input', { type: 'checkbox', checked: !!val, onchange: (e) => upd(e.target.checked ? true : (f.keepFalse ? false : undefined)) }), f.label);
       case 'color': el = h('input', { type: 'color', value: /^#[0-9a-f]{6}$/i.test(val || '') ? val : '#1a82d8', oninput: (e) => upd(e.target.value) }); break;
       case 'date': el = h('input', { type: 'date', value: val || '', oninput: (e) => upd(e.target.value) }); break;
       case 'hours': el = h('input', { value: hoursText(val), placeholder: '08-20 atau 24 jam', oninput: (e) => upd(parseHours(e.target.value)) }); break;
@@ -61,6 +74,73 @@
   }
 
   const fieldsGrid = (fields, obj, onChange, ctx) => A().h('div', { class: 'sc-grid' }, fields.map((f) => control(f, obj, onChange, ctx)));
+
+  const profileGroups = [
+    ['Identitas Lokasi', 'Identitas utama yang digunakan di seluruh pengalaman tur.', 'map-pin', ['short', 'place', 'slug', 'type']],
+    ['Wilayah', 'Administrasi wilayah lokasi.', 'landmark', ['kecamatan', 'desa']],
+    ['Koordinat', 'Titik GPS utama untuk peta, jarak, dan informasi matahari.', 'locate-fixed', ['center.lat', 'center.lng']],
+    ['Operasional', 'Informasi penting sebelum pengunjung datang.', 'clock-3', ['hours', 'ticket', 'best', 'contact']],
+    ['Informasi Pengunjung', 'Akses, aturan, dan panduan singkat di lokasi.', 'circle-help', ['access', 'permit', 'tips', 'about.tag']],
+    ['Tampilan', 'Gambar latar yang dipakai pada panel informasi.', 'image', ['infoImage']],
+  ];
+  const requiredProfile = ['short', 'slug', 'type', 'center.lat', 'center.lng', 'hours', 'ticket', 'best', 'contact', 'access', 'permit', 'about.text'];
+  const fieldByKey = (fields, key) => fields.find((f) => f.k === key);
+  const sectionCard = (title, desc, icon, content, extraClass = '') => A().h('section', { class: 'sc-profile-card ' + extraClass, 'data-profile-card': title },
+    A().h('header', null, A().h('i', { 'data-lucide': icon, 'aria-hidden': 'true' }), A().h('div', null, A().h('h3', null, title), A().h('p', null, desc))), content);
+
+  function profileField(f, obj, mark, ctx) {
+    const { h } = A();
+    const required = requiredProfile.includes(f.k);
+    const node = control({ ...f, label: f.label.replace(/\s*\*.*$/, '') + (required ? ' *' : ''), wide: ['access', 'permit', 'tips'].includes(f.k) || f.wide }, obj, mark, ctx);
+    node.dataset.fieldKey = f.k;
+    if (required && (get(obj, f.k) === undefined || get(obj, f.k) === '')) node.classList.add('is-required-empty');
+    const input = node.querySelector('input,select,textarea');
+    input?.addEventListener('input', () => node.classList.toggle('is-required-empty', required && !String(input.value).trim()));
+    if (f.k === 'hours' || f.k === 'ticket') {
+      const preset = f.k === 'hours' ? '24 jam' : 'Gratis';
+      node.append(h('button', { type: 'button', class: 'sc-preset', onclick: () => { input.value = preset; input.dispatchEvent(new Event('input', { bubbles: true })); } }, preset));
+    }
+    return node;
+  }
+
+  function droneCard(fields, obj, mark, ctx) {
+    const { h } = A();
+    const enabledKey = 'jakartaRuntime.has_drone', nodeKey = 'jakartaRuntime.drone';
+    const enabled = !!get(obj, enabledKey);
+    const body = h('div', { class: 'sc-drone-body', hidden: !enabled });
+    const thumb = h('img', { class: 'sc-drone-thumb', alt: 'Pratinjau panorama drone', hidden: true });
+    const showScene = (id) => { const scene = ctx.scenes.find((s) => s.id === id); thumb.hidden = !scene?.thumb; if (scene?.thumb) thumb.src = scene.thumb; };
+    const select = h('select', { onchange: (e) => {
+      const scene = ctx.scenes.find((s) => s.id === e.target.value); setp(obj, nodeKey, e.target.value || undefined);
+      if (scene?.start) { setp(obj, 'jakartaRuntime.drone_pan', Number(scene.start.pan ?? 0)); setp(obj, 'jakartaRuntime.drone_tilt', Number(scene.start.tilt ?? 0)); setp(obj, 'jakartaRuntime.drone_fov', Number(scene.start.fov ?? 70)); }
+      showScene(e.target.value); mark(); drawRanges();
+    } }, h('option', { value: '' }, '— Pilih panorama drone —'), ctx.scenes.map((s) => h('option', { value: s.id, selected: get(obj, nodeKey) === s.id ? true : null }, `${s.name} (${s.id})`)));
+    const ranges = h('div', { class: 'sc-drone-ranges' });
+    const drawRanges = () => {
+      ranges.replaceChildren(...[['drone_pan', 'Pan', -180, 180, 0], ['drone_tilt', 'Tilt', -90, 90, 0], ['drone_fov', 'FoV', 20, 120, 70]].map(([key, label, min, max, fallback]) => {
+        const path = 'jakartaRuntime.' + key, value = Number(get(obj, path) ?? fallback), out = h('output', null, value.toFixed(1) + '°');
+        return h('label', { class: 'sc-range' }, h('span', null, label, out), h('input', { type: 'range', min, max, step: '.1', value, oninput: (e) => { setp(obj, path, +e.target.value); out.textContent = (+e.target.value).toFixed(1) + '°'; mark(); } }));
+      }));
+    };
+    body.append(h('label', { class: 'sc-f is-wide' }, h('span', null, 'Node drone'), h('div', { class: 'sc-drone-select' }, select, thumb), h('small', null, 'Pilihan panorama dibaca dari pano XML lokasi melalui paket scene Smart Kit.')), ranges);
+    drawRanges(); showScene(get(obj, nodeKey));
+    const toggle = h('label', { class: 'sc-toggle' }, h('input', { type: 'checkbox', checked: enabled, onchange: (e) => { setp(obj, enabledKey, e.target.checked); body.hidden = !e.target.checked; mark(); } }), h('i', null), h('span', null, 'Aktifkan drone'));
+    return h('section', { class: 'sc-profile-card sc-drone-card' }, h('header', null, h('i', { 'data-lucide': 'navigation', 'aria-hidden': 'true' }), h('div', null, h('h3', null, 'Drone'), h('p', null, 'Pilih panorama dan atur arah tampilan drone.')), toggle), h('span', { class: 'sc-sync-badge' }, h('i', { 'data-lucide': 'refresh-cw' }), 'Tersinkron dengan Data Lokasi'), body);
+  }
+
+  function profileEditor(blockDef, root, mark, ctx) {
+    const { h } = A(), obj = get(root, blockDef.path) || {}, fields = blockDef.fields;
+    const changed = () => { if (!get(root, blockDef.path)) setp(root, blockDef.path, obj); mark(); };
+    const cards = profileGroups.map(([title, desc, icon, keys]) => sectionCard(title, desc, icon, h('div', { class: 'sc-profile-grid' }, keys.map((key) => profileField(fieldByKey(fields, key), obj, changed, ctx)))));
+    cards.push(droneCard(fields, obj, changed, ctx));
+    const description = fieldByKey(fields, 'about.text'), descriptionField = profileField(description, obj, changed, ctx), textarea = descriptionField.querySelector('textarea');
+    const counter = h('span', { class: 'sc-char-counter' });
+    const count = () => { const n = textarea.value.length; counter.textContent = `${n} / 250–400`; counter.classList.toggle('is-bad', n < 250 || n > 400); };
+    textarea.addEventListener('input', count); count(); descriptionField.append(counter);
+    cards.push(sectionCard('Deskripsi', 'Ringkasan utama yang tampil pada panel Tentang dan sambutan lokasi.', 'align-left', descriptionField, 'sc-description-card'));
+    queueMicrotask(() => window.lucide?.createIcons());
+    return h('div', { class: 'sc-profile-sections' }, cards);
+  }
 
   /* ---------------- blok: objek, daftar, kamus ---------------- */
   function block(b, root, mark, ctx, rerender) {
@@ -183,13 +263,13 @@
       ST.data = { loc: ST.loc, content: d.content, scenes: d.scenes, hasPack: d.hasPack, warnings: d.warnings }; ST.dirty = false;
     }
     d = ST.data;
-    const ctx = { scenes: d.scenes, svcCats: schema.SVC_CATS };
+    const ctx = { scenes: d.scenes, svcCats: schema.SVC_CATS, location: ST.loc, assetUrl: (ref) => /^https?:|^data:|^\//.test(ref || '') ? ref : S.settings.url + 'packs/' + S.settings.wilayah + '/' + ST.loc + '/' + String(ref || '').replace(/^\.\//, '') };
     const sections = schema.SECTIONS.filter((s) => !s.pins);
     if (!ST.sec || !sections.some((s) => s.id === ST.sec)) ST.sec = sections[0].id;
     let sec = sections.find((s) => s.id === ST.sec);
-    const mark = () => { ST.dirty = true; saveBtn.classList.add('is-dirty'); saveBtn.textContent = 'Simpan konten ●'; };
+    const mark = () => { ST.dirty = true; saveBtn.disabled = false; saveBtn.classList.add('is-dirty'); saveBtn.textContent = 'Simpan konten'; box.querySelector('.sc-dirty-state')?.classList.add('is-dirty'); };
     const countOf = (s) => s.blocks.reduce((n, b) => { const v = get(d.content, b.path); return n + (Array.isArray(v) ? v.length : v && typeof v === 'object' ? (b.kind === 'dict' ? Object.keys(v).length : 1) : 0); }, 0);
-    const saveBtn = h('button', { type: 'button', class: 'save', onclick: save }, 'Simpan konten');
+    const saveBtn = h('button', { type: 'button', class: 'save', disabled: true, onclick: save }, 'Simpan konten');
     async function save() {
       saveBtn.disabled = true;
       try { const j = await post('content_save', { location: ST.loc, content: d.content }); d.content = j.content; d.warnings = j.warnings; ST.dirty = false; toast(j.message + (j.warnings.length ? ` ${j.warnings.length} catatan di bawah.` : ' Tidak ada catatan.')); A().reloadPreview(); box.replaceChildren(...build().filter(Boolean)); }
@@ -197,14 +277,17 @@
     }
     const panel = h('div', { class: 'sc-panel' });
     const paint = () => {
-      panel.replaceChildren(h('p', { class: 'sc-hint' }, sec.hint || ''), ...sec.blocks.map((b) => h('div', { class: 'card sh-card' }, block(b, d.content, mark, ctx, (soft) => { paint(); }))));
+      panel.replaceChildren(h('p', { class: 'sc-hint' }, sec.hint || ''), ...sec.blocks.map((b) => sec.id === 'Profil' && b.kind === 'object' && b.path === 'REGION'
+        ? profileEditor(b, d.content, mark, ctx)
+        : h('div', { class: 'card sh-card' }, block(b, d.content, mark, ctx, () => { paint(); }))));
     };
     function build() {
       sec = sections.find((s) => s.id === ST.sec) || sections[0];
-      const nav = h('nav', { class: 'sc-nav', 'aria-label': 'Bagian konten' }, sections.map((s) => { const n = countOf(s); return h('button', { type: 'button', class: s.id === ST.sec ? 'is-on' : '', onclick: () => { ST.sec = s.id; box.replaceChildren(...build().filter(Boolean)); } }, h('span', null, s.label), n ? h('i', null, String(n)) : null); }));
-      const warn = h('div', { class: 'card sh-card sc-warn' + (d.warnings.length ? '' : ' is-ok') }, h('h4', null, d.warnings.length ? `Catatan (${d.warnings.length})` : '✓ Tidak ada catatan'), d.warnings.length ? h('ul', null, d.warnings.map((w) => h('li', null, w))) : h('p', null, 'Data lolos pemeriksaan dasar.'));
+      const navIcons = ['user-round', 'lightbulb', 'store', 'badge-help', 'shield-check', 'route', 'calendar-days', 'images', 'stamp', 'layers-3'];
+      const nav = h('nav', { class: 'sc-nav', 'aria-label': 'Bagian konten' }, sections.map((s, i) => { const n = countOf(s); return h('button', { type: 'button', class: s.id === ST.sec ? 'is-on' : '', onclick: () => { ST.sec = s.id; box.replaceChildren(...build().filter(Boolean)); } }, h('span', null, h('i', { 'data-lucide': navIcons[i] || 'file-text', 'aria-hidden': 'true' }), s.label), n ? h('b', null, String(n)) : null); }));
       paint();
-      return [headerBar(locs, box, main, saveBtn, d), !d.hasPack ? h('div', { class: 'card sh-card sh-warn' }, 'Paket lokasi ini belum dibangun, jadi daftar scene kosong. Buka tab "Lokasi & Paket" lalu tekan "Bangun / perbarui paket".') : null, h('div', { class: 'sc-layout' }, nav, h('div', { class: 'sc-main' }, panel, warn))];
+      queueMicrotask(() => window.lucide?.createIcons());
+      return [headerBar(locs, box, main, saveBtn, d), !d.hasPack ? h('div', { class: 'card sh-card sh-warn' }, 'Paket lokasi ini belum dibangun, jadi daftar scene kosong. Buka tab "Lokasi & Paket" lalu tekan "Bangun / perbarui paket".') : null, h('div', { class: 'sc-layout' }, nav, h('div', { class: 'sc-main' }, panel))];
     }
     box.replaceChildren(...build().filter(Boolean));
   }
@@ -212,7 +295,10 @@
   function headerBar(locs, box, main, saveBtn, d) {
     const { h } = A();
     const sel = h('select', { 'aria-label': 'Lokasi', onchange: (e) => { if (ST.dirty && !confirm('Ada perubahan yang belum disimpan. Pindah lokasi tanpa menyimpan?')) { e.target.value = ST.loc; return; } ST.dirty = false; ST.loc = e.target.value; ST.data = null; A().render(); } }, locs.map((l) => h('option', { value: l.id, selected: l.id === ST.loc ? true : null }, `${l.name}${l.pack.exists ? '' : ' (paket belum dibangun)'}`)));
-    return h('div', { class: 'card sh-card sc-head' }, h('div', null, h('h3', null, 'Isi konten lokasi'), h('p', null, 'Data yang tampil di Tourism Guide, Informasi, Fakta, Discover, Paspor, dll. Tersimpan di content.json lokasi (cadangan otomatis).')), h('div', { class: 'sc-head__r' }, sel, saveBtn || null));
+    const requiredMissing = requiredProfile.filter((key) => { const value = get(d.content.REGION || {}, key); return value === undefined || value === ''; }).length;
+    return h('div', { class: 'sc-head' }, h('div', { class: 'sc-head__location' }, h('span', null, 'Lokasi aktif'), sel), h('div', { class: 'sc-head__r' },
+      h('button', { type: 'button', class: 'sc-completeness', onclick: () => document.querySelector('.is-required-empty')?.scrollIntoView({ behavior: 'smooth', block: 'center' }) }, requiredMissing ? `${requiredMissing} field wajib belum terisi` : 'Profil wajib lengkap'),
+      h('span', { class: 'sc-dirty-state' }, h('i', null), 'Tidak ada perubahan'), saveBtn || null));
   }
 
   /* ---------------- tampilan: Data Wilayah ---------------- */

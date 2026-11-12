@@ -107,12 +107,14 @@ function shStatus(array $st, array $tours): array
         if (is_file($packDir . '/scenes.js') && preg_match('~"order":\s*\[(.*?)\]~s', (string) file_get_contents($packDir . '/scenes.js'), $m)) $scenes = substr_count($m[1], '"') / 2;
         $html = is_file($t['dir'] . '/index.html') ? (string) file_get_contents($t['dir'] . '/index.html') : '';
         $applied = preg_match('~<script[^>]*src="([^"]*smart-kit/boot\.js[^"]*)"~i', $html, $am) ? $am[1] : '';
+        $runtimeReady = (bool) preg_match('~<script[^>]+src=["\'][^"\']*main-loader\.js(?:\?[^"\']*)?["\']~i', $html)
+            && (bool) preg_match('~<link[^>]+href=["\'][^"\']*custom\.css(?:\?[^"\']*)?["\']~i', $html);
         $count = static fn($k) => is_array($content[$k] ?? null) ? count($content[$k]) : 0;
         $rows[] = [
             'id' => $id, 'path' => $t['path'], 'name' => (string) ($content['REGION']['name'] ?? shHumanize($id)), 'url' => shWebUrl($t['dir']),
             'pack' => ['exists' => $scenes > 0, 'scenes' => (int) $scenes, 'content' => is_array($content), 'hubLocal' => is_file($packDir . '/hub.json'),
                 'type' => (string) ($content['REGION']['type'] ?? ''), 'counts' => ['layanan' => $count('SERVICES'), 'fakta' => $count('FACTS'), 'acara' => $count('EVENTS'), 'rute' => $count('ROUTES'), 'stempel' => $count('STAMPS')]],
-            'applied' => $applied !== '', 'appliedSrc' => $applied,
+            'applied' => $applied !== '', 'appliedSrc' => $applied, 'runtimeReady' => $runtimeReady,
         ];
     }
     return $rows;
@@ -254,6 +256,25 @@ function shSaveLogo(array $st, string $dataUrl): string
     return '~/img/brand/' . $name . '?v=' . time();
 }
 
+/** Unggah gambar latar Informasi per lokasi. */
+function shSaveContentImage(array $st, string $location, string $dataUrl): array
+{
+    $pos = strpos($dataUrl, ';base64,');
+    $mime = ($pos !== false && str_starts_with($dataUrl, 'data:image/')) ? substr($dataUrl, 11, $pos - 11) : '';
+    if (!in_array($mime, ['png', 'jpeg', 'webp'], true)) throw new RuntimeException('Gambar harus berformat PNG, JPG, atau WebP.');
+    $bin = base64_decode(substr($dataUrl, $pos + 8), true);
+    if ($bin === false || $bin === '' || strlen($bin) > 5 * 1024 * 1024) throw new RuntimeException('Gambar rusak atau melebihi 5 MB.');
+    $info = @getimagesizefromstring($bin); $map = [IMAGETYPE_PNG => 'png', IMAGETYPE_JPEG => 'jpg', IMAGETYPE_WEBP => 'webp'];
+    if (!$info || !isset($map[$info[2]])) throw new RuntimeException('Berkas bukan gambar PNG/JPG/WebP yang valid.');
+    if ($info[0] > 10000 || $info[1] > 10000) throw new RuntimeException('Dimensi gambar terlalu besar (maks 10.000 px).');
+    $dir = $st['path'] . '/packs/' . $st['wilayah'] . '/' . $location . '/img';
+    if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) throw new RuntimeException('Folder gambar lokasi gagal dibuat.');
+    foreach (glob($dir . '/info-background.*') ?: [] as $old) @unlink($old);
+    $name = 'info-background.' . $map[$info[2]];
+    if (file_put_contents($dir . '/' . $name, $bin, LOCK_EX) === false) throw new RuntimeException('Gambar latar info gagal disimpan.');
+    return ['ref' => 'img/' . $name . '?v=' . time(), 'url' => $st['url'] . 'packs/' . $st['wilayah'] . '/' . $location . '/img/' . $name . '?v=' . time()];
+}
+
 function shWriteHub(array $st, array $hub): void
 {
     $file = shHubFile($st);
@@ -274,7 +295,11 @@ function shBuildPack(array $st, array $tour): string
 {
     $script = $st['path'] . '/tools/build-pack.py';
     if (!is_file($script)) throw new RuntimeException('tools/build-pack.py tidak ditemukan.');
-    $cmd = [$st['python'], '-I', $script, '--tour', $tour['dir'], '--pack', $st['wilayah'] . '/' . $tour['id'], '--init'];
+    // -I menonaktifkan user site-packages. Pada Python Microsoft Store, Pillow
+    // terpasang di user site sehingga `from PIL import Image` selalu gagal.
+    // -E tetap mengabaikan variabel lingkungan Python tanpa menyembunyikan
+    // dependensi yang dipasang untuk pengguna Windows yang menjalankan PHP.
+    $cmd = [$st['python'], '-E', $script, '--tour', $tour['dir'], '--pack', $st['wilayah'] . '/' . $tour['id'], '--init'];
     $proc = proc_open($cmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, ['PYTHONIOENCODING' => 'utf-8'] + getenv());
     if (!is_resource($proc)) throw new RuntimeException('Python tidak dapat dijalankan (' . $st['python'] . '). Atur jalur Python di Pengaturan.');
     $out = stream_get_contents($pipes[1]); $err = stream_get_contents($pipes[2]);
@@ -282,6 +307,49 @@ function shBuildPack(array $st, array $tour): string
     $code = proc_close($proc);
     if ($code !== 0) throw new RuntimeException('build-pack gagal (' . $code . '): ' . trim($err ?: $out));
     return trim($out);
+}
+
+/** URL relatif dari folder tour menuju berkas runtime project (aman untuk tour bersarang). */
+function shRelativeFileUrl(string $fromDirectory, string $targetFile): string
+{
+    $from = explode('/', trim(str_replace('\\', '/', $fromDirectory), '/'));
+    $target = explode('/', trim(str_replace('\\', '/', $targetFile), '/'));
+    while ($from && $target && strcasecmp($from[0], $target[0]) === 0) { array_shift($from); array_shift($target); }
+    return str_repeat('../', count($from)) . implode('/', array_map('rawurlencode', $target));
+}
+
+/**
+ * Pasang runtime bersama Jakarta tanpa menyentuh skin.js.
+ * main-loader.js juga melakukan preload video teaser desktop/mobile. index.html
+ * selalu dicadangkan sebelum perubahan agar dapat dipulihkan secara manual.
+ */
+function shInstallSharedRuntime(array $project, array $tour): string
+{
+    $runtime = projectRuntimeDirectory($project);
+    $loader = $runtime . '/main-loader.js';
+    $css = $runtime . '/custom.css';
+    if (!is_file($loader) || !is_file($css)) throw new RuntimeException('Runtime project tidak lengkap: main-loader.js atau custom.css tidak ditemukan di ' . $runtime);
+    $index = $tour['dir'] . '/index.html';
+    if (!is_file($index)) throw new RuntimeException('index.html tidak ada.');
+    $html = (string) file_get_contents($index);
+    $loaderUrl = shRelativeFileUrl($tour['dir'], $loader);
+    $cssUrl = shRelativeFileUrl($tour['dir'], $css);
+    $hasLoader = str_contains($html, $loaderUrl) || (bool) preg_match('~<script[^>]+src=["\'][^"\']*main-loader\.js(?:\?[^"\']*)?["\']~i', $html);
+    $hasCss = str_contains($html, $cssUrl) || (bool) preg_match('~<link[^>]+href=["\'][^"\']*custom\.css(?:\?[^"\']*)?["\']~i', $html);
+    if ($hasLoader && $hasCss) return 'runtime bersama + teaser sudah terpasang';
+    $tags = [];
+    if (!$hasCss) $tags[] = '<link rel="stylesheet" href="' . htmlspecialchars($cssUrl, ENT_QUOTES) . '" data-smart-runtime>';
+    if (!$hasLoader) $tags[] = '<script src="' . htmlspecialchars($loaderUrl, ENT_QUOTES) . '?v=' . date('YmdHis') . '" data-smart-runtime></script>';
+    $insertion = "\n\t\t" . implode("\n\t\t", $tags);
+    $updated = preg_replace('~(<script[^>]+src=["\']skin\.js(?:\?[^"\']*)?["\'][^>]*>\s*</script>)~i', '$1' . $insertion, $html, 1, $count);
+    if ($updated === null || $count !== 1) {
+        $pos = stripos($html, '</head>');
+        if ($pos === false) throw new RuntimeException('Tag skin.js dan </head> tidak ditemukan; runtime tidak dipasang.');
+        $updated = substr($html, 0, $pos) . $insertion . "\n\t" . substr($html, $pos);
+    }
+    shBackup($tour['dir'], 'index.html');
+    if (file_put_contents($index, $updated, LOCK_EX) === false) throw new RuntimeException('Runtime bersama gagal ditulis ke index.html.');
+    return 'runtime bersama + teaser dipasang (backup index.html dibuat)';
 }
 
 function shTag(array $st, string $slug): string
@@ -361,6 +429,45 @@ function shState(array $project): array
 /* ------------------------------ konten lokasi & data wilayah (GUI "Isi Konten") ------------------------------ */
 const SH_CONTENT_KEYS = ['REGION', 'ZONES', 'CATS', 'SERVICES', 'FACT_CATS', 'FACTS', 'ETIQUETTE', 'QUIZ', 'SAFETY', 'ROUTES', 'STAMPS', 'REWARDS', 'COLLECTIONS', 'THEMED', 'EVENTS', 'DULU', 'SEATS', 'WIZARD', 'DESTINATIONS', 'MENU', 'REELS', 'LANDMARK', 'ZONEOF'];
 const SH_REGION_KEEP = ['brandLogo', 'menuArt', 'skin', 'brand', 'destImg', 'walk'];   // dikelola alat lain; tidak diterima dari GUI
+
+function shJakartaDatabaseFile(array $project): string
+{
+    return projectRuntimeDirectory($project) . '/global-database.js';
+}
+
+function shJakartaRuntimeRecord(array $project, string $location): ?array
+{
+    $file = shJakartaDatabaseFile($project);
+    if (!is_file($file)) return null;
+    $database = cmsReadJsObject($file, 'GLOBAL_DATABASE');
+    $record = $database[$location] ?? null;
+    if (!is_array($record)) return null;
+    return [
+        'id_lokasi' => (string) ($record['id_lokasi'] ?? $location),
+        'drone' => (string) ($record['drone'] ?? ''),
+        'has_drone' => ($record['has_drone'] ?? false) === true,
+        'drone_pan' => (float) ($record['drone_pan'] ?? 0),
+        'drone_tilt' => (float) ($record['drone_tilt'] ?? 0),
+        'drone_fov' => (float) ($record['drone_fov'] ?? 70),
+    ];
+}
+
+function shSyncJakartaRuntime(array $project, string $location, array $runtime): void
+{
+    $file = shJakartaDatabaseFile($project);
+    if (!is_file($file)) return;
+    $database = cmsReadJsObject($file, 'GLOBAL_DATABASE');
+    if (!isset($database[$location]) || !is_array($database[$location])) return;
+    $database[$location]['id_lokasi'] = (string) ($runtime['id_lokasi'] ?? $location);
+    $database[$location]['drone'] = trim((string) ($runtime['drone'] ?? ''));
+    $database[$location]['has_drone'] = ($runtime['has_drone'] ?? false) === true;
+    $database[$location]['drone_pan'] = round((float) ($runtime['drone_pan'] ?? 0), 2);
+    $database[$location]['drone_tilt'] = round((float) ($runtime['drone_tilt'] ?? 0), 2);
+    $database[$location]['drone_fov'] = max(1, min(179, round((float) ($runtime['drone_fov'] ?? 70), 2)));
+    $backup = dirname($file) . '/.history'; if (!is_dir($backup)) @mkdir($backup, 0775, true);
+    @copy($file, $backup . '/global-database-' . date('Ymd-His') . '.js');
+    cmsReplaceJsObject($file, 'GLOBAL_DATABASE', $database);
+}
 
 /** Bersihkan data dari GUI: tanpa tag HTML, tanpa skema berbahaya, batas ukuran & kedalaman. */
 function shClean(mixed $v, int $depth = 0): mixed
@@ -449,6 +556,8 @@ function shContentGet(array $st, array $tour): array
     if (is_file($dir . '/data.js') && !is_file($dir . '/content.json')) throw new RuntimeException('Lokasi ini memakai format lama (data.js) yang tidak dapat disunting di GUI. Migrasikan ke content.json lebih dulu.');
     $content = is_file($dir . '/content.json') ? json_decode((string) file_get_contents($dir . '/content.json'), true) : null;
     $content = is_array($content) ? $content : ['REGION' => ['slug' => $tour['id']]];
+    $runtime = shJakartaRuntimeRecord(activeProject(), $tour['id']);
+    if ($runtime !== null) $content['REGION']['jakartaRuntime'] = $runtime;
     return ['content' => $content, 'scenes' => $scenes, 'hasPack' => $scenes !== [], 'warnings' => shContentWarnings($content, array_column($scenes, 'id'))];
 }
 
@@ -484,6 +593,12 @@ if (!defined('SMART_HUB_INCLUDE_ONLY')) {
                 $id = cmsCleanKey((string) ($payload['location'] ?? ''));
                 if (!isset($tours[$id])) throw new RuntimeException('Lokasi tidak ditemukan.');
                 cmsJsonResponse(['success' => true] + shContentGet($st, $tours[$id]));
+            case 'content_upload_image':
+                $id = cmsCleanKey((string) ($payload['location'] ?? ''));
+                if (!isset($tours[$id])) throw new RuntimeException('Lokasi tidak ditemukan.');
+                $image = shSaveContentImage($st, $id, (string) ($payload['data'] ?? ''));
+                cmsAudit('konten.gambar', ['pack' => $st['wilayah'] . '/' . $id]);
+                cmsJsonResponse(['success' => true, 'message' => 'Gambar latar info berhasil diunggah.'] + $image);
             case 'content_save':
                 $id = cmsCleanKey((string) ($payload['location'] ?? ''));
                 if (!isset($tours[$id])) throw new RuntimeException('Lokasi tidak ditemukan.');
@@ -496,7 +611,11 @@ if (!defined('SMART_HUB_INCLUDE_ONLY')) {
                 foreach (SH_REGION_KEEP as $k) if (isset($cur['REGION'][$k])) $clean['REGION'][$k] = $cur['REGION'][$k];
                 foreach ($cur as $k => $v) if (!in_array($k, SH_CONTENT_KEYS, true)) $clean[$k] = $v;
                 $clean['REGION']['slug'] = $clean['REGION']['slug'] ?? $id;
+                $runtime = (array) ($clean['REGION']['jakartaRuntime'] ?? []);
+                if (($runtime['has_drone'] ?? false) === true && trim((string) ($runtime['drone'] ?? '')) !== '') $clean['REGION']['aerial'] = trim((string) $runtime['drone']);
+                else unset($clean['REGION']['aerial']);
                 shWriteJson($file, $clean);
+                if ($runtime) shSyncJakartaRuntime($project, $id, $runtime);
                 cmsAudit('konten.simpan', ['pack' => $st['wilayah'] . '/' . $id]);
                 cmsJsonResponse(['success' => true, 'message' => 'Konten ' . $id . ' disimpan.', 'content' => $clean, 'warnings' => shContentWarnings($clean, array_column(shScenes($st, $id), 'id'))]);
             case 'region_get':
@@ -528,7 +647,13 @@ if (!defined('SMART_HUB_INCLUDE_ONLY')) {
                 $results = [];
                 foreach ($pick((array) ($payload['locations'] ?? [])) as $id => $t) {
                     try {
-                        $msg = $op === 'build' ? shBuildPack($st, $t) : shApply($st, $t, $op === 'apply');
+                        if ($op === 'build') {
+                            $buildMessage = shBuildPack($st, $t);
+                            $runtimeMessage = shInstallSharedRuntime($project, $t);
+                            $msg = trim($buildMessage . ($buildMessage !== '' ? ' · ' : '') . $runtimeMessage);
+                        } else {
+                            $msg = shApply($st, $t, $op === 'apply');
+                        }
                         $results[] = ['id' => $id, 'ok' => true, 'message' => $msg];
                     } catch (Throwable $e) { $results[] = ['id' => $id, 'ok' => false, 'message' => $e->getMessage()]; }
                 }
