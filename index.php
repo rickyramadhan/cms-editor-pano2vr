@@ -229,6 +229,8 @@ function scanTourDirectories(string $root): array
     return $detected;
 }
 
+require_once __DIR__ . '/includes/pano-audit.php';
+
 function readPanoramaNodes(string $root, array $tour): array
 {
     $tourPath = $root . '/' . $tour['path'];
@@ -297,125 +299,6 @@ function readTourWebElements(string $root, array $tour): array
         }
     }
     return array_values($elements);
-}
-
-function parseXmlAttributes(string $text): array
-{
-    preg_match_all('/([a-zA-Z0-9_-]+)="([^"]*)"/', $text, $matches, PREG_SET_ORDER);
-    $attributes = [];
-    foreach ($matches as $match) {
-        $attributes[strtolower($match[1])] = html_entity_decode($match[2], ENT_QUOTES | ENT_XML1, 'UTF-8');
-    }
-    return $attributes;
-}
-
-function auditTour(string $root, array $tour): array
-{
-    $tourPath = $root . '/' . $tour['path'];
-    $xml = file_get_contents($tourPath . '/pano.xml');
-    $result = ['stats' => ['panoramas' => 0, 'hotspots' => 0, 'errors' => 0, 'warnings' => 0], 'issues' => [], 'hotspots' => [], 'languages' => [], 'displayLanguageIndexes' => [], 'translations' => []];
-    if ($xml === false) {
-        $result['issues'][] = ['level' => 'error', 'type' => 'File', 'location' => $tour['path'], 'message' => 'pano.xml tidak dapat dibaca.'];
-        $result['stats']['errors'] = 1;
-        return $result;
-    }
-
-    $addIssue = static function (string $level, string $type, string $location, string $message) use (&$result): void {
-        $result['issues'][] = compact('level', 'type', 'location', 'message');
-        $result['stats'][$level === 'error' ? 'errors' : 'warnings']++;
-    };
-    $isIgnoredTranslation = static function (string $source): bool {
-        $normalized = strtolower(trim(html_entity_decode(strip_tags($source), ENT_QUOTES | ENT_XML1, 'UTF-8')));
-        return in_array($normalized, ['govirtual', 'enter fullscreen', 'enter vr', 'exit fullscreen'], true);
-    };
-
-    preg_match_all('/<panorama\b[^>]*\bid="([^"]+)"[^>]*>.*?<\/panorama>/is', $xml, $panoramaMatches, PREG_SET_ORDER);
-    $result['stats']['panoramas'] = count($panoramaMatches);
-    $nodeIds = [];
-    foreach ($panoramaMatches as $panorama) $nodeIds[$panorama[1]] = true;
-
-    $translatedTexts = [];
-    foreach ($panoramaMatches as $panorama) {
-        $nodeId = $panorama[1];
-        $body = $panorama[0];
-        if (preg_match('/<userdata\s+([^>]*)\/>/i', $body, $userdataMatch)) {
-            $userdata = parseXmlAttributes($userdataMatch[1]);
-            $title = trim((string) ($userdata['title'] ?? ''));
-            if ($title !== '') $translatedTexts[$title] = true;
-        }
-
-        preg_match_all('/<hotspot\s+([^>]*)\/>/i', $body, $hotspotMatches);
-        foreach ($hotspotMatches[1] ?? [] as $hotspotText) {
-            $result['stats']['hotspots']++;
-            $hotspot = parseXmlAttributes($hotspotText);
-            $hotspotId = trim((string) ($hotspot['id'] ?? 'hotspot'));
-            $location = $nodeId . ' / ' . $hotspotId;
-            $title = trim((string) ($hotspot['title'] ?? ''));
-            $url = trim((string) ($hotspot['url'] ?? ''));
-            $result['hotspots'][] = ['nodeId' => $nodeId, 'id' => $hotspotId, 'title' => $title, 'url' => $url, 'target' => trim((string) ($hotspot['target'] ?? '')), 'skinId' => trim((string) ($hotspot['skinid'] ?? ''))];
-            if ($title !== '') $translatedTexts[$title] = true;
-            if ($url === '') {
-                $addIssue('error', 'Link kosong', $location, 'Hotspot “' . ($title !== '' ? $title : $hotspotId) . '” belum memiliki URL/link.');
-            }
-        }
-    }
-
-    $translations = [];
-    $languages = [];
-    if (preg_match('/<json>(.*?)<\/json>/is', $xml, $jsonMatch)) {
-        $translationData = json_decode(html_entity_decode(trim($jsonMatch[1]), ENT_QUOTES | ENT_XML1, 'UTF-8'), true);
-        if (is_array($translationData)) {
-            $languages = array_values(array_filter((array) ($translationData['languages'] ?? []), 'is_string'));
-            $translations = (array) ($translationData['translations'] ?? []);
-        }
-    }
-    if ($languages === []) {
-        $addIssue('error', 'Terjemahan', 'masternode', 'Data bahasa terjemahan tidak ditemukan atau tidak valid.');
-    } else {
-        $hasZhCn = in_array('zh-CN', $languages, true);
-        foreach ($languages as $index => $language) {
-            if ($hasZhCn && strtolower($language) === 'zh') continue;
-            $result['displayLanguageIndexes'][] = $index;
-        }
-        foreach (array_keys($translatedTexts) as $sourceText) {
-            if ($isIgnoredTranslation($sourceText)) continue;
-            $values = $translations[$sourceText] ?? null;
-            foreach ($result['displayLanguageIndexes'] as $index) {
-                $language = $languages[$index];
-                if (!is_array($values) || trim((string) ($values[$index] ?? '')) === '') {
-                    $addIssue('warning', 'Belum diterjemahkan', $sourceText, 'Terjemahan bahasa ' . $language . ' masih kosong.');
-                }
-            }
-        }
-    }
-    $result['languages'] = $languages;
-    foreach ($translations as $source => $values) {
-        if (!is_string($source) || !is_array($values)) continue;
-        if ($isIgnoredTranslation($source)) continue;
-        $plainSource = trim(strip_tags($source));
-        $isDateOrTime = preg_match('/^(?:\d{1,4}[-\/.]\d{1,2}[-\/.]\d{1,4})(?:\s+\d{1,2}:\d{2}(?::\d{2})?(?:\s*[AP]M)?)?$/i', $plainSource)
-            || preg_match('/^\d{1,2}:\d{2}(?::\d{2})?(?:\s*[AP]M)?$/i', $plainSource)
-            || preg_match('/^\d{1,2}\s+(?:jan|feb|mar|apr|mei|may|jun|jul|agu|aug|sep|okt|oct|nov|des|dec)[a-z]*\s+\d{2,4}$/i', $plainSource);
-        if (!$isDateOrTime) {
-            $translationValues = array_values($values);
-            $missingCount = 0;
-            foreach ($result['displayLanguageIndexes'] as $index) {
-                if (trim((string) ($translationValues[$index] ?? '')) === '') $missingCount++;
-            }
-            $result['translations'][] = ['source' => $source, 'values' => $translationValues, 'missingCount' => $missingCount];
-        }
-    }
-    usort($result['hotspots'], static function (array $left, array $right): int {
-        $leftMissing = trim((string) $left['url']) === '' ? 0 : 1;
-        $rightMissing = trim((string) $right['url']) === '' ? 0 : 1;
-        return $leftMissing <=> $rightMissing ?: strnatcasecmp($left['nodeId'] . $left['id'], $right['nodeId'] . $right['id']);
-    });
-    usort($result['translations'], static function (array $left, array $right): int {
-        $leftComplete = (int) ($left['missingCount'] ?? 0) === 0 ? 1 : 0;
-        $rightComplete = (int) ($right['missingCount'] ?? 0) === 0 ? 1 : 0;
-        return $leftComplete <=> $rightComplete ?: strnatcasecmp((string) $left['source'], (string) $right['source']);
-    });
-    return $result;
 }
 
 function analyzeTourCompletion(string $root, string $id, array $tour, array $location, array $objects, bool $includeAssetAnalysis = true): array
@@ -569,7 +452,10 @@ function smartKitDashboardTour(array $status, array $tour, array $settings): arr
 }
 
 // Smart Hub dan Optimasi Loading tidak memerlukan database CMS: project tanpa assets CMS (mis. Semarang) tetap dapat membukanya tanpa galat.
-$lightTab = in_array((string) ($_GET['tab'] ?? ''), ['smart', 'loading'], true) && !projectAssetsValid($assetsBaseRoot);
+$cmsRuntimeReady = projectAssetsValid($assetsBaseRoot);
+// Project tanpa runtime CMS (assets/global-database.js) hanya dapat memakai tab yang tidak membutuhkannya; sisanya dialihkan ke AI Guide Hub.
+if (!$cmsRuntimeReady && !in_array((string) ($_GET['tab'] ?? ''), ['smart', 'loading', 'aihub'], true)) $_GET['tab'] = 'aihub';
+$lightTab = in_array((string) ($_GET['tab'] ?? ''), ['smart', 'loading', 'aihub'], true) && !$cmsRuntimeReady;
 try {
     if ($lightTab) {
         $database = []; $languageRegistry = []; $config = ['base_url' => '', 'links' => []]; $oiDatabase = []; $customCss = '';
@@ -802,13 +688,20 @@ try {
 
 $selectedId = cleanKey((string) ($_GET['lokasi'] ?? array_key_first($detectedTours) ?? array_key_first($database) ?? ''));
 $requestedTab = (string) ($_GET['tab'] ?? 'dashboard');
-$activeTab = in_array($requestedTab, ['dashboard', 'translations', 'lokasi', 'config', 'languages', 'custom', 'skin', 'object', 'voice', 'video', 'video360', 'optimizer', 'audit', 'smart', 'loading'], true) ? $requestedTab : 'dashboard';
+$activeTab = in_array($requestedTab, ['dashboard', 'translations', 'lokasi', 'config', 'languages', 'custom', 'skin', 'object', 'voice', 'video', 'video360', 'optimizer', 'audit', 'smart', 'aihub', 'loading'], true) ? $requestedTab : 'dashboard';
 $smartHubState = null;
 if ($activeTab === 'smart') {
     // Smart Hub: integrasi Smart Kit untuk wilayah project aktif (lihat smart-hub.php)
     if (!defined('SMART_HUB_INCLUDE_ONLY')) define('SMART_HUB_INCLUDE_ONLY', true);
     require_once __DIR__ . '/smart-hub.php';
     try { $smartHubState = shState($activeProject); } catch (Throwable $smartError) { $error = $smartError->getMessage(); }
+}
+$aiHubState = null;
+if ($activeTab === 'aihub') {
+    // AI Guide Hub: penghubung CMS ↔ Hub untuk wilayah project aktif (lihat ai-hub.php)
+    if (!defined('AI_HUB_INCLUDE_ONLY')) define('AI_HUB_INCLUDE_ONLY', true);
+    require_once __DIR__ . '/ai-hub.php';
+    try { $aiHubState = ahState($activeProject); } catch (Throwable $aiHubError) { $error = $aiHubError->getMessage(); }
 }
 $selected = $database[$selectedId] ?? [
     'id_lokasi' => $selectedId === 'baru' ? '' : $selectedId,
@@ -882,7 +775,7 @@ if ($activeTab === 'dashboard') {
         $dashboardTours[] = smartKitDashboardTour($status, $detectedTours[$id] ?? [], $dashboardSettings);
     }
     usort($dashboardTours, static fn(array $a, array $b): int => $a['score'] <=> $b['score'] ?: strnatcasecmp((string) $a['name'], (string) $b['name']));
-} elseif (!in_array($activeTab, ['config', 'languages', 'translations', 'custom', 'skin', 'smart', 'loading', 'video360'], true)) {   // tab tanpa daftar status per lokasi: jangan mengurai pano.xml semua tur
+} elseif (!in_array($activeTab, ['config', 'languages', 'translations', 'custom', 'skin', 'smart', 'aihub', 'loading', 'video360'], true)) {   // tab tanpa daftar status per lokasi: jangan mengurai pano.xml semua tur
     foreach ($detectedTours as $id => $tour) {
         $sidebarTourStatus[$id] = analyzeTourCompletion($projectRoot, $id, $tour, $database[$id] ?? [], $oiDatabase[$id] ?? [], false);
     }

@@ -10,6 +10,7 @@ declare(strict_types=1);
 $routes = [
     'add-language-progress' => 'add-language-progress.php',
     'add-welcome-text' => 'add-welcome-text.php',
+    'ai-hub' => 'ai-hub.php',
     'bulk-action' => 'bulk-action.php',
     'generate-voice' => 'generate-voice.php',
     'health-check' => 'health-check.php',
