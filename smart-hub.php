@@ -427,8 +427,24 @@ function shState(array $project): array
 }
 
 /* ------------------------------ konten lokasi & data wilayah (GUI "Isi Konten") ------------------------------ */
-const SH_CONTENT_KEYS = ['REGION', 'ZONES', 'CATS', 'SERVICES', 'FACT_CATS', 'FACTS', 'ETIQUETTE', 'QUIZ', 'SAFETY', 'ROUTES', 'STAMPS', 'REWARDS', 'COLLECTIONS', 'THEMED', 'EVENTS', 'DULU', 'SEATS', 'WIZARD', 'DESTINATIONS', 'MENU', 'REELS', 'LANDMARK', 'ZONEOF'];
+const SH_CONTENT_KEYS = ['REGION', 'ZONES', 'CATS', 'SERVICES', 'GUIDE', 'FACT_CATS', 'FACTS', 'ETIQUETTE', 'QUIZ', 'SAFETY', 'ROUTES', 'STAMPS', 'REWARDS', 'COLLECTIONS', 'THEMED', 'EVENTS', 'DULU', 'SEATS', 'WIZARD', 'DESTINATIONS', 'MENU', 'REELS', 'LANDMARK', 'ZONEOF'];
 const SH_REGION_KEEP = ['brandLogo', 'menuArt', 'skin', 'brand', 'destImg', 'walk', 'aiGuide'];   // dikelola alat lain; tidak diterima dari GUI
+
+/** Normalisasi preferensi Tourism Guide per lokasi. Array kosong = konfigurasi default (semua aktif). */
+function shNormalizeGuide(array &$content): void
+{
+    $guide = $content['GUIDE'] ?? null;
+    $input = is_array($guide) && is_array($guide['hiddenCategories'] ?? null) ? $guide['hiddenCategories'] : [];
+    $hidden = [];
+    foreach ($input as $id) {
+        if (!is_string($id) && !is_int($id)) continue;
+        $id = trim((string) $id);
+        if (preg_match(SH_ID_RE, $id)) $hidden[$id] = true;
+    }
+    $hidden = array_map('strval', array_slice(array_keys($hidden), 0, 100));
+    if ($hidden) $content['GUIDE'] = ['hiddenCategories' => $hidden];
+    else unset($content['GUIDE']);
+}
 
 function shJakartaDatabaseFile(array $project): string
 {
@@ -606,6 +622,7 @@ if (!defined('SMART_HUB_INCLUDE_ONLY')) {
                 if (!is_array($raw)) throw new RuntimeException('Data konten tidak valid.');
                 $clean = [];
                 foreach ($raw as $k => $v) if (in_array($k, SH_CONTENT_KEYS, true)) $clean[$k] = shClean($v);
+                shNormalizeGuide($clean);
                 $file = $st['path'] . '/packs/' . $st['wilayah'] . '/' . $id . '/content.json';
                 $cur = is_file($file) ? (json_decode((string) file_get_contents($file), true) ?: []) : [];
                 foreach (SH_REGION_KEEP as $k) if (isset($cur['REGION'][$k])) $clean['REGION'][$k] = $cur['REGION'][$k];

@@ -268,7 +268,10 @@
     if (!ST.sec || !sections.some((s) => s.id === ST.sec)) ST.sec = sections[0].id;
     let sec = sections.find((s) => s.id === ST.sec);
     const mark = () => { ST.dirty = true; saveBtn.disabled = false; saveBtn.classList.add('is-dirty'); saveBtn.textContent = 'Simpan konten'; box.querySelector('.sc-dirty-state')?.classList.add('is-dirty'); };
-    const countOf = (s) => s.blocks.reduce((n, b) => { const v = get(d.content, b.path); return n + (Array.isArray(v) ? v.length : v && typeof v === 'object' ? (b.kind === 'dict' ? Object.keys(v).length : 1) : 0); }, 0);
+    const guideHidden = () => new Set(Array.isArray(d.content.GUIDE?.hiddenCategories) ? d.content.GUIDE.hiddenCategories : []);
+    const countOf = (s) => s.guideCategories
+      ? schema.SVC_CATS.filter(([id]) => !guideHidden().has(id)).length
+      : s.blocks.reduce((n, b) => { const v = get(d.content, b.path); return n + (Array.isArray(v) ? v.length : v && typeof v === 'object' ? (b.kind === 'dict' ? Object.keys(v).length : 1) : 0); }, 0);
     const saveBtn = h('button', { type: 'button', class: 'save', disabled: true, onclick: save }, 'Simpan konten');
     async function save() {
       saveBtn.disabled = true;
@@ -276,14 +279,54 @@
       catch (e) { toast(e.message, true); } finally { saveBtn.disabled = false; }
     }
     const panel = h('div', { class: 'sc-panel' });
+    const guideEditor = () => {
+      const hidden = guideHidden();
+      const serviceCounts = (d.content.SERVICES || []).reduce((out, row) => {
+        if (row?.cat) out[row.cat] = (out[row.cat] || 0) + 1;
+        return out;
+      }, {});
+      const store = (next) => {
+        const ids = schema.SVC_CATS.map(([id]) => id).filter((id) => next.has(id));
+        if (ids.length) (d.content.GUIDE ||= {}).hiddenCategories = ids;
+        else {
+          if (d.content.GUIDE) delete d.content.GUIDE.hiddenCategories;
+          if (d.content.GUIDE && !Object.keys(d.content.GUIDE).length) delete d.content.GUIDE;
+        }
+        mark();
+        paint();
+      };
+      const setAll = (active) => store(new Set(active ? [] : schema.SVC_CATS.map(([id]) => id)));
+      return h('div', { class: 'card sh-card sc-guide' },
+        h('div', { class: 'sc-guide__head' },
+          h('div', null,
+            h('h3', null, 'Kategori yang ditampilkan'),
+            h('p', null, `${schema.SVC_CATS.filter(([id]) => !hidden.has(id)).length} dari ${schema.SVC_CATS.length} kategori aktif di lokasi ini.`)),
+          h('div', { class: 'sc-guide__actions' },
+            h('button', { type: 'button', class: 'translate', onclick: () => setAll(true) }, 'Aktifkan semua'),
+            h('button', { type: 'button', class: 'translate', onclick: () => setAll(false) }, 'Nonaktifkan semua'),
+            h('button', { type: 'button', class: 'translate', onclick: () => store(new Set()) }, 'Pulihkan default'))),
+        h('div', { class: 'sc-guide__grid' }, schema.SVC_CATS.map(([id, label]) => {
+          const active = !hidden.has(id);
+          return h('label', { class: `sc-guide__cat${active ? ' is-on' : ''}` },
+            h('span', { class: 'sc-guide__copy' }, h('b', null, label), h('small', null, `${serviceCounts[id] || 0} layanan · ${active ? 'Tampil' : 'Disembunyikan'}`)),
+            h('span', { class: 'sc-guide__switch' }, h('input', { type: 'checkbox', checked: active, onchange: (e) => {
+              const next = guideHidden();
+              if (e.target.checked) next.delete(id); else next.add(id);
+              store(next);
+            }, 'aria-label': `${active ? 'Nonaktifkan' : 'Aktifkan'} ${label}` }), h('i', null)));
+        })));
+    };
     const paint = () => {
-      panel.replaceChildren(h('p', { class: 'sc-hint' }, sec.hint || ''), ...sec.blocks.map((b) => sec.id === 'Profil' && b.kind === 'object' && b.path === 'REGION'
-        ? profileEditor(b, d.content, mark, ctx)
-        : h('div', { class: 'card sh-card' }, block(b, d.content, mark, ctx, () => { paint(); }))));
+      const body = sec.guideCategories
+        ? [guideEditor()]
+        : sec.blocks.map((b) => sec.id === 'Profil' && b.kind === 'object' && b.path === 'REGION'
+          ? profileEditor(b, d.content, mark, ctx)
+          : h('div', { class: 'card sh-card' }, block(b, d.content, mark, ctx, () => { paint(); })));
+      panel.replaceChildren(h('p', { class: 'sc-hint' }, sec.hint || ''), ...body);
     };
     function build() {
       sec = sections.find((s) => s.id === ST.sec) || sections[0];
-      const navIcons = ['user-round', 'lightbulb', 'store', 'badge-help', 'shield-check', 'route', 'calendar-days', 'images', 'stamp', 'layers-3'];
+      const navIcons = ['user-round', 'lightbulb', 'store', 'map-pinned', 'badge-help', 'shield-check', 'route', 'calendar-days', 'images', 'stamp', 'layers-3'];
       const nav = h('nav', { class: 'sc-nav', 'aria-label': 'Bagian konten' }, sections.map((s, i) => { const n = countOf(s); return h('button', { type: 'button', class: s.id === ST.sec ? 'is-on' : '', onclick: () => { ST.sec = s.id; box.replaceChildren(...build().filter(Boolean)); } }, h('span', null, h('i', { 'data-lucide': navIcons[i] || 'file-text', 'aria-hidden': 'true' }), s.label), n ? h('b', null, String(n)) : null); }));
       paint();
       queueMicrotask(() => window.lucide?.createIcons());

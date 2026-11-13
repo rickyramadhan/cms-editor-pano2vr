@@ -24,7 +24,7 @@
             <span class="cms-nav-label">Workspace</span>
             <a class="<?= $activeTab === 'smart' ? 'active' : '' ?>" href="?tab=smart"><span aria-hidden="true"><i data-lucide="blocks"></i></span>Smart Hub</a>
             <a class="<?= $activeTab === 'aihub' ? 'active' : '' ?>" href="?tab=aihub"><span aria-hidden="true"><i data-lucide="bot"></i></span>AI Guide Hub</a>
-            <?php if ($cmsRuntimeReady): ?><a class="<?= in_array($activeTab, ['lokasi', 'voice', 'video', 'optimizer', 'audit', 'object', 'config', 'skin'], true) ? 'active' : '' ?>" href="?tab=lokasi&lokasi=<?= e($selectedId) ?>"><span aria-hidden="true"><i data-lucide="settings-2"></i></span>Configuration</a><?php endif; ?>
+            <?php if ($cmsRuntimeReady): ?><a class="<?= in_array($activeTab, ['lokasi', 'voice', 'video', 'audit', 'object', 'skin'], true) ? 'active' : '' ?>" href="?tab=lokasi&lokasi=<?= e($selectedId) ?>"><span aria-hidden="true"><i data-lucide="settings-2"></i></span>Configuration</a><?php endif; ?>
             <span class="cms-nav-label">Media &amp; Tools</span>
             <?php if ($cmsRuntimeReady): ?><a class="<?= in_array($activeTab, ['languages', 'translations'], true) ? 'active' : '' ?>" href="?tab=languages"><span aria-hidden="true"><i data-lucide="languages"></i></span>Bahasa &amp; Terjemahan</a><?php endif; ?>
             <?php if ($cmsRuntimeReady): ?><a class="<?= $activeTab === 'video360' ? 'active' : '' ?>" href="?tab=video360"><span aria-hidden="true"><i data-lucide="circle-play"></i></span>Video 360</a><?php endif; ?>
@@ -35,7 +35,7 @@
     </aside>
     <div class="cms-navigation-scrim" id="cmsNavigationScrim" hidden></div>
     <main class="shell">
-    <?php $tabLabels = ['dashboard'=>'Dashboard','config'=>'Konfigurasi Global','languages'=>'Manajemen Bahasa','translations'=>'Translation Center','lokasi'=>'Data Lokasi','voice'=>'Voice Over','video'=>'Video','optimizer'=>'Media Optimizer','audit'=>'Audit','object'=>'Object Informasi','video360'=>'Video 360','custom'=>'Custom CSS','skin'=>'Template Skin','smart'=>'Smart Hub','aihub'=>'AI Guide Hub','loading'=>'Optimasi Loading']; $pageLabel = $tabLabels[$activeTab] ?? 'Data Lokasi'; ?>
+    <?php $tabLabels = ['dashboard'=>'Dashboard','languages'=>'Manajemen Bahasa','translations'=>'Translation Center','lokasi'=>'Data Lokasi','voice'=>'Voice Over','video'=>'Video','audit'=>'Audit','object'=>'Object Informasi','video360'=>'Video 360','custom'=>'Custom CSS','skin'=>'Template Skin','smart'=>'Smart Hub','aihub'=>'AI Guide Hub','loading'=>'Optimasi Loading']; $pageLabel = $tabLabels[$activeTab] ?? 'Data Lokasi'; ?>
     <header class="topbar">
         <button type="button" class="cms-menu-button" id="openCmsNavigation" aria-controls="cmsNavigation" aria-expanded="false" aria-label="Buka menu"><i data-lucide="menu" aria-hidden="true"></i></button>
         <div class="cms-page-heading"><nav class="cms-breadcrumbs" aria-label="Breadcrumb"><a href="?tab=dashboard">CMS Virtual Tour</a><span>/</span><span aria-current="page"><?= e($pageLabel) ?></span></nav><h1><?= e($pageLabel) ?></h1><small><?= e($activeProject['name']) ?></small></div>
@@ -65,17 +65,15 @@
         <script src="assets/js/cms-shell.js"></script>
         <div class="location-workspace">
             <div class="location-toolbar">
-            <nav class="location-tabs">
-                <a class="<?= $activeTab === 'lokasi' ? 'active' : '' ?>" href="?tab=lokasi&lokasi=<?= e($selectedId) ?>">Data</a>
-                <a class="<?= $activeTab === 'voice' ? 'active' : '' ?> <?= isset($database[$selectedId]) ? '' : 'disabled' ?>" href="?tab=voice&lokasi=<?= e($selectedId) ?>">Media · Voice Over</a>
-                <a class="<?= $activeTab === 'video' ? 'active' : '' ?> <?= isset($detectedTours[$selectedId]) ? '' : 'disabled' ?>" href="?tab=video&lokasi=<?= e($selectedId) ?>">Media · Video</a>
-                <a class="<?= $activeTab === 'optimizer' ? 'active' : '' ?> <?= isset($detectedTours[$selectedId]) ? '' : 'disabled' ?>" href="?tab=optimizer&lokasi=<?= e($selectedId) ?>">Tools · Optimizer</a>
-                <a class="<?= $activeTab === 'audit' ? 'active' : '' ?> <?= isset($detectedTours[$selectedId]) ? '' : 'disabled' ?>" href="?tab=audit&lokasi=<?= e($selectedId) ?>">Tools · Audit</a>
-                <a class="<?= $activeTab === 'object' ? 'active' : '' ?> <?= isset($database[$selectedId]) ? '' : 'disabled' ?>" href="?tab=object&lokasi=<?= e($selectedId) ?>">Object Informasi</a>
-                <a class="<?= $activeTab === 'config' ? 'active' : '' ?>" href="?tab=config&lokasi=<?= e($selectedId) ?>">Konfigurasi Global</a>
-                <a class="<?= $activeTab === 'skin' ? 'active' : '' ?>" href="?tab=skin&lokasi=<?= e($selectedId) ?>">Template Skin</a>
+            <nav class="location-tabs" aria-label="Bagian pengelolaan lokasi">
+                <a class="<?= $activeTab === 'lokasi' ? 'active' : '' ?>" href="?tab=lokasi&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'lokasi' ? 'aria-current="page"' : '' ?>><i data-lucide="file-text" aria-hidden="true"></i><span><small>Konten</small>Data</span></a>
+                <a class="<?= $activeTab === 'voice' ? 'active' : '' ?> <?= isset($database[$selectedId]) ? '' : 'disabled' ?>" href="?tab=voice&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'voice' ? 'aria-current="page"' : '' ?>><i data-lucide="audio-lines" aria-hidden="true"></i><span><small>Media</small>Voice Over</span></a>
+                <a class="<?= $activeTab === 'video' ? 'active' : '' ?> <?= isset($detectedTours[$selectedId]) ? '' : 'disabled' ?>" href="?tab=video&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'video' ? 'aria-current="page"' : '' ?>><i data-lucide="video" aria-hidden="true"></i><span><small>Media</small>Video</span></a>
+                <a class="<?= $activeTab === 'audit' ? 'active' : '' ?> <?= isset($detectedTours[$selectedId]) ? '' : 'disabled' ?>" href="?tab=audit&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'audit' ? 'aria-current="page"' : '' ?>><i data-lucide="clipboard-check" aria-hidden="true"></i><span><small>Peralatan</small>Audit</span></a>
+                <a class="<?= $activeTab === 'object' ? 'active' : '' ?> <?= isset($database[$selectedId]) ? '' : 'disabled' ?>" href="?tab=object&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'object' ? 'aria-current="page"' : '' ?>><i data-lucide="scan-search" aria-hidden="true"></i><span><small>Konten</small>Object Informasi</span></a>
+                <a class="location-tab-project <?= $activeTab === 'skin' ? 'active' : '' ?>" href="?tab=skin&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'skin' ? 'aria-current="page"' : '' ?>><i data-lucide="panel-top" aria-hidden="true"></i><span><small>Project</small>Template Skin</span></a>
             </nav>
-            <?php if ($selectedId !== 'baru' && isset($detectedTours[$selectedId])): ?><a class="location-local-tour" href="<?= e(projectUrl(trim($detectedTours[$selectedId]['path'], '/') . '/')) ?>" target="_blank" rel="noopener">▶ Kunjungi URL Lokal</a><?php endif; ?>
+            <?php if ($selectedId !== 'baru' && isset($detectedTours[$selectedId])): ?><a class="location-local-tour" href="<?= e(projectUrl(trim($detectedTours[$selectedId]['path'], '/') . '/')) ?>" target="_blank" rel="noopener"><i data-lucide="external-link" aria-hidden="true"></i><span>Kunjungi tur lokal</span></a><?php endif; ?>
             </div>
     <?php endif; ?>
 
@@ -392,6 +390,18 @@
     <?php elseif ($activeTab === 'object'): ?>
         <section class="card section object-editor">
             <div class="section-heading"><div><span class="step">OI</span><h2>Object Informasi</h2></div><div class="object-head-actions"><button type="button" class="translate" id="importWebElements">＋ Ambil WebElement</button><button type="button" class="translate" id="addObject">＋ Manual</button><button type="button" class="save object-save" id="saveObjects">Simpan</button></div></div>
+            <?php if (isset($detectedTours[$selectedId]) && $selectedPanoramas !== []): ?>
+            <div class="object-panorama-editor">
+                <div class="object-panorama-toolbar">
+                    <div><strong>Editor Panorama</strong><small>Geser panorama, lalu tarik pin WebElement untuk mengubah posisinya.</small></div>
+                    <label><span>Panorama</span><select id="objectPanoramaNode"><?php foreach ($selectedPanoramas as $panorama): ?><option value="<?= e($panorama['nodeId']) ?>" data-public-node="<?= e($panorama['value']) ?>"><?= e($panorama['title'] ?: $panorama['value']) ?></option><?php endforeach; ?></select></label>
+                    <button type="button" class="translate" id="addWebElement">＋ WebElement di Tengah</button>
+                    <button type="button" class="danger" id="removeWebElement" disabled>Hapus Pin</button>
+                </div>
+                <div class="object-panorama-stage" id="objectPanoramaStage"><div id="objectPanoramaHost"></div><div class="object-panorama-loading" id="objectPanoramaLoading">Memuat panorama editor…</div></div>
+                <div class="object-panorama-status"><span id="objectPanoramaStatus">Tarik pin untuk memindahkan WebElement.</span><span>Perubahan pano.xml baru diterapkan saat tombol <b>Simpan</b> ditekan.</span></div>
+            </div>
+            <?php endif; ?>
             <div class="skin-notice"><strong>WebElement pano.xml</strong><span><?= count($selectedWebElements) ?> elemen terdeteksi. OI hanya dinilai jika lokasi memiliki WebElement. Data memakai <code>assets/oi-database.js</code> dan <code>assets/oi-config.js</code>.</span></div>
             <div class="object-layout"><aside class="object-list-panel"><input id="objectSearch" type="search" placeholder="Cari object…"><div id="objectCount"></div><div id="objectList"></div></aside><div id="objectForm" class="object-form"><div class="object-empty">Pilih atau tambahkan object informasi.</div></div></div>
             <div class="voice-progress" id="objectProgress">Data tersimpan ke assets/oi-database.js.</div>
@@ -459,15 +469,31 @@
             <?php if ($auditResult !== null): $stats = $auditResult['stats']; ?>
                 <div class="audit-summary"><div><strong><?= e($stats['panoramas']) ?></strong><span>Panorama</span></div><div><strong><?= e($stats['hotspots']) ?></strong><span>Hotspot</span></div><div class="audit-error"><strong><?= e($stats['errors']) ?></strong><span>Link belum diisi</span></div><div class="audit-warning"><strong><?= e($stats['warnings']) ?></strong><span>Terjemahan kosong</span></div></div>
                 <div class="pano-editor-actions"><strong>Editor pano.xml</strong><span>Field yang belum lengkap langsung ditandai pada editor.</span><button type="button" class="save" id="savePanoEditor">Simpan pano.xml</button></div>
-                <nav class="pano-editor-tabs"><button type="button" class="active" data-pano-editor-tab="hotspot">Hotspot <span><?= count($auditResult['hotspots']) ?></span></button><button type="button" data-pano-editor-tab="translation">Terjemahan <span><?= count($auditResult['translations']) ?></span></button></nav>
+                <nav class="pano-editor-tabs"><button type="button" class="active" data-pano-editor-tab="panorama">Panorama <span><?= count($selectedPanoramas) ?></span></button><button type="button" data-pano-editor-tab="hotspot">Hotspot <span><?= count($auditResult['hotspots']) ?></span></button><button type="button" data-pano-editor-tab="translation">Terjemahan <span><?= count($auditResult['translations']) ?></span></button></nav>
                 <?php $missingHotspotCount = count(array_filter($auditResult['hotspots'], static fn(array $hotspot): bool => trim((string) ($hotspot['url'] ?? '')) === '')); ?>
-                <section class="pano-editor-panel active" data-pano-editor-panel="hotspot"><div class="pano-filter"><button type="button" class="active" data-hotspot-filter="all">Semua Hotspot</button><button type="button" data-hotspot-filter="missing">Belum Diisi (<?= e($missingHotspotCount) ?>)</button></div><div class="pano-editor-grid" id="panoHotspotEditor">
-                    <?php foreach ($auditResult['hotspots'] as $hotspot): $isEst = stripos($hotspot['title'], 'est') !== false; ?>
-                        <article class="pano-edit-card <?= $hotspot['url'] === '' ? 'needs-attention' : '' ?> <?= $isEst ? 'est-hotspot' : '' ?>" data-node-id="<?= e($hotspot['nodeId']) ?>" data-hotspot-id="<?= e($hotspot['id']) ?>"><header><div><strong><?= e($hotspot['title'] !== '' ? $hotspot['title'] : $hotspot['id']) ?></strong><small><?= e($hotspot['nodeId']) ?> · <?= e($hotspot['id']) ?> · <?= e($hotspot['skinId']) ?></small></div><?php if ($hotspot['url'] === ''): ?><button type="button" class="missing-info" title="URL hotspot belum diisi">! Link belum diisi</button><?php endif; ?></header><label><span>Title</span><input data-pano-field="title" value="<?= e($hotspot['title']) ?>"></label><label><span>URL / Node tujuan <?= $isEst ? '— pilih destinasi' : '' ?></span><?php if ($isEst): ?><select data-pano-field="url" data-est-url><option value="">— Pilih destinasi —</option><?php if ($hotspot['url'] !== '' && !in_array((string) parse_url($hotspot['url'], PHP_URL_PATH), array_map(static fn(string $slug): string => '/' . $slug, EST_DESTINATIONS), true)): ?><option value="<?= e($hotspot['url']) ?>" selected><?= e($hotspot['url']) ?></option><?php endif; ?><?php foreach (EST_DESTINATIONS as $slug): $url = 'https://jakarta.govirtual.id/' . $slug; ?><option value="<?= e($url) ?>" <?= $hotspot['url'] === $url ? 'selected' : '' ?>><?= e(mb_convert_case(str_replace('-', ' ', $slug), MB_CASE_TITLE, 'UTF-8')) ?></option><?php endforeach; ?></select><?php else: ?><input data-pano-field="url" value="<?= e($hotspot['url']) ?>"><?php endif; ?></label><label><span>Target</span><input data-pano-field="target" value="<?= e($hotspot['target']) ?>"></label></article>
+                <section class="pano-editor-panel" data-pano-editor-panel="hotspot"><div class="pano-filter"><button type="button" class="active" data-hotspot-filter="all">Semua Hotspot</button><button type="button" data-hotspot-filter="missing">Belum Diisi (<?= e($missingHotspotCount) ?>)</button></div><div class="pano-hotspot-groups" id="panoHotspotEditor">
+                    <?php foreach ($selectedPanoramas as $sourcePanorama): $sourceHotspots = array_values(array_filter($auditResult['hotspots'], static fn(array $hotspot): bool => strcasecmp((string) $hotspot['nodeId'], (string) $sourcePanorama['nodeId']) === 0)); ?>
+                    <details class="pano-hotspot-group" data-hotspot-group="<?= e($sourcePanorama['nodeId']) ?>" <?= $sourceHotspots !== [] ? '' : 'data-empty' ?>>
+                        <summary><span class="pano-group-thumb"><?php if ($sourcePanorama['thumbnail'] !== ''): ?><img src="<?= e($sourcePanorama['thumbnail']) ?>" alt="" loading="lazy"><?php else: ?><i>360°</i><?php endif; ?></span><span><strong><?= e($sourcePanorama['title'] !== '' ? $sourcePanorama['title'] : 'Panorama ' . $sourcePanorama['nodeId']) ?></strong><small><?= e($sourcePanorama['nodeId']) ?><?= $sourcePanorama['customNodeId'] !== '' ? ' · ' . e($sourcePanorama['customNodeId']) : '' ?></small></span><b><?= count($sourceHotspots) ?> hotspot</b></summary>
+                        <div class="pano-editor-grid">
+                        <?php if ($sourceHotspots === []): ?><div class="pano-group-empty">Panorama ini belum memiliki hotspot.</div><?php endif; ?>
+                        <?php foreach ($sourceHotspots as $hotspot): $isEst = stripos($hotspot['title'], 'est') !== false; $targetNodeId = trim((string) $hotspot['url'], '{}'); $targetPanorama = null; foreach ($selectedPanoramas as $candidatePanorama) if (strcasecmp($candidatePanorama['nodeId'], $targetNodeId) === 0 || ($candidatePanorama['customNodeId'] !== '' && strcasecmp($candidatePanorama['customNodeId'], $targetNodeId) === 0)) { $targetPanorama = $candidatePanorama; break; } ?>
+                            <article class="pano-edit-card <?= $hotspot['url'] === '' ? 'needs-attention' : '' ?> <?= $isEst ? 'est-hotspot' : '' ?>" data-node-id="<?= e($hotspot['nodeId']) ?>" data-hotspot-id="<?= e($hotspot['id']) ?>"><header><div><strong><?= e($hotspot['title'] !== '' ? $hotspot['title'] : $hotspot['id']) ?></strong><small><?= e($hotspot['id']) ?> · <?= e($hotspot['skinId']) ?></small></div><?php if ($hotspot['url'] === ''): ?><button type="button" class="missing-info" title="URL hotspot belum diisi">! Link belum diisi</button><?php endif; ?></header><label><span>Title</span><input data-pano-field="title" value="<?= e($hotspot['title']) ?>"></label><?php if ($isEst): ?><label><span>URL destinasi</span><select data-pano-field="url" data-est-url><option value="">— Pilih destinasi —</option><?php foreach (EST_DESTINATIONS as $slug): $url = 'https://jakarta.govirtual.id/' . $slug; ?><option value="<?= e($url) ?>" <?= $hotspot['url'] === $url ? 'selected' : '' ?>><?= e(mb_convert_case(str_replace('-', ' ', $slug), MB_CASE_TITLE, 'UTF-8')) ?></option><?php endforeach; ?></select></label><?php else: ?><div class="hotspot-target-picker"><span>Panorama Tujuan / URL</span><input type="hidden" data-pano-field="url" value="<?= e($hotspot['url']) ?>"><button type="button" class="hotspot-target-current" data-toggle-target-picker><?php if ($targetPanorama): ?><span><?php if ($targetPanorama['thumbnail'] !== ''): ?><img src="<?= e($targetPanorama['thumbnail']) ?>" alt=""><?php else: ?><i>360°</i><?php endif; ?></span><b><?= e($targetPanorama['title'] !== '' ? $targetPanorama['title'] : $targetPanorama['nodeId']) ?><small><?= e($targetPanorama['nodeId']) ?></small></b><?php else: ?><span><i>＋</i></span><b><?= $hotspot['url'] !== '' ? e($hotspot['url']) : 'Pilih panorama tujuan' ?><small>Klik untuk memilih dari thumbnail</small></b><?php endif; ?></button><div class="hotspot-target-options" hidden><?php foreach ($selectedPanoramas as $targetOption): ?><button type="button" data-target-node="<?= e($targetOption['nodeId']) ?>" data-target-title="<?= e($targetOption['title'] !== '' ? $targetOption['title'] : $targetOption['nodeId']) ?>" data-target-thumb="<?= e($targetOption['thumbnail']) ?>"><?php if ($targetOption['thumbnail'] !== ''): ?><img src="<?= e($targetOption['thumbnail']) ?>" alt="" loading="lazy"><?php else: ?><i>360°</i><?php endif; ?><span><strong><?= e($targetOption['title'] !== '' ? $targetOption['title'] : 'Panorama ' . $targetOption['nodeId']) ?></strong><small><?= e($targetOption['nodeId']) ?></small></span></button><?php endforeach; ?></div><input class="hotspot-manual-url" data-manual-target-url value="<?= e($hotspot['url']) ?>" placeholder="Atau masukkan URL / {nodeID}"></div><?php endif; ?><label><span>Target View</span><input data-pano-field="target" value="<?= e($hotspot['target']) ?>"></label></article>
+                        <?php endforeach; ?>
+                        </div>
+                    </details>
                     <?php endforeach; ?>
                 </div></section>
                 <section class="pano-editor-panel" data-pano-editor-panel="translation"><div class="pano-filter"><button type="button" class="active" data-translation-filter="all">Semua Terjemahan</button><button type="button" data-translation-filter="missing">Belum Diisi (<?= e($stats['warnings']) ?>)</button></div><div class="translation-editor" id="panoTranslationEditor">
                     <?php foreach ($auditResult['translations'] as $translation): $translationMissing = (int) ($translation['missingCount'] ?? 0); ?><article class="translation-row <?= $translationMissing > 0 ? 'needs-translation' : '' ?>" data-source="<?= e($translation['source']) ?>"><div class="translation-source"><strong><?= e($translation['source']) ?></strong><button type="button" class="translation-auto" data-translate-pano title="Auto Translate Kosong" aria-label="Auto Translate Kosong">✦</button></div><?php if ($translationMissing > 0): ?><span class="translation-warning">! <?= $translationMissing ?> bahasa kosong</span><?php endif; ?><div class="translation-fields"><?php foreach ($auditResult['languages'] as $index => $language): $translationValue = (string) ($translation['values'][$index] ?? ''); $isDisplayedLanguage = in_array($index, $auditResult['displayLanguageIndexes'], true); $languageLabel = match (strtolower($language)) { 'en', 'en-us' => 'English', 'zh', 'zh-cn' => 'Mandarin', 'ar', 'ar-sa' => 'Arab', default => $language }; ?><?php if (!$isDisplayedLanguage): ?><textarea hidden data-translation-index="<?= $index ?>"><?= e($translationValue) ?></textarea><?php else: ?><label class="translation-field <?= trim($translationValue) === '' ? 'empty-translation' : '' ?>"><span><?= e($languageLabel) ?></span><textarea rows="1" data-translation-index="<?= $index ?>"><?= e($translationValue) ?></textarea></label><?php endif; ?><?php endforeach; ?></div></article><?php endforeach; ?>
+                </div></section>
+                <section class="pano-editor-panel active" data-pano-editor-panel="panorama"><div class="panorama-audit-grid" id="panoPanoramaEditor">
+                    <?php foreach ($selectedPanoramas as $panorama): ?>
+                    <article class="panorama-audit-card" data-panorama-node-id="<?= e($panorama['nodeId']) ?>">
+                        <div class="panorama-audit-thumb"><?php if ($panorama['thumbnail'] !== ''): ?><img src="<?= e($panorama['thumbnail']) ?>" alt="Thumbnail <?= e($panorama['title'] ?: $panorama['nodeId']) ?>" loading="lazy"><?php else: ?><span>Tanpa thumbnail</span><?php endif; ?><b><?= e($panorama['nodeId']) ?></b></div>
+                        <div class="panorama-audit-fields"><div class="panorama-card-actions span2"><button type="button" data-see-panorama-hotspots="<?= e($panorama['nodeId']) ?>">Lihat Hotspot (<?= count(array_filter($auditResult['hotspots'], static fn(array $hotspot): bool => strcasecmp((string) $hotspot['nodeId'], (string) $panorama['nodeId']) === 0)) ?>) →</button></div><label class="span2"><span>Title Panorama</span><input data-panorama-field="title" value="<?= e($panorama['title']) ?>" placeholder="Judul panorama"></label><label><span>Node ID</span><input value="<?= e($panorama['nodeId']) ?>" readonly></label><label><span>Custom Node ID</span><input data-panorama-field="customNodeId" value="<?= e($panorama['customNodeId']) ?>" placeholder="ID publik unik"></label><div class="panorama-geo-setter span2"><div><label><span>Latitude</span><input type="number" step="any" min="-90" max="90" data-panorama-field="latitude" value="<?= e($panorama['latitude']) ?>" placeholder="-6.175392"></label><label><span>Longitude</span><input type="number" step="any" min="-180" max="180" data-panorama-field="longitude" value="<?= e($panorama['longitude']) ?>" placeholder="106.827153"></label></div><div class="panorama-geo-actions"><button type="button" data-set-panorama-geo>⌖ Pakai Lokasi Saya</button><a data-open-panorama-map href="<?= $panorama['latitude'] !== '' && $panorama['longitude'] !== '' ? 'https://www.openstreetmap.org/?mlat=' . rawurlencode($panorama['latitude']) . '&mlon=' . rawurlencode($panorama['longitude']) . '#map=17/' . rawurlencode($panorama['latitude']) . '/' . rawurlencode($panorama['longitude']) : '#' ?>" target="_blank" rel="noopener" <?= $panorama['latitude'] === '' || $panorama['longitude'] === '' ? 'hidden' : '' ?>>Buka Peta ↗</a></div><small>Koordinat disimpan ke userdata panorama dan dapat digunakan oleh map tour.</small></div></div>
+                    </article>
+                    <?php endforeach; ?>
                 </div></section>
                 <div class="voice-progress" id="panoEditorProgress">Perubahan belum disimpan.</div>
             <?php endif; ?>
@@ -893,8 +919,17 @@ if (panoSaveButton) {
         button.addEventListener('click', function() {
             document.querySelectorAll('[data-hotspot-filter]').forEach(item=>item.classList.remove('active'));button.classList.add('active');
             document.querySelectorAll('.pano-edit-card').forEach(card=>{card.hidden=button.dataset.hotspotFilter==='missing'&&!card.classList.contains('needs-attention');});
+            document.querySelectorAll('.pano-hotspot-group').forEach(group=>{const visible=Array.from(group.querySelectorAll('.pano-edit-card')).some(card=>!card.hidden);group.hidden=button.dataset.hotspotFilter==='missing'&&!visible;});
         });
     });
+    document.getElementById('panoHotspotEditor')?.addEventListener('click',event=>{
+        const toggle=event.target.closest('[data-toggle-target-picker]'),option=event.target.closest('[data-target-node]');
+        if(toggle){return;}
+        if(option){const picker=option.closest('.hotspot-target-picker'),hidden=picker.querySelector('[data-pano-field="url"]'),manual=picker.querySelector('[data-manual-target-url]'),current=picker.querySelector('[data-toggle-target-picker]'),node=option.dataset.targetNode,title=option.dataset.targetTitle,thumb=option.dataset.targetThumb;hidden.value='{'+node+'}';manual.value='{'+node+'}';current.innerHTML='<span>'+(thumb?'<img src="'+escapeHtml(thumb)+'" alt="">':'<i>360°</i>')+'</span><b>'+escapeHtml(title)+'<small>'+escapeHtml(node)+'</small></b>';picker.querySelector('.hotspot-target-options').hidden=true;hidden.dispatchEvent(new Event('input',{bubbles:true}));}
+    });
+    document.querySelectorAll('.hotspot-target-picker').forEach(picker=>{const gallery=picker.querySelector('.hotspot-target-options'),hidden=picker.querySelector('[data-pano-field="url"]');if(!gallery||!hidden)return;const select=document.createElement('select');select.className='hotspot-target-select';select.innerHTML='<option value="">— Pilih panorama tujuan —</option>'+Array.from(gallery.querySelectorAll('[data-target-node]')).map(option=>'<option value="'+escapeHtml(option.dataset.targetNode)+'">'+escapeHtml(option.dataset.targetTitle)+' · '+escapeHtml(option.dataset.targetNode)+'</option>').join('');select.value=String(hidden.value||'').replace(/[{}]/g,'');select.addEventListener('change',()=>{const source=gallery.querySelector('[data-target-node="'+CSS.escape(select.value)+'"]');if(source)source.click();});picker.querySelector('[data-toggle-target-picker]').after(select);gallery.remove();});
+    document.getElementById('panoHotspotEditor')?.addEventListener('input',event=>{if(!event.target.matches('[data-manual-target-url]'))return;const picker=event.target.closest('.hotspot-target-picker'),hidden=picker.querySelector('[data-pano-field="url"]');hidden.value=event.target.value;hidden.dispatchEvent(new Event('input',{bubbles:true}));});
+    document.getElementById('panoPanoramaEditor')?.addEventListener('click',event=>{const button=event.target.closest('[data-see-panorama-hotspots]');if(!button)return;document.querySelector('[data-pano-editor-tab="hotspot"]')?.click();const group=document.querySelector('[data-hotspot-group="'+CSS.escape(button.dataset.seePanoramaHotspots)+'"]');if(group){group.hidden=false;group.open=true;group.scrollIntoView({behavior:'smooth',block:'start'});}});
     let activeTranslationFilter = 'all';
     const refreshTranslationRow = row => {
         const emptyFields = Array.from(row.querySelectorAll('textarea[data-translation-index]:not([hidden])')).filter(field => !field.value.trim());
@@ -910,6 +945,9 @@ if (panoSaveButton) {
         document.querySelectorAll('.translation-row').forEach(refreshTranslationRow);
     }));
     document.getElementById('panoTranslationEditor')?.addEventListener('input',event=>{if(event.target.matches('[data-translation-index]'))refreshTranslationRow(event.target.closest('.translation-row'));});
+    const updatePanoramaMapLink = card => { const lat=card.querySelector('[data-panorama-field="latitude"]')?.value.trim(),lng=card.querySelector('[data-panorama-field="longitude"]')?.value.trim(),link=card.querySelector('[data-open-panorama-map]');if(!link)return;if(lat&&lng){link.href='https://www.openstreetmap.org/?mlat='+encodeURIComponent(lat)+'&mlon='+encodeURIComponent(lng)+'#map=17/'+encodeURIComponent(lat)+'/'+encodeURIComponent(lng);link.hidden=false;}else{link.href='#';link.hidden=true;} };
+    document.getElementById('panoPanoramaEditor')?.addEventListener('input',event=>{const card=event.target.closest('[data-panorama-node-id]');if(card&&event.target.matches('[data-panorama-field="latitude"],[data-panorama-field="longitude"]'))updatePanoramaMapLink(card);});
+    document.getElementById('panoPanoramaEditor')?.addEventListener('click',event=>{const button=event.target.closest('[data-set-panorama-geo]');if(!button)return;const card=button.closest('[data-panorama-node-id]');if(!navigator.geolocation){document.getElementById('panoEditorProgress').textContent='Browser tidak mendukung geolocation.';return;}button.disabled=true;button.textContent='Mencari lokasi…';navigator.geolocation.getCurrentPosition(position=>{card.querySelector('[data-panorama-field="latitude"]').value=position.coords.latitude.toFixed(7);card.querySelector('[data-panorama-field="longitude"]').value=position.coords.longitude.toFixed(7);updatePanoramaMapLink(card);button.disabled=false;button.textContent='⌖ Pakai Lokasi Saya';document.getElementById('panoEditorProgress').textContent='Koordinat panorama diperbarui. Tekan Simpan pano.xml.';},error=>{button.disabled=false;button.textContent='⌖ Pakai Lokasi Saya';document.getElementById('panoEditorProgress').textContent='Lokasi gagal diambil: '+error.message;},{enableHighAccuracy:true,timeout:10000,maximumAge:0});});
     document.getElementById('panoHotspotEditor').addEventListener('input', function(event) {
         if (event.target.dataset.panoField === 'title') {
             const card=event.target.closest('.pano-edit-card');
@@ -942,9 +980,10 @@ if (panoSaveButton) {
     });
     panoSaveButton.addEventListener('click',async function(){
         const hotspots=Array.from(document.querySelectorAll('.pano-edit-card')).map(card=>({nodeId:card.dataset.nodeId,id:card.dataset.hotspotId,title:card.querySelector('[data-pano-field="title"]').value,url:card.querySelector('[data-pano-field="url"]').value,target:card.querySelector('[data-pano-field="target"]').value}));
+        const panoramas=Array.from(document.querySelectorAll('[data-panorama-node-id]')).map(card=>({nodeId:card.dataset.panoramaNodeId,title:card.querySelector('[data-panorama-field="title"]').value,customNodeId:card.querySelector('[data-panorama-field="customNodeId"]').value,latitude:card.querySelector('[data-panorama-field="latitude"]').value,longitude:card.querySelector('[data-panorama-field="longitude"]').value}));
         const translations={};document.querySelectorAll('.translation-row').forEach(row=>{translations[row.dataset.source]=Array.from(row.querySelectorAll('[data-translation-index]')).map(field=>field.value);});
         const progress=document.getElementById('panoEditorProgress');this.disabled=true;progress.textContent='Menyimpan pano.xml…';
-        try{const response=await fetch('save-pano.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({csrf:<?= json_encode($_SESSION['cms_csrf']) ?>,id_lokasi:<?= json_encode($auditId) ?>,hotspots,translations})});const result=await response.json();if(!response.ok||!result.success)throw new Error(result.message||'Gagal menyimpan.');progress.textContent=result.message;}catch(error){progress.textContent='Gagal: '+error.message;}finally{this.disabled=false;}
+        try{const response=await fetch('save-pano.php',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({csrf:<?= json_encode($_SESSION['cms_csrf']) ?>,id_lokasi:<?= json_encode($auditId) ?>,hotspots,translations,panoramas})});const result=await response.json();if(!response.ok||!result.success)throw new Error(result.message||'Gagal menyimpan.');progress.textContent=result.message;}catch(error){progress.textContent='Gagal: '+error.message;}finally{this.disabled=false;}
     });
 }
 
@@ -1062,9 +1101,13 @@ document.addEventListener('keydown', function (event) { if (event.key === 'Escap
 const voiceDatabase = <?= json_encode($database, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 const oiDatabase = <?= json_encode($oiDatabase, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 const detectedWebElements = <?= json_encode($selectedWebElements, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+const detectedObjectHotspots = <?= json_encode($selectedHotspots, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 const oiPreviewBaseUrl = <?= json_encode($oiPreviewBaseUrl, JSON_UNESCAPED_SLASHES) ?>;
+const objectTourBaseUrl = <?= json_encode(isset($detectedTours[$selectedId]) ? projectUrl(trim($detectedTours[$selectedId]['path'], '/') . '/') : '', JSON_UNESCAPED_SLASHES) ?>;
 const currentLocationId = <?= json_encode($selectedId) ?>;
-const activeProjectBaseUrl = <?= json_encode(projectUrl(), JSON_UNESCAPED_SLASHES) ?>;
+// projectUrl() is relative to the CMS page (for example ../dj-output/).
+// Resolve it once because the URL constructor requires an absolute base URL.
+const activeProjectBaseUrl = new URL(<?= json_encode(projectUrl(), JSON_UNESCAPED_SLASHES) ?>, document.baseURI).href;
 const activeAssetsDirectory = <?= json_encode($assetsDirectoryName) ?>;
 const voiceCsrf = <?= json_encode($_SESSION['cms_csrf']) ?>;
 const video360Form = document.getElementById('video360UploadForm');
@@ -1119,7 +1162,11 @@ const voiceAudioFiles = <?= json_encode($voiceAudioAvailability) ?>;
 const objectList = document.getElementById('objectList');
 if (objectList) {
     let objectRecords = structuredClone(oiDatabase[currentLocationId] || []);
+    let editableWebElements = structuredClone(detectedWebElements);
+    let editableObjectHotspots = structuredClone(detectedObjectHotspots);
     let selectedObject = objectRecords.length ? 0 : -1;
+    let selectedWebElement = -1;
+    let objectPanoPlayer = null, objectPanoXml = null, objectPanoReady = false, objectPanoDragging = false;
     const objectForm = document.getElementById('objectForm');
     const objectSearch = document.getElementById('objectSearch');
     const escapeObjectHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
@@ -1130,6 +1177,75 @@ if (objectList) {
         document.getElementById('objectCount').textContent = visible.length + ' dari ' + objectRecords.length + ' object';
         objectList.innerHTML = visible.map(({record,index}) => '<button type="button" class="object-item '+(index===selectedObject?'active':'')+'" data-object="'+index+'"><strong>'+escapeObjectHtml(record.labelTeks?.id||'Tanpa judul')+'</strong><small>'+escapeObjectHtml(record.route_key)+' · '+escapeObjectHtml(record.nodeID||'Tanpa node')+'</small></button>').join('');
         renderObjectForm();
+    }
+    const normalizeObjectPan = value => ((Number(value) + 180) % 360 + 360) % 360 - 180;
+    const panoramaSelect = document.getElementById('objectPanoramaNode');
+    const panoramaHost = document.getElementById('objectPanoramaHost');
+    const panoramaStatus = document.getElementById('objectPanoramaStatus');
+    const setPanoramaStatus = message => { if (panoramaStatus) panoramaStatus.textContent = message; };
+    const currentPublicNode = () => panoramaSelect?.selectedOptions[0]?.dataset.publicNode || '';
+    function selectWebElement(index, refreshMarkers = true) {
+        selectedWebElement = index;
+        const element = editableWebElements[index];
+        document.getElementById('removeWebElement').disabled = !element;
+        if (element) {
+            const recordIndex = objectRecords.findIndex(record => String(record.nodeID || '').replace(/[{}]/g, '').toLowerCase() === String(element.nodeID).toLowerCase() && String(record.targetID || '').toLowerCase() === String(element.targetID).toLowerCase());
+            if (recordIndex >= 0) { selectedObject = recordIndex; objectSearch.value = ''; renderObjectList(); }
+        }
+        if (refreshMarkers) renderWebElementMarkers();
+        else panoramaHost?.querySelectorAll('.object-web-pin').forEach(marker => marker.classList.toggle('selected', marker.title === element?.targetID));
+    }
+    function attachWebElementDrag(button, element, index) {
+        button.addEventListener('pointerdown', event => {
+            if (event.button !== 0 || !objectPanoReady || objectPanoDragging) return;
+            event.preventDefault(); event.stopPropagation(); selectWebElement(index, false);
+            const rect = panoramaHost.getBoundingClientRect();
+            const first = objectPanoPlayer.getPositionAngles(event.clientX - rect.left, event.clientY - rect.top);
+            const startPan = Number(element.pan);
+            const tiltOffset = Number(element.tilt) - Number(first.tilt);
+            objectPanoDragging = true; objectPanoPlayer.stopAutorotate?.(); objectPanoPlayer.setLocked(true); button.setPointerCapture?.(event.pointerId);
+            const move = moveEvent => {
+                moveEvent.preventDefault(); moveEvent.stopPropagation();
+                const area = panoramaHost.getBoundingClientRect(), angle = objectPanoPlayer.getPositionAngles(moveEvent.clientX - area.left, moveEvent.clientY - area.top);
+                const panDelta = normalizeObjectPan(Number(angle.pan) - Number(first.pan));
+                element.pan = normalizeObjectPan(startPan - panDelta); element.tilt = Math.max(-90, Math.min(90, Number(angle.tilt) + tiltOffset));
+                objectPanoPlayer.updateHotspot('cms_we_' + index, element.pan, element.tilt);
+                setPanoramaStatus(element.targetID + ' · Pan ' + element.pan.toFixed(2) + '° · Tilt ' + element.tilt.toFixed(2) + '°');
+            };
+            const end = endEvent => {
+                endEvent?.preventDefault(); endEvent?.stopPropagation(); objectPanoDragging = false; objectPanoPlayer.setLocked(false);
+                button.removeEventListener('pointermove', move); button.removeEventListener('pointerup', end); button.removeEventListener('pointercancel', end);
+                setPanoramaStatus('Posisi ' + element.targetID + ' diperbarui. Tekan Simpan untuk menerapkan ke pano.xml.');
+            };
+            button.addEventListener('pointermove', move); button.addEventListener('pointerup', end); button.addEventListener('pointercancel', end);
+        });
+    }
+    function attachObjectHotspotDrag(button, hotspot, index) {
+        button.addEventListener('pointerdown',event=>{if(event.button!==0||!objectPanoReady||objectPanoDragging)return;event.preventDefault();event.stopPropagation();const rect=panoramaHost.getBoundingClientRect(),first=objectPanoPlayer.getPositionAngles(event.clientX-rect.left,event.clientY-rect.top),startPan=Number(hotspot.pan),tiltOffset=Number(hotspot.tilt)-Number(first.tilt);objectPanoDragging=true;objectPanoPlayer.stopAutorotate?.();objectPanoPlayer.setLocked(true);button.setPointerCapture?.(event.pointerId);const move=moveEvent=>{moveEvent.preventDefault();moveEvent.stopPropagation();const area=panoramaHost.getBoundingClientRect(),angle=objectPanoPlayer.getPositionAngles(moveEvent.clientX-area.left,moveEvent.clientY-area.top),panDelta=normalizeObjectPan(Number(angle.pan)-Number(first.pan));hotspot.pan=normalizeObjectPan(startPan-panDelta);hotspot.tilt=Math.max(-90,Math.min(90,Number(angle.tilt)+tiltOffset));objectPanoPlayer.updateHotspot('cms_hs_'+index,hotspot.pan,hotspot.tilt);setPanoramaStatus('Hotspot '+hotspot.id+' · Pan '+hotspot.pan.toFixed(2)+'° · Tilt '+hotspot.tilt.toFixed(2)+'°');};const end=endEvent=>{endEvent?.preventDefault();endEvent?.stopPropagation();objectPanoDragging=false;objectPanoPlayer.setLocked(false);button.removeEventListener('pointermove',move);button.removeEventListener('pointerup',end);button.removeEventListener('pointercancel',end);setPanoramaStatus('Posisi hotspot '+hotspot.id+' diperbarui. Tekan Simpan untuk menerapkan.');};button.addEventListener('pointermove',move);button.addEventListener('pointerup',end);button.addEventListener('pointercancel',end);});
+    }
+    function renderWebElementMarkers() {
+        if (!objectPanoPlayer || !objectPanoReady || objectPanoDragging || !panoramaSelect) return;
+        objectPanoPlayer.removeHotspots();
+        editableObjectHotspots.forEach((hotspot,index)=>{if(String(hotspot.panoNodeId).toLowerCase()!==panoramaSelect.value.toLowerCase())return;const marker=document.createElement('button');marker.type='button';marker.className='object-web-pin object-hotspot-pin';marker.title='Hotspot '+hotspot.id;marker.innerHTML='<i>↗</i><span>'+escapeObjectHtml(hotspot.title||hotspot.id)+'</span>';attachObjectHotspotDrag(marker,hotspot,index);objectPanoPlayer.addHotspot('cms_hs_'+index,normalizeObjectPan(hotspot.pan),Number(hotspot.tilt),marker);});
+        editableWebElements.forEach((element, index) => {
+            if (String(element.panoNodeId).toLowerCase() !== panoramaSelect.value.toLowerCase()) return;
+            const marker = document.createElement('button'); marker.type = 'button'; marker.className = 'object-web-pin' + (index === selectedWebElement ? ' selected' : ''); marker.title = element.targetID; marker.innerHTML = '<i>＋</i><span>' + escapeObjectHtml(element.targetID) + '</span>';
+            marker.addEventListener('click', event => { event.stopPropagation(); selectWebElement(index); }); attachWebElementDrag(marker, element, index);
+            objectPanoPlayer.addHotspot('cms_we_' + index, normalizeObjectPan(element.pan), Number(element.tilt), marker);
+        });
+    }
+    async function ensureObjectPanoPlayer() {
+        if (!panoramaHost || !panoramaSelect || !objectTourBaseUrl) return;
+        const base = new URL(objectTourBaseUrl, document.baseURI);
+        if (!window.pano2vrPlayer) await new Promise((resolve, reject) => { const script = document.createElement('script'); script.src = new URL('pano2vr_player.js', base).href; script.onload = resolve; script.onerror = () => reject(new Error('pano2vr_player.js tidak dapat dimuat.')); document.head.appendChild(script); });
+        if (!objectPanoXml) { const response = await fetch(new URL('pano.xml?v=' + Date.now(), base), {cache:'no-store'}); if (!response.ok) throw new Error('pano.xml tidak dapat dibaca.'); objectPanoXml = new DOMParser().parseFromString(await response.text(), 'application/xml'); if (objectPanoXml.querySelector('parsererror')) throw new Error('pano.xml tidak valid.'); }
+        if (!objectPanoPlayer) objectPanoPlayer = new pano2vrPlayer('objectPanoramaHost');
+        const config = objectPanoXml.cloneNode(true); config.documentElement.setAttribute('start', panoramaSelect.value);
+        config.querySelectorAll('hotspots,media,animation,autorotate').forEach(node => node.remove());
+        config.querySelectorAll('input[leveltileurl],input[previewurl]').forEach(input => ['leveltileurl','previewurl'].forEach(attribute => { const value=input.getAttribute(attribute); if(value) input.setAttribute(attribute,new URL(value.replace(/^\.\//,''),base).href); }));
+        config.querySelectorAll('control').forEach(control => { control.setAttribute('lockedmouse','0'); control.setAttribute('lockedwheel','0'); control.setAttribute('lockedkeyboard','0'); });
+        objectPanoReady = false; objectPanoPlayer.readConfigString(new XMLSerializer().serializeToString(config));
+        window.setTimeout(() => { objectPanoReady = true; document.getElementById('objectPanoramaLoading').hidden = true; renderWebElementMarkers(); setPanoramaStatus('Panorama siap. Tarik pin untuk memindahkan WebElement.'); }, 350);
     }
     function renderObjectForm() {
         const record = objectRecords[selectedObject];
@@ -1163,9 +1279,13 @@ if (objectList) {
         if(event.target.closest('[data-delete-object]')&&await cuteConfirm({icon:'🧩',title:'Hapus object ini?',message:'Object akan dihapus dari daftar editor. Perubahan permanen setelah tombol Simpan ditekan.',action:'Ya, hapus object'})){objectRecords.splice(selectedObject,1);selectedObject=Math.min(selectedObject,objectRecords.length-1);renderObjectList();}
     });
     document.getElementById('addObject').addEventListener('click',()=>{objectRecords.push(blankObject());selectedObject=objectRecords.length-1;objectSearch.value='';renderObjectList();});
+    panoramaSelect?.addEventListener('change',()=>{selectedWebElement=-1;document.getElementById('removeWebElement').disabled=true;document.getElementById('objectPanoramaLoading').hidden=false;ensureObjectPanoPlayer().catch(error=>setPanoramaStatus('Gagal: '+error.message));});
+    document.getElementById('addWebElement')?.addEventListener('click',()=>{if(!objectPanoReady)return setPanoramaStatus('Tunggu panorama selesai dimuat.');const used=editableWebElements.filter(item=>String(item.panoNodeId).toLowerCase()===panoramaSelect.value.toLowerCase()).map(item=>String(item.targetID).toLowerCase());let number=1,targetID;do{targetID='Element'+String(number++).padStart(2,'0');}while(used.includes(targetID.toLowerCase()));const element={nodeID:currentPublicNode(),panoNodeId:panoramaSelect.value,targetID,pan:Number(objectPanoPlayer.getPan()),tilt:Number(objectPanoPlayer.getTilt()),fov:31.53,width:3200,height:2400};editableWebElements.push(element);const record=blankObject();record.nodeID='{'+element.nodeID+'}';record.targetID=targetID;record.route_key=(element.nodeID+'-'+targetID).toLowerCase().replace(/[^a-z0-9_-]/g,'');objectRecords.push(record);selectedObject=objectRecords.length-1;objectSearch.value='';renderObjectList();selectWebElement(editableWebElements.length-1);setPanoramaStatus(targetID+' ditambahkan di tengah pandangan. Tarik pin untuk menggesernya, lalu tekan Simpan.');});
+    document.getElementById('removeWebElement')?.addEventListener('click',async()=>{const element=editableWebElements[selectedWebElement];if(!element||!await cuteConfirm({icon:'📍',title:'Hapus WebElement ini?',message:element.targetID+' akan dihapus dari pano.xml setelah disimpan. Data Object Informasi terkait tidak otomatis dihapus.',action:'Hapus pin'}))return;editableWebElements.splice(selectedWebElement,1);selectedWebElement=-1;document.getElementById('removeWebElement').disabled=true;renderWebElementMarkers();setPanoramaStatus('WebElement dihapus dari editor. Tekan Simpan untuk menerapkan.');});
     document.getElementById('importWebElements').addEventListener('click',()=>{let added=0;detectedWebElements.forEach(element=>{const exists=objectRecords.some(record=>String(record.nodeID||'').replace(/[{}]/g,'').toLowerCase()===String(element.nodeID).toLowerCase()&&String(record.targetID||'').toLowerCase()===String(element.targetID).toLowerCase());if(exists)return;const record=blankObject();record.nodeID='{'+element.nodeID+'}';record.targetID=element.targetID;record.route_key=(element.nodeID+'-'+element.targetID).toLowerCase().replace(/[^a-z0-9_-]/g,'');objectRecords.push(record);added++;});if(added){selectedObject=objectRecords.length-added;objectSearch.value='';renderObjectList();}document.getElementById('objectProgress').textContent=added+' WebElement baru ditambahkan; simpan untuk menerapkan.';});
-    document.getElementById('saveObjects').addEventListener('click',async function(){this.disabled=true;const progress=document.getElementById('objectProgress');progress.textContent='Menyimpan…';try{const response=await fetch(location.href,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({csrf:voiceCsrf,id_lokasi:currentLocationId,records:objectRecords})});const result=await response.json();if(!response.ok||!result.success)throw new Error(result.message||'Gagal menyimpan.');progress.textContent=result.message;}catch(error){progress.textContent='Gagal: '+error.message;}finally{this.disabled=false;}});
+    document.getElementById('saveObjects').addEventListener('click',async function(){this.disabled=true;const progress=document.getElementById('objectProgress');progress.textContent='Menyimpan Object Informasi, hotspot, dan WebElement…';try{const response=await fetch(location.href,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({csrf:voiceCsrf,id_lokasi:currentLocationId,records:objectRecords,webElements:editableWebElements,hotspots:editableObjectHotspots})});const result=await response.json();if(!response.ok||!result.success)throw new Error(result.message||'Gagal menyimpan.');progress.textContent=result.message;}catch(error){progress.textContent='Gagal: '+error.message;}finally{this.disabled=false;}});
     renderObjectList();
+    ensureObjectPanoPlayer().catch(error=>{document.getElementById('objectPanoramaLoading')?.setAttribute('hidden','');setPanoramaStatus('Gagal memuat editor panorama: '+error.message);});
 }
 
 const voiceLocation = document.getElementById('voiceLocation');

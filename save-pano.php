@@ -35,6 +35,27 @@ try {
     $dom->formatOutput = false;
     if (!$dom->load($panoFile)) respond(422, false, 'pano.xml tidak valid.');
     $xpath = new DOMXPath($dom);
+    $customNodeIds = [];
+    foreach ((array) ($payload['panoramas'] ?? []) as $item) {
+        if (!is_array($item)) continue;
+        $nodeId = trim((string) ($item['nodeId'] ?? ''));
+        $customNodeId = trim((string) ($item['customNodeId'] ?? ''));
+        $title = trim(strip_tags((string) ($item['title'] ?? '')));
+        $latitude = trim((string) ($item['latitude'] ?? ''));
+        $longitude = trim((string) ($item['longitude'] ?? ''));
+        if ($customNodeId !== '' && !preg_match('/^[A-Za-z0-9_-]{1,100}$/D', $customNodeId)) throw new RuntimeException('Custom Node ID hanya boleh berisi huruf, angka, dash, dan underscore.');
+        $customKey = strtolower($customNodeId);
+        if ($customKey !== '' && isset($customNodeIds[$customKey])) throw new RuntimeException('Custom Node ID "' . $customNodeId . '" digunakan lebih dari sekali.');
+        if ($customKey !== '') $customNodeIds[$customKey] = true;
+        if ($latitude !== '' && (!is_numeric($latitude) || (float) $latitude < -90 || (float) $latitude > 90)) throw new RuntimeException('Latitude ' . $nodeId . ' tidak valid.');
+        if ($longitude !== '' && (!is_numeric($longitude) || (float) $longitude < -180 || (float) $longitude > 180)) throw new RuntimeException('Longitude ' . $nodeId . ' tidak valid.');
+        $userdata = $xpath->query('//panorama[@id=' . xpathLiteral($nodeId) . ']/userdata')?->item(0);
+        if (!$userdata instanceof DOMElement) continue;
+        $userdata->setAttribute('title', $title);
+        $userdata->setAttribute('customnodeid', $customNodeId);
+        $userdata->setAttribute('latitude', $latitude === '' ? '' : number_format((float) $latitude, 7, '.', ''));
+        $userdata->setAttribute('longitude', $longitude === '' ? '' : number_format((float) $longitude, 7, '.', ''));
+    }
     foreach ((array) ($payload['hotspots'] ?? []) as $item) {
         $nodeId = (string) ($item['nodeId'] ?? ''); $id = (string) ($item['id'] ?? '');
         $query = '//panorama[@id=' . xpathLiteral($nodeId) . ']//hotspot[@id=' . xpathLiteral($id) . ']';
@@ -58,8 +79,11 @@ try {
         $jsonNode->nodeValue = '';
         $jsonNode->appendChild($dom->createTextNode((string) json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)));
     }
+    $backupDirectory = dirname($panoFile) . '/.media-backups';
+    if (!is_dir($backupDirectory) && !mkdir($backupDirectory, 0775, true) && !is_dir($backupDirectory)) throw new RuntimeException('Folder backup gagal dibuat.');
+    if (!copy($panoFile, $backupDirectory . '/pano-before-audit-editor-' . date('Ymd-His') . '.xml')) throw new RuntimeException('Backup pano.xml gagal dibuat.');
     if ($dom->save($panoFile) === false) respond(500, false, 'Gagal menyimpan pano.xml.');
-    respond(200, true, 'Hotspot dan terjemahan pano.xml berhasil disimpan.');
+    respond(200, true, 'Panorama, hotspot, dan terjemahan pano.xml berhasil disimpan.');
 } catch (Throwable $error) {
     respond(400, false, $error->getMessage());
 }

@@ -128,7 +128,7 @@ input:focus,select:focus,textarea:focus { border-color:#83c9be!important;box-sha
 
 /* Configuration and forms */
 .layout { grid-template-columns:220px minmax(0,1fr);gap:16px; }
-.sidebar { top:100px;height:calc(100dvh - 124px);border-radius:18px; }
+.sidebar {border-radius:18px; }
 .location-workspace { align-self:start;gap:0!important;border:1px solid var(--ui-line);border-radius:16px;background:#fff;overflow:hidden; }
 .location-toolbar { position:static;top:auto;z-index:auto;align-self:start;min-height:64px;padding:0 10px;border:0;border-bottom:1px solid var(--ui-line);border-radius:0;background:#fff;box-shadow:none;backdrop-filter:none; }
 .location-tabs { border:0;border-radius:0!important;box-shadow:none;background:transparent; }

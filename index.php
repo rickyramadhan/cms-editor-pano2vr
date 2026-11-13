@@ -269,6 +269,8 @@ function readPanoramaNodes(string $root, array $tour): array
             'customNodeId' => $customNodeId,
             'value' => $customNodeId !== '' ? $customNodeId : $nodeId,
             'title' => trim((string) ($attributes['title'] ?? '')),
+            'latitude' => trim((string) ($attributes['latitude'] ?? '')),
+            'longitude' => trim((string) ($attributes['longitude'] ?? '')),
             'thumbnail' => $thumbnail,
         ];
     }
@@ -283,22 +285,68 @@ function readTourWebElements(string $root, array $tour): array
     preg_match_all('/<panorama\b[^>]*\bid="([^"]+)"[^>]*>(.*?)<\/panorama>/is', $xml, $panoramas, PREG_SET_ORDER);
     $elements = [];
     foreach ($panoramas as $panorama) {
-        $nodeId = $panorama[1];
+        $panoNodeId = $panorama[1];
+        $nodeId = $panoNodeId;
         if (preg_match('/<userdata\s+([^>]*)\/>/i', $panorama[2], $userdataMatch)) {
             $userdata = parseXmlAttributes($userdataMatch[1]);
             $nodeId = trim((string) ($userdata['customnodeid'] ?? '')) ?: trim((string) ($userdata['nodeid'] ?? $nodeId));
         }
         preg_match_all('/<webelement\b([^>]*)\/>/is', $panorama[2], $webElements);
         foreach ($webElements[1] ?? [] as $attributes) {
-            $decoded = html_entity_decode($attributes, ENT_QUOTES | ENT_XML1, 'UTF-8');
-            if (!preg_match('/\bid\s*=\s*["\']([^"\']+)["\']/i', $decoded, $idMatch)) continue;
-            $targetId = trim($idMatch[1]);
+            $values = parseXmlAttributes($attributes);
+            $targetId = trim((string) ($values['id'] ?? ''));
             if ($targetId === '') continue;
             $key = strtolower($nodeId . '|' . $targetId);
-            $elements[$key] = ['nodeID' => $nodeId, 'targetID' => $targetId];
+            $elements[$key] = ['nodeID'=>$nodeId,'panoNodeId'=>$panoNodeId,'targetID'=>$targetId,'pan'=>(float)($values['pan']??0),'tilt'=>(float)($values['tilt']??0),'fov'=>(float)($values['fov']??21.02),'width'=>max(1,(int)($values['width']??400)),'height'=>max(1,(int)($values['height']??600))];
         }
     }
     return array_values($elements);
+}
+
+function readTourHotspotPositions(string $root, array $tour): array
+{
+    $file=$root.'/'.str_replace('/',DIRECTORY_SEPARATOR,$tour['path']).'/pano.xml';$xml=file_get_contents($file);if($xml===false)return [];
+    preg_match_all('/<panorama\b[^>]*\bid="([^"]+)"[^>]*>(.*?)<\/panorama>/is',$xml,$panoramas,PREG_SET_ORDER);$out=[];
+    foreach($panoramas as $panorama){preg_match_all('/<hotspot\s+([^>]*)\/>/i',$panorama[2],$matches);foreach($matches[1]??[] as $text){$a=parseXmlAttributes($text);$id=trim((string)($a['id']??''));if($id==='')continue;$out[]=['panoNodeId'=>$panorama[1],'id'=>$id,'title'=>trim((string)($a['title']??$id)),'pan'=>(float)($a['pan']??0),'tilt'=>(float)($a['tilt']??0)];}}
+    return $out;
+}
+
+function saveTourWebElements(string $root, array $tour, array $elements, array $hotspots = []): int
+{
+    $panoFile = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, $tour['path']) . '/pano.xml';
+    $dom = new DOMDocument('1.0', 'UTF-8');
+    $dom->preserveWhiteSpace = true;
+    if (!@$dom->load($panoFile)) throw new RuntimeException('pano.xml tidak valid atau tidak dapat dibaca.');
+    $xpath = new DOMXPath($dom); $panoramas = [];
+    $nodes = $xpath->query('/tour/panorama');
+    if ($nodes === false) throw new RuntimeException('Struktur pano.xml tidak valid.');
+    foreach ($nodes as $panorama) if ($panorama instanceof DOMElement) $panoramas[strtolower($panorama->getAttribute('id'))] = ['element'=>$panorama,'items'=>[]];
+    foreach ($elements as $index => $item) {
+        if (!is_array($item)) throw new RuntimeException('WebElement #' . ($index + 1) . ' tidak valid.');
+        $panoNodeId=trim((string)($item['panoNodeId']??''));$targetId=trim((string)($item['targetID']??''));$key=strtolower($panoNodeId);
+        if (!preg_match('/^[A-Za-z][A-Za-z0-9_-]{0,63}$/D',$panoNodeId)||!preg_match('/^[A-Za-z][A-Za-z0-9_-]{0,63}$/D',$targetId)||!isset($panoramas[$key])) throw new RuntimeException('Node atau ID WebElement #' . ($index + 1) . ' tidak valid.');
+        $pan=(float)($item['pan']??0);$tilt=(float)($item['tilt']??0);$fov=(float)($item['fov']??21.02);
+        if (!is_finite($pan)||!is_finite($tilt)||!is_finite($fov)||$tilt < -90||$tilt > 90||$fov <= 0||$fov >= 180) throw new RuntimeException('Posisi WebElement #' . ($index + 1) . ' tidak valid.');
+        $panoramas[$key]['items'][]=['targetID'=>$targetId,'pan'=>$pan,'tilt'=>$tilt,'fov'=>$fov,'width'=>max(1,min(4000,(int)($item['width']??400))),'height'=>max(1,min(4000,(int)($item['height']??600)))];
+    }
+    foreach($hotspots as $index=>$item){$node=trim((string)($item['panoNodeId']??''));$id=trim((string)($item['id']??''));$pan=(float)($item['pan']??0);$tilt=(float)($item['tilt']??0);$key=strtolower($node);if(!isset($panoramas[$key])||$id===''||!is_finite($pan)||!is_finite($tilt)||$tilt < -90||$tilt > 90)throw new RuntimeException('Posisi hotspot #'.($index+1).' tidak valid.');$list=$xpath->query('./hotspots/hotspot',$panoramas[$key]['element']);$found=false;if($list!==false)foreach($list as $hotspot)if($hotspot instanceof DOMElement&&$hotspot->getAttribute('id')===$id){$hotspot->setAttribute('pan',number_format($pan,3,'.',''));$hotspot->setAttribute('tilt',number_format($tilt,3,'.',''));$found=true;break;}if(!$found)throw new RuntimeException('Hotspot '.$id.' tidak ditemukan pada '.$node.'.');}
+    $saved=0;
+    foreach ($panoramas as $data) {
+        $panorama=$data['element'];$media=$xpath->query('./media',$panorama)?->item(0);
+        if (!$media instanceof DOMElement && $data['items']!==[]) {$media=$dom->createElement('media');$panorama->appendChild($media);}
+        if (!$media instanceof DOMElement) continue;
+        foreach (iterator_to_array($media->childNodes) as $child) if ($child instanceof DOMElement&&strtolower($child->tagName)==='webelement') $media->removeChild($child);
+        foreach ($data['items'] as $item) {
+            $web=$dom->createElement('webelement');
+            $attrs=['popoutscaling'=>'100','hidepinned'=>'0','height'=>(string)$item['height'],'id'=>$item['targetID'],'clickmode'=>'0','rotx'=>'0.000','code'=>'<div id="'.$item['targetID'].'" style="width: 100%; height: 100%;"></div>','pan'=>number_format($item['pan'],3,'.',''),'rotz'=>'0.000','popbackmode'=>'0','permeable'=>'1','handcursor'=>'0','tilt'=>number_format($item['tilt'],3,'.',''),'stretch'=>'1.000','fov'=>number_format($item['fov'],3,'.',''),'width'=>(string)$item['width'],'roty'=>'0.000'];
+            foreach($attrs as $name=>$value)$web->setAttribute($name,$value);$media->appendChild($web);$saved++;
+        }
+    }
+    $backupDirectory=dirname($panoFile).'/.media-backups';
+    if(!is_dir($backupDirectory)&&!mkdir($backupDirectory,0775,true)&&!is_dir($backupDirectory))throw new RuntimeException('Folder backup pano.xml gagal dibuat.');
+    if(!copy($panoFile,$backupDirectory.'/pano-before-object-editor-'.date('Ymd-His').'.xml'))throw new RuntimeException('Backup pano.xml gagal dibuat.');
+    $xml=$dom->saveXML();if($xml===false||file_put_contents($panoFile,$xml,LOCK_EX)===false)throw new RuntimeException('WebElement gagal disimpan ke pano.xml.');
+    return $saved;
 }
 
 function analyzeTourCompletion(string $root, string $id, array $tour, array $location, array $objects, bool $includeAssetAnalysis = true): array
@@ -485,9 +533,16 @@ try {
             foreach (cmsLanguages() as $code => $label) $labels[$code] = trim((string) ($record['labelTeks'][$code] ?? ''));
             $cleanRecords[] = ['route_key' => $routeKey, 'infoID' => trim((string) ($record['infoID'] ?? '')), 'nodeID' => trim((string) ($record['nodeID'] ?? '')), 'targetID' => trim((string) ($record['targetID'] ?? '')), 'category' => trim((string) ($record['category'] ?? 'umum')), 'arah' => trim((string) ($record['arah'] ?? 'luruskanan')), 'versi' => '1', 'ukuran' => trim((string) ($record['ukuran'] ?? '500px')), 'labelTeks' => $labels, 'isActive' => (bool) ($record['isActive'] ?? true), 'title' => trim((string) ($record['title'] ?? ''))];
         }
+        $webElementCount = null;
+        if (array_key_exists('webElements', $payload)) {
+            if (!isset($detectedTours[$locationId]) || !is_array($payload['webElements'])) throw new RuntimeException('Data editor panorama tidak valid.');
+            $hotspots=is_array($payload['hotspots']??null)?$payload['hotspots']:[];
+            $webElementCount = saveTourWebElements($projectRoot, $detectedTours[$locationId], $payload['webElements'], $hotspots);
+        }
         $oiDatabase[$locationId] = $cleanRecords;
         replaceJsObject($oiDatabaseFile, 'TourDatabase', $oiDatabase);
-        echo json_encode(['success' => true, 'message' => count($cleanRecords) . ' object berhasil disimpan.']); exit;
+        $message = count($cleanRecords) . ' object berhasil disimpan.' . ($webElementCount !== null ? ' ' . $webElementCount . ' WebElement dan ' . count($hotspots ?? []) . ' hotspot diperbarui di pano.xml.' : '');
+        echo json_encode(['success' => true, 'message' => $message]); exit;
     }
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -688,7 +743,7 @@ try {
 
 $selectedId = cleanKey((string) ($_GET['lokasi'] ?? array_key_first($detectedTours) ?? array_key_first($database) ?? ''));
 $requestedTab = (string) ($_GET['tab'] ?? 'dashboard');
-$activeTab = in_array($requestedTab, ['dashboard', 'translations', 'lokasi', 'config', 'languages', 'custom', 'skin', 'object', 'voice', 'video', 'video360', 'optimizer', 'audit', 'smart', 'aihub', 'loading'], true) ? $requestedTab : 'dashboard';
+$activeTab = in_array($requestedTab, ['dashboard', 'translations', 'lokasi', 'languages', 'custom', 'skin', 'object', 'voice', 'video', 'video360', 'audit', 'smart', 'aihub', 'loading'], true) ? $requestedTab : 'dashboard';
 $smartHubState = null;
 if ($activeTab === 'smart') {
     // Smart Hub: integrasi Smart Kit untuk wilayah project aktif (lihat smart-hub.php)
@@ -727,6 +782,7 @@ foreach ($detectedTours as $id => $tour) {
 uksort($sidebarLocations, 'strnatcasecmp');
 $selectedPanoramas = isset($detectedTours[$selectedId]) ? readPanoramaNodes($projectRoot, $detectedTours[$selectedId]) : [];
 $selectedWebElements = isset($detectedTours[$selectedId]) ? readTourWebElements($projectRoot, $detectedTours[$selectedId]) : [];
+$selectedHotspots = isset($detectedTours[$selectedId]) ? readTourHotspotPositions($projectRoot, $detectedTours[$selectedId]) : [];
 $oiConfigContent = is_file($assetsRoot . '/oi-config.js') ? (string) file_get_contents($assetsRoot . '/oi-config.js') : '';
 $oiPreviewBaseUrl = preg_match("/baseUrl\s*:\s*['\"]([^'\"]+)['\"]/", $oiConfigContent, $oiBaseMatch) ? $oiBaseMatch[1] : 'https://webview-jakarta.govirtual.id/objinfo.php';
 $auditId = $selectedId;
