@@ -401,7 +401,10 @@ function analyzeTourCompletion(string $root, string $id, array $tour, array $loc
     $audioScore = $audioDone * 25;
     if ($audioDone < 4) $missing[] = (4 - $audioDone) . ' audio belum tersedia';
 
-    $videoDone = (is_file($tourDirectory . '/video/mobile.webm') ? 1 : 0) + (is_file($tourDirectory . '/video/desktop.webm') ? 1 : 0);
+    $videoDone = 0;
+    foreach (['mobile', 'desktop'] as $videoType) {
+        if (is_file($tourDirectory . '/video/' . $videoType . '.webm') || is_file($tourDirectory . '/video/' . $videoType . '.mp4')) $videoDone++;
+    }
     $videoScore = $videoDone * 50;
     if ($videoDone < 2) $missing[] = (2 - $videoDone) . ' video belum tersedia';
 

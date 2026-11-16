@@ -79,11 +79,19 @@ function feValidateManifest(array $m, string $dir, array $features): array
         if (!in_array((string) $feat, $features, true)) throw new RuntimeException('frontend.json: halaman "' . $feat . '" bukan fitur Smart Kit. Fitur yang ada: ' . implode(', ', $features));
         $pages[(string) $feat] = $check((string) $rel, 'pages.' . $feat);
     }
-    if (!isset($clean['entry']) && !$pages) throw new RuntimeException('frontend.json: isi minimal "entry" (shell) atau "pages".');
     if ($pages) $clean['pages'] = $pages;
     $css = [];
     foreach ((array) ($m['globalCss'] ?? []) as $c) $css[] = $check((string) $c, 'globalCss');
     if ($css) $clean['globalCss'] = $css;
+    // Skrip paket (modul ES, export default function ({ S, D, frontend, base })) — dijalankan frontend.js sebelum HUD.
+    $js = [];
+    foreach ((array) ($m['script'] ?? []) as $s) {
+        $rel = $check((string) $s, 'script');
+        if (!preg_match('/\.m?js$/i', $rel)) throw new RuntimeException('frontend.json: "script" harus berkas .js/.mjs: ' . $rel);
+        $js[] = $rel;
+    }
+    if ($js) $clean['script'] = $js;
+    if (!isset($clean['entry']) && !$pages && !$css && !$js) throw new RuntimeException('frontend.json: isi minimal salah satu dari "entry" (shell), "pages", "globalCss", atau "script".');
     if (array_key_exists('companion', $m)) $clean['companion'] = (bool) $m['companion'];
     return $clean;
 }

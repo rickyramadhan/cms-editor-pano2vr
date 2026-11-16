@@ -50,20 +50,28 @@ try {
     foreach (['mobile', 'desktop'] as $type) {
         if (!isset($_FILES[$type]) || $_FILES[$type]['error'] === UPLOAD_ERR_NO_FILE) continue;
         if ($_FILES[$type]['error'] !== UPLOAD_ERR_OK) videoResponse(422, false, 'Upload ' . $type . ' gagal dengan kode ' . $_FILES[$type]['error'] . '.');
-        if (strtolower(pathinfo((string) $_FILES[$type]['name'], PATHINFO_EXTENSION)) !== 'webm') videoResponse(422, false, 'Video ' . $type . ' harus berformat WebM.');
+        // Format yang diterima: WebM atau MP4. Format simpan ditentukan dari isi file
+        // (mis. file bernama .mp4 yang isinya WebM tetap disimpan sebagai .webm).
+        $extension = strtolower(pathinfo((string) $_FILES[$type]['name'], PATHINFO_EXTENSION));
+        if (!in_array($extension, ['webm', 'mp4'], true)) videoResponse(422, false, 'Video ' . $type . ' harus berformat WebM atau MP4.');
         $mime = (new finfo(FILEINFO_MIME_TYPE))->file((string) $_FILES[$type]['tmp_name']);
-        if (!in_array($mime, ['video/webm', 'application/octet-stream'], true)) videoResponse(422, false, 'Isi file ' . $type . ' bukan video WebM yang valid.');
-        $uploads[$type] = (string) $_FILES[$type]['tmp_name'];
+        $mimeFormats = ['video/webm' => 'webm', 'video/mp4' => 'mp4', 'application/mp4' => 'mp4', 'video/x-m4v' => 'mp4', 'application/octet-stream' => $extension];
+        if (!isset($mimeFormats[$mime])) videoResponse(422, false, 'Isi file ' . $type . ' bukan video WebM/MP4 yang valid.');
+        $extension = $mimeFormats[$mime];
+        $uploads[$type] = ['tmp' => (string) $_FILES[$type]['tmp_name'], 'ext' => $extension];
     }
-    if ($uploads === []) videoResponse(422, false, 'Pilih minimal satu video WebM.');
+    if ($uploads === []) videoResponse(422, false, 'Pilih minimal satu video WebM atau MP4.');
 
     $videoDirectory = $tourDirectory . '/video';
     if (!is_dir($videoDirectory) && !mkdir($videoDirectory, 0775, true) && !is_dir($videoDirectory)) videoResponse(500, false, 'Folder video gagal dibuat.');
     $saved = [];
-    foreach ($uploads as $type => $temporaryFile) {
-        $destination = $videoDirectory . '/' . $type . '.webm';
-        if (!move_uploaded_file($temporaryFile, $destination)) videoResponse(500, false, 'Video ' . $type . ' gagal disimpan.');
-        $saved[] = $type . '.webm';
+    foreach ($uploads as $type => $upload) {
+        $destination = $videoDirectory . '/' . $type . '.' . $upload['ext'];
+        if (!move_uploaded_file($upload['tmp'], $destination)) videoResponse(500, false, 'Video ' . $type . ' gagal disimpan.');
+        // Hapus format lain agar tur tidak memutar video lama (WebM diprioritaskan saat keduanya ada).
+        $otherFile = $videoDirectory . '/' . $type . '.' . ($upload['ext'] === 'webm' ? 'mp4' : 'webm');
+        if (is_file($otherFile)) @unlink($otherFile);
+        $saved[] = $type . '.' . $upload['ext'];
     }
     videoResponse(200, true, implode(' dan ', $saved) . ' berhasil diunggah dan menimpa file lama.', ['files' => $saved]);
 } catch (Throwable $error) {

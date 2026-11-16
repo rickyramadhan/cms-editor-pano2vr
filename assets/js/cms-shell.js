@@ -32,4 +32,33 @@
     }));
     search.addEventListener('input', applyLocationFilter);
     applyLocationFilter();
+
+    // Tooltip nama lengkap: hanya muncul bila judul lokasi terpotong (ellipsis).
+    const tooltip = document.createElement('div');
+    tooltip.className = 'location-tooltip';
+    tooltip.setAttribute('role', 'tooltip');
+    document.body.appendChild(tooltip);
+    const hideTooltip = () => tooltip.classList.remove('visible');
+    const showTooltip = location => {
+        const title = location.querySelector('.location-title strong');
+        if (!title || title.scrollWidth <= title.clientWidth) return hideTooltip();
+        tooltip.textContent = title.textContent;
+        const box = location.getBoundingClientRect();
+        tooltip.style.left = Math.round(box.right + 10) + 'px';
+        tooltip.style.top = Math.round(box.top + box.height / 2) + 'px';
+        tooltip.classList.add('visible');
+        // Jika keluar layar di kanan, tampilkan di bawah kartu.
+        const tip = tooltip.getBoundingClientRect();
+        if (tip.right > window.innerWidth - 8) {
+            tooltip.style.left = Math.round(box.left) + 'px';
+            tooltip.style.top = Math.round(box.bottom + 6 + tip.height / 2) + 'px';
+        }
+    };
+    locations.forEach(location => {
+        location.addEventListener('mouseenter', () => showTooltip(location));
+        location.addEventListener('mouseleave', hideTooltip);
+        location.addEventListener('focus', () => showTooltip(location));
+        location.addEventListener('blur', hideTooltip);
+    });
+    list.addEventListener('scroll', hideTooltip, { passive: true });
 })();
