@@ -412,7 +412,7 @@
                     <?php foreach ($skinStatuses as $tourId => $status): ?>
                         <label class="skin-sync-item <?= $status['same'] ? 'synced' : 'outdated' ?>">
                             <input type="checkbox" name="skin_targets[]" value="<?= e($tourId) ?>" <?= $status['same'] ? '' : 'checked' ?>>
-                            <span><strong><?= e(humanizeLocationId($tourId)) ?></strong><small><?= e(($status['skinMatches'] ? 'Sudah memakai ' . $activeSkinTemplate['name'] : ($status['currentTemplate'] !== '' ? 'Memakai template ' . $status['currentTemplate'] : 'Skin lain / versi lama')) . (empty($status['loaderReady']) ? ' · pemuat skin belum terpasang di index.html' : '')) ?></small></span>
+                            <span><strong><?= e(humanizeLocationId($tourId)) ?></strong><small><?= e(($status['skinMatches'] ? 'Sudah memakai ' . $activeSkinTemplate['name'] : ($status['currentTemplate'] !== '' ? 'Memakai template ' . $status['currentTemplate'] : 'Skin lain / versi lama')) . (empty($status['loaderReady']) ? ' · index.html belum sesuai template (pemuat / tag lama)' : '')) ?></small></span>
                             <em><?= $status['same'] ? 'Sesuai' : 'Perlu' ?></em>
                         </label>
                     <?php endforeach; ?>

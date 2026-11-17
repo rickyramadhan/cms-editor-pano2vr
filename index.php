@@ -615,13 +615,13 @@ try {
                 $targetDirectory = $projectRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $detectedTours[$targetId]['path']);
                 try {
                     $applied = applySkinTemplate($template, $projectRoot, $targetDirectory, $targetId);
-                    if (!empty($applied['loader'])) $loaders++;
+                    if (!empty($applied['index'])) $loaders++;
                     $synced++;
                 } catch (Throwable $targetError) {
                     $failed[] = $targetId . ': ' . $targetError->getMessage();
                 }
             }
-            $_SESSION['cms_flash'] = $synced . ' lokasi berhasil memakai skin.js dari template ' . $template['name'] . '.' . ($loaders > 0 ? ' Pemuat skin dipasang di index.html ' . $loaders . ' lokasi.' : '') . ' File lama telah dicadangkan ke .skin-backups.' . ($failed !== [] ? ' Gagal (' . count($failed) . '): ' . implode(' | ', $failed) : '');
+            $_SESSION['cms_flash'] = $synced . ' lokasi berhasil memakai skin.js dari template ' . $template['name'] . '.' . ($loaders > 0 ? ' index.html dirapikan (pemuat dipasang / tag lama dihapus) di ' . $loaders . ' lokasi.' : '') . ' File lama telah dicadangkan ke .skin-backups.' . ($failed !== [] ? ' Gagal (' . count($failed) . '): ' . implode(' | ', $failed) : '');
             header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?') . '?tab=skin');
             exit;
         } elseif ($action === 'save_custom_css') {
@@ -796,8 +796,8 @@ if ($activeTab === 'skin') {
         $skinHash = is_file($skinFile) ? (string) md5_file($skinFile) : '';
         $skinMatches = $activeSkinTemplateHash !== '' && $skinHash === $activeSkinTemplateHash;
         // template dengan "loader": lokasi baru dianggap sesuai bila tag pemuat juga sudah ada di index.html
-        $activeLoader = $activeSkinTemplateId !== '' ? (string) $skinTemplates[$activeSkinTemplateId]['loader'] : '';
-        $loaderReady = $activeLoader === '' || skinLoaderPresent(is_file($tourDirectory . '/index.html') ? (string) file_get_contents($tourDirectory . '/index.html') : '', $activeLoader);
+        // index.html sesuai template: pemuat lengkap, tag lama (remove/replace) sudah tidak ada
+        $loaderReady = $activeSkinTemplateId === '' || !is_file($tourDirectory . '/index.html') || !skinIndexNeedsFix((string) file_get_contents($tourDirectory . '/index.html'), $skinTemplates[$activeSkinTemplateId]);
         $skinStatuses[$id] = ['same' => $skinMatches && $loaderReady, 'skinMatches' => $skinMatches, 'loaderReady' => $loaderReady, 'currentTemplate' => $skinHashNames[$skinHash] ?? '', 'size' => is_file($skinFile) ? filesize($skinFile) : 0];
     }
 }

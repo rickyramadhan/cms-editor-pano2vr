@@ -24,12 +24,17 @@ skin-templates/
    }
    ```
    - `preview` — alamat tur untuk pratinjau (opsional, relatif ke `htdocs`).
-   - `loader` — pemuat yang harus ada di `index.html` lokasi agar skin tampil lengkap (opsional). Contoh Badung: video intro & pilihan audio dipasang oleh `../assets/template-skin/template-skin-loader.js`, **bukan** oleh `skin.js`. Hanya jalur relatif ke berkas `.js` di server yang sama yang diterima.
+   - `loader` — pemuat yang harus ada di `index.html` lokasi agar skin tampil lengkap (opsional). Boleh satu string atau daftar (maks. 5, urutan = urutan di `index.html`), mis. `["../assets/template-skin/template-skin-loader.js?v=3", "../assets/x.js"]`. Contoh Badung: video intro & pilihan audio dipasang oleh `../assets/template-skin/template-skin-loader.js`, **bukan** oleh `skin.js`. Hanya jalur relatif ke berkas `.js` di server yang sama yang diterima.
+   - `remove` — daftar tag lama yang **dihapus** dari `index.html` saat diterapkan, mis. `["../assets/main-loader.js"]` (jalur yang dulu salah dan 404).
+   - `replace` — tag yang **alamatnya diganti**, mis. `{ "../assets/custom.css": "../assets/main-loader/custom.css" }`. Posisi tag tetap; bila alamat baru sudah ada, tag lama cukup dihapus agar tidak ganda. Jenis berkas harus sama (.css → .css).
+   - `remove` & `replace` hanya mengenai tag `<script src>` / `<link href>` yang nilainya **persis** sama (versi `?v=` boleh beda); mis. `../assets/main-loader.js` tidak pernah mengenai `../assets/main-loader/main-loader.js`.
+   - Uji dulu setiap pemuat di satu lokasi sebelum dimasukkan ke template. Badung memakai `../assets/main-loader/main-loader.js` **versi Badung** (gyro, musik latar, bahasa, data CMS, Video 360; tanpa layar hitam & tanpa berkas `jkt/`). Jangan menyalin `main-loader.js` versi Jakarta ke Badung: ia memasang layar hitam yang hanya dilepas skin Jakarta, sehingga tur menjadi hitam.
 4. Buka CMS › Template Skin, pilih template, lalu simpan pilihan. CMS tidak menebak template dari ID project.
 
 ## Yang diubah di lokasi saat diterapkan
 1. `skin.js` diganti dengan milik template.
-2. Bila template punya `loader` dan `index.html` lokasi belum memuatnya: **satu baris** `<script src="…loader…"></script>` disisipkan tepat setelah tag `skin.js`. Selain baris itu, isi `index.html` tidak berubah. Bila sudah ada, `index.html` tidak disentuh (menerapkan ulang tidak membuat tag ganda).
+2. Tag di `remove` dihapus dan alamat di `replace` diganti (hanya tag yang cocok persis).
+3. Untuk setiap pemuat di `loader` yang belum ada di `index.html`: **satu baris** `<script src="…"></script>` disisipkan setelah tag `skin.js` (dan setelah pemuat template yang sudah ada tepat di bawahnya). Tag lain tidak dihapus atau diubah. Pemuat yang sudah ada dilewati (menerapkan ulang tidak membuat tag ganda).
 
 File lama (`skin.js`, dan `index.html` bila disisipi) dicadangkan dulu ke `.skin-backups/<stempel>/` di folder lokasi; bila salah satu langkah gagal, keduanya dikembalikan otomatis. `pano2vr_player.js`, `pano.xml`, peta, tiles, video, aset, dan data lokasi tidak disentuh.
 

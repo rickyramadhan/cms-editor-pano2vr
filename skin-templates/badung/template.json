@@ -2,5 +2,14 @@
     "name": "Badung",
     "description": "Skin Badung (badung.ggsk). Snapshot skin.js dari pantai-kuta.",
     "preview": "/badung/pantai-kuta/",
-    "loader": "../assets/template-skin/template-skin-loader.js?v=3"
+    "loader": [
+        "../assets/template-skin/template-skin-loader.js?v=3",
+        "../assets/main-loader/main-loader.js"
+    ],
+    "remove": [
+        "../assets/main-loader.js"
+    ],
+    "replace": {
+        "../assets/custom.css": "../assets/main-loader/custom.css"
+    }
 }
