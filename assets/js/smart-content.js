@@ -271,7 +271,7 @@
     const guideHidden = () => new Set(Array.isArray(d.content.GUIDE?.hiddenCategories) ? d.content.GUIDE.hiddenCategories : []);
     const countOf = (s) => s.guideCategories
       ? schema.SVC_CATS.filter(([id]) => !guideHidden().has(id)).length
-      : s.blocks.reduce((n, b) => { const v = get(d.content, b.path); return n + (Array.isArray(v) ? v.length : v && typeof v === 'object' ? (b.kind === 'dict' ? Object.keys(v).length : 1) : 0); }, 0);
+      : (s.blocks || []).reduce((n, b) => { const v = get(d.content, b.path); return n + (Array.isArray(v) ? v.length : v && typeof v === 'object' ? (b.kind === 'dict' ? Object.keys(v).length : 1) : 0); }, 0);
     const saveBtn = h('button', { type: 'button', class: 'save', disabled: true, onclick: save }, 'Simpan konten');
     async function save() {
       saveBtn.disabled = true;
