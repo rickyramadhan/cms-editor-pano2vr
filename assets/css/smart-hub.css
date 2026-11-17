@@ -19,7 +19,7 @@ html, body, button, input, select, textarea { font-family: "Plus Jakarta Sans", 
 .sh-tabs button[aria-selected="true"] { background: #fff; color: var(--sh-accent); box-shadow: 0 2px 8px rgba(26, 38, 66, .09); }
 .sh-tabs button[aria-selected="true"] i { background: var(--sh-accent); color: #fff; }
 .sh-layout { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 20px; align-items: start; }
-.sh-main { display: grid; gap: 16px; min-width: 0; }
+.sh-main { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; min-width: 0; }
 .sh-card { padding: 20px 22px; display: grid; gap: 16px; min-width: 0; border-color: var(--sh-line); border-radius: var(--sh-r-lg); box-shadow: none; }
 .sh-card h3 { margin: 0; font-size: 16px; }
 .sh-card p { margin: 3px 0 0; color: var(--muted); font-size: 12.5px; }
@@ -149,13 +149,13 @@ html, body, button, input, select, textarea { font-family: "Plus Jakarta Sans", 
 .sc-nav button.is-on { background: var(--blue); color: #fff; }
 .sc-nav button i { min-width: 22px; padding: 1px 6px; border-radius: 999px; background: var(--blue-soft); color: var(--blue); font-style: normal; font-size: 11px; text-align: center; }
 .sc-nav button.is-on i { background: rgba(255, 255, 255, .25); color: #fff; }
-.sc-main, .sc-panel { display: grid; gap: 14px; min-width: 0; }
+.sc-main, .sc-panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; min-width: 0; }
 .sc-hint { margin: 0; color: var(--muted); font-size: 12.5px; }
 .sc-block h4 { margin: 0 0 8px; font-size: 14px; }
 .sc-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
 .sc-search { flex: 1; min-width: 160px; padding: 8px 11px; border: 1px solid #d6dfec; border-radius: 9px; font-size: 13px; }
-.sc-list { display: grid; gap: 8px; }
-.sc-item { border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+.sc-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; }
+.sc-item { min-width: 0; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .sc-item[open] { border-color: #bfd3ff; box-shadow: 0 6px 18px rgba(37, 99, 235, .06); }
 .sc-item > summary { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; min-width: 0; padding: 10px 12px; cursor: pointer; list-style: none; }
 .sc-item > summary::-webkit-details-marker { display: none; }
@@ -165,7 +165,7 @@ html, body, button, input, select, textarea { font-family: "Plus Jakarta Sans", 
 .sc-item__a { flex: none; }
 .sc-item__a em { font-size: 11.5px; color: var(--muted); font-style: normal; }
 .sc-item__b { padding: 4px 14px 14px; border-top: 1px solid var(--line); }
-.sc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; padding-top: 10px; }
+.sc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr)); gap: 12px; padding-top: 10px; align-items: start; }
 .sc-f.is-wide { grid-column: 1 / -1; }
 .sc-f textarea, .sc-f input:not([type=checkbox]), .sc-f select { width: 100%; padding: 9px 11px; border: 1px solid #d6dfec; border-radius: 9px; font: inherit; font-size: 13px; background: #fff; }
 .sc-bool { align-self: end; padding-bottom: 8px; }

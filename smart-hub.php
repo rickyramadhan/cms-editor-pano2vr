@@ -111,7 +111,7 @@ function shStatus(array $st, array $tours): array
             && (bool) preg_match('~<link[^>]+href=["\'][^"\']*custom\.css(?:\?[^"\']*)?["\']~i', $html);
         $count = static fn($k) => is_array($content[$k] ?? null) ? count($content[$k]) : 0;
         $rows[] = [
-            'id' => $id, 'path' => $t['path'], 'name' => (string) ($content['REGION']['name'] ?? shHumanize($id)), 'url' => shWebUrl($t['dir']),
+            'id' => $id, 'path' => $t['path'], 'name' => (string) (($content['REGION']['place'] ?? '') ?: ($content['REGION']['name'] ?? shHumanize($id)))   /* nama tempat (place); name = nama wilayah untuk header HUD */, 'url' => shWebUrl($t['dir']),
             'pack' => ['exists' => $scenes > 0, 'scenes' => (int) $scenes, 'content' => is_array($content), 'hubLocal' => is_file($packDir . '/hub.json'),
                 'type' => (string) ($content['REGION']['type'] ?? ''), 'counts' => ['layanan' => $count('SERVICES'), 'fakta' => $count('FACTS'), 'acara' => $count('EVENTS'), 'rute' => $count('ROUTES'), 'stempel' => $count('STAMPS')]],
             'applied' => $applied !== '', 'appliedSrc' => $applied,
