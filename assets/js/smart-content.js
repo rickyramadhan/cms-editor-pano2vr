@@ -264,7 +264,7 @@
     }
     d = ST.data;
     const ctx = { scenes: d.scenes, svcCats: schema.SVC_CATS, location: ST.loc, assetUrl: (ref) => /^https?:|^data:|^\//.test(ref || '') ? ref : S.settings.url + 'packs/' + S.settings.wilayah + '/' + ST.loc + '/' + String(ref || '').replace(/^\.\//, '') };
-    const sections = schema.SECTIONS.filter((s) => !s.pins);
+    const sections = schema.SECTIONS;
     if (!ST.sec || !sections.some((s) => s.id === ST.sec)) ST.sec = sections[0].id;
     let sec = sections.find((s) => s.id === ST.sec);
     const mark = () => { ST.dirty = true; saveBtn.disabled = false; saveBtn.classList.add('is-dirty'); saveBtn.textContent = 'Simpan konten'; box.querySelector('.sc-dirty-state')?.classList.add('is-dirty'); };
@@ -317,12 +317,14 @@
         })));
     };
     const paint = () => {
+      if (sec.names) { panel.replaceChildren(h('p', { class: 'sc-hint' }, sec.hint || ''), namesPanel(d, mark)); return; }
+      if (sec.pins) { panel.replaceChildren(h('p', { class: 'sc-hint' }, sec.hint || ''), h('div', { class: 'sh-empty' }, 'Memuat…')); pinsPanel(d, ctx).then((el) => { if (sec.pins) panel.replaceChildren(h('p', { class: 'sc-hint' }, sec.hint || ''), el); }); return; }
       const body = sec.guideCategories
         ? [guideEditor()]
         : sec.blocks.map((b) => sec.id === 'Profil' && b.kind === 'object' && b.path === 'REGION'
           ? profileEditor(b, d.content, mark, ctx)
           : h('div', { class: 'card sh-card' }, block(b, d.content, mark, ctx, () => { paint(); })));
-      panel.replaceChildren(h('p', { class: 'sc-hint' }, sec.hint || ''), ...body);
+      panel.replaceChildren(h('p', { class: 'sc-hint' }, sec.hint || ''), ...(sec.id === 'Kreator' ? [creatorTool(d, mark, () => paint())] : []), ...body);
     };
     function build() {
       sec = sections.find((s) => s.id === ST.sec) || sections[0];
@@ -342,6 +344,65 @@
     return h('div', { class: 'sc-head' }, h('div', { class: 'sc-head__location' }, h('span', null, 'Lokasi aktif'), sel), h('div', { class: 'sc-head__r' },
       h('button', { type: 'button', class: 'sc-completeness', onclick: () => document.querySelector('.is-required-empty')?.scrollIntoView({ behavior: 'smooth', block: 'center' }) }, requiredMissing ? `${requiredMissing} field wajib belum terisi` : 'Profil wajib lengkap'),
       h('span', { class: 'sc-dirty-state' }, h('i', null), 'Tidak ada perubahan'), saveBtn || null));
+  }
+
+
+  /* ---------------- panel khusus: nama scene, pin, kurasi kreator ---------------- */
+  function namesPanel(d, mark) {
+    const { h } = A();
+    const names = (d.content.SCENE_NAMES ||= {}); const review = new Set(d.content._review || []);
+    if (!d.scenes.length) return h('div', { class: 'sh-empty' }, 'Paket belum dibangun.');
+    return h('div', { class: 'card sh-card' }, h('div', { class: 'sc-grid' }, d.scenes.map((s) => {
+      const inp = h('input', { value: names[s.id] ?? s.name, oninput: (e) => { names[s.id] = e.target.value.trim(); if (names[s.id] === s.name) delete names[s.id]; mark(); row.classList.remove('is-review'); } });
+      const row = h('label', { class: 'sc-field' + (review.has(s.id) ? ' is-review' : ''), style: 'display:grid;grid-template-columns:96px 1fr;gap:10px;align-items:center' },
+        h('img', { src: s.thumb, alt: '', style: 'width:96px;height:60px;object-fit:cover;border-radius:8px' }),
+        h('span', null, h('small', null, s.id + (review.has(s.id) ? ' · perlu ditinjau' : '')), inp));
+      return row;
+    })));
+  }
+
+  async function pinsPanel(d, ctx, rerender) {
+    const { h, post, toast } = A();
+    const wrap = h('div', { class: 'card sh-card' }, h('div', { class: 'sh-empty' }, 'Memuat pin…'));
+    let j; try { j = await post('pins_get', { location: ST.loc }); } catch (e) { wrap.replaceChildren(h('div', { class: 'sh-warn' }, e.message)); return wrap; }
+    const pins = j.pins; const scenes = j.scenes; let dirty = false; const TYPES = [['info', 'Informasi'], ['fact', 'Fakta'], ['safety', 'Keselamatan'], ['service', 'Layanan'], ['photo', 'Spot foto']];
+    const list = h('div', { class: 'sc-list' });
+    const save = h('button', { type: 'button', class: 'save', onclick: async () => { save.disabled = true; try { const r = await post('pins_save', { location: ST.loc, pins }); dirty = false; toast(r.message); A().reloadPreview(); } catch (e) { toast(e.message, true); } finally { save.disabled = false; } } }, 'Simpan & bangun pin');
+    const draw = () => {
+      list.replaceChildren();
+      pins.forEach((p, i) => {
+        const sc = scenes.find((s) => s.id === p.scene);
+        const dot = h('i', { style: 'position:absolute;width:16px;height:16px;border-radius:50%;background:#1a5cff;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.5);transform:translate(-50%,-50%);pointer-events:none' });
+        const place = () => { dot.style.left = (p.u / 720 * 100) + '%'; dot.style.top = (p.v / 450 * 100) + '%'; };
+        const stage = h('div', { style: 'position:relative;width:100%;max-width:420px;aspect-ratio:720/450;border-radius:10px;overflow:hidden;cursor:crosshair;background:#0001' }, h('img', { src: sc?.thumb || '', alt: '', style: 'width:100%;height:100%;object-fit:cover;display:block' }), dot);
+        stage.addEventListener('click', (e) => { const r = stage.getBoundingClientRect(); p.u = Math.round((e.clientX - r.left) / r.width * 720); p.v = Math.round((e.clientY - r.top) / r.height * 450); place(); dirty = true; mark2(); });
+        place();
+        const f = (label, key, type = 'text') => h('label', { class: 'sc-field' }, h('span', null, label), type === 'textarea' ? h('textarea', { rows: 3, oninput: (e) => { p[key] = e.target.value; mark2(); } }, p[key] ?? '') : h('input', { value: p[key] ?? '', oninput: (e) => { p[key] = e.target.value; mark2(); } }));
+        const sel = (label, key, opts, after) => h('label', { class: 'sc-field' }, h('span', null, label), h('select', { onchange: (e) => { p[key] = e.target.value; mark2(); after && after(); } }, opts.map(([v, t]) => h('option', { value: v, selected: v === p[key] ? true : null }, t))));
+        const det = h('details', { class: 'sc-item' }, h('summary', null, h('span', { class: 'sc-item__t' }, `${p.title || '(tanpa judul)'} · ${sc?.name || p.scene}`), h('span', { class: 'sc-item__a' }, h('button', { type: 'button', class: 'danger', onclick: (e) => { e.preventDefault(); if (!confirm('Hapus pin ini?')) return; pins.splice(i, 1); dirty = true; mark2(); draw(); } }, 'Hapus'))),
+          h('div', { class: 'sc-item__b' }, h('p', { class: 'sc-hint' }, 'Klik pada gambar untuk menaruh pin tepat di objeknya.'), stage, h('div', { class: 'sc-grid' }, sel('Scene', 'scene', scenes.map((s) => [s.id, s.name]), draw), sel('Jenis', 'type', TYPES), f('ID pin', 'id'), f('Judul', 'title'), f('Keterangan singkat', 'sub'), f('Rujukan (ID fakta/layanan)', 'ref'), f('Deskripsi', 'desc', 'textarea'))));
+        list.append(det);
+      });
+      if (!pins.length) list.append(h('div', { class: 'sh-empty' }, 'Belum ada pin. Tekan "＋ Tambah pin".'));
+    };
+    const mark2 = () => { save.classList.add('is-dirty'); window.__shPinsDirty = true; };
+    const add = h('button', { type: 'button', class: 'translate', onclick: () => { const n = pins.length + 1; pins.push({ id: 'pin-' + ST.loc + '-' + n, type: 'info', scene: scenes[0]?.id, u: 360, v: 225, title: '', icon: 'info' }); mark2(); draw(); list.lastElementChild?.setAttribute('open', ''); } }, '＋ Tambah pin');
+    wrap.replaceChildren(j.orphans.length ? h('div', { class: 'sh-warn' }, 'Pin yatim (scene tidak ada lagi di tur, mungkin akibat export ulang): ' + j.orphans.join(', ') + '. Pindahkan ke scene yang benar atau hapus.') : null, h('div', { class: 'sc-toolbar' }, add, save), list);
+    draw();
+    return wrap;
+  }
+
+  function creatorTool(d, mark, rerender) {
+    const { h, post, toast } = A();
+    const url = h('input', { type: 'text', placeholder: 'Tempel tautan video YouTube / TikTok…', style: 'flex:1' });
+    const btn = h('button', { type: 'button', class: 'save', onclick: async () => {
+      btn.disabled = true;
+      try { const r = await post('creator_fetch', { location: ST.loc, url: url.value }); const c = (d.content.CREATORS ||= { title: 'Kata Kreator', items: [] }); c.items ||= [];
+        if (c.items.some((x) => x.id === r.item.id)) throw new Error('Video ini sudah ada di daftar.');
+        c.items.unshift(r.item); mark(); toast('Ditambahkan: ' + (r.item.title || r.item.id)); url.value = ''; rerender(); }
+      catch (e) { toast(e.message, true); } finally { btn.disabled = false; }
+    } }, '＋ Ambil dari tautan');
+    return h('div', { class: 'card sh-card' }, h('div', { class: 'sc-toolbar', style: 'display:flex;gap:8px' }, url, btn));
   }
 
   /* ---------------- tampilan: Data Wilayah ---------------- */

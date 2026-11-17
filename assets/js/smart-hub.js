@@ -87,6 +87,7 @@
         h('td', null, h('b', null, l.name), h('small', null, l.id + ' · ' + l.path)),
         h('td', null, l.pack.exists ? h('span', { class: 'sh-badge is-ok' }, l.pack.scenes + ' scene') : h('span', { class: 'sh-badge' }, 'belum dibangun')),
         h('td', null, l.pack.content ? h('span', { class: 'sh-metrics' }, ...[['layanan', c.layanan], ['fakta', c.fakta], ['acara', c.acara], ['rute', c.rute], ['stempel', c.stempel]].map(([label, value]) => h('span', null, h('b', null, value), label))) : h('span', { class: 'sh-mini is-muted' }, 'Belum ada konten')),
+        h('td', null, l.pack.exists ? h('span', { class: 'sh-badge ' + (l.ready.score >= 80 ? 'is-ok' : 'is-muted'), title: l.ready.todo.length ? 'Masih perlu:\n- ' + l.ready.todo.join('\n- ') : 'Lengkap' }, l.ready.score + '%') : h('span', { class: 'sh-mini is-muted' }, '—')),
         h('td', null, h('span', { class: 'sh-statusline' }, h('small', null, 'Runtime'), l.runtimeReady ? h('span', { class: 'sh-badge is-ok' }, 'Terpasang') : h('span', { class: 'sh-badge is-muted' }, 'Belum dipasang')), h('span', { class: 'sh-statusline' }, h('small', null, 'HUD'), l.applied ? h('span', { class: 'sh-badge is-ok', title: l.appliedSrc }, 'Smart Kit') : h('span', { class: 'sh-badge is-muted' }, 'Skin bawaan'))),
         h('td', { class: 'sh-actions sh-rowactions' }, h('button', { type: 'button', class: 'translate', disabled: !l.applied || null, title: l.applied ? 'Tampilkan di panel pratinjau' : 'Terapkan Smart Kit terlebih dahulu untuk mengaktifkan pratinjau', onclick: () => setPreview(l.id) }, ico('panel-right-open'), 'Pratinjau'), l.url ? h('a', { class: 'translate sh-iconbtn', href: l.url, target: '_blank', rel: 'noopener', title: 'Buka tur di tab baru', 'aria-label': 'Buka ' + l.name + ' di tab baru' }, ico('external-link')) : null));
     });
@@ -100,14 +101,37 @@
     main.append(h('div', { class: 'card sh-card' },
       h('div', { class: 'sh-card__h' }, h('div', null, h('h3', null, 'Lokasi di project ini'), h('p', null, `${S.locations.length} tur terdeteksi di ${S.project.path}. Paket konten dibuat dari pano.xml (tur tidak diubah); "Terapkan" memasang HUD Smart Kit ke index.html.`)),
         h('label', { class: 'sh-selall' }, h('input', { type: 'checkbox', onchange: (e) => { main.querySelectorAll('tbody input[type=checkbox]').forEach((x) => { x.checked = e.target.checked; x.dispatchEvent(new Event('change')); }); } }), 'Pilih semua')),
-      S.locations.length ? h('div', { class: 'sh-tablewrap' }, h('table', { class: 'sh-table' }, h('thead', null, h('tr', null, h('th', null, ''), h('th', null, 'Lokasi'), h('th', null, 'Paket'), h('th', null, 'Konten'), h('th', null, 'Tampilan'), h('th', null, ''))), h('tbody', null, rows)))
+      S.locations.length ? h('div', { class: 'sh-tablewrap' }, h('table', { class: 'sh-table' }, h('thead', null, h('tr', null, h('th', null, ''), h('th', null, 'Lokasi'), h('th', null, 'Paket'), h('th', null, 'Konten'), h('th', null, 'Kesiapan'), h('th', null, 'Tampilan'), h('th', null, ''))), h('tbody', null, rows)))
         : h('div', { class: 'sh-empty' }, 'Belum ada folder tur (berisi pano.xml) di project ini.'),
       h('div', { class: 'sh-bar' },
+        h('button', { type: 'button', class: 'save', onclick: () => run('activate', 'Aktifkan Smart Kit (bangun paket + terapkan)') }, ico('zap'), 'Aktifkan Smart Kit (satu klik)'),
         h('button', { type: 'button', class: 'translate', onclick: () => run('build', 'Bangun paket') }, ico('package-cog'), 'Bangun / perbarui paket'),
         h('button', { type: 'button', class: 'save', onclick: () => run('apply', 'Terapkan Smart Kit') }, ico('check'), 'Terapkan Smart Kit'),
         h('button', { type: 'button', class: 'translate', onclick: () => run('unapply', 'Lepas Smart Kit') }, ico('undo-2'), 'Lepas Smart Kit')),
       h('div', { class: 'sh-note' }, h('b', null, 'Alur per lokasi: '), '① Bangun paket (scenes, thumbnail, content.json, serta memasang custom.css + main-loader.js dengan preload teaser; skin.js tidak ditimpa) → ② isi konten di tab 2–3 → ③ atur aksi, menu & data di tab 4–6 → ④ Terapkan Smart Kit. Sebelum index.html diubah, backup otomatis dibuat di ', h('code', null, '.skin-backups'), '. Konten lokasi tetap di ', h('code', null, `smart-kit/packs/${S.settings.wilayah}/<lokasi>/content.json`), '.')));
     const res = h('div', { id: 'shResults' }); main.append(res);
+    syncCard().then((c) => { if (tab === 'lokasi') main.append(c); });
+  }
+
+  /* ---------- sinkron dari pilot ---------- */
+  async function syncCard() {
+    const box = h('div', { class: 'card sh-card' }, h('div', { class: 'sh-empty' }, 'Memuat…'));
+    let sy; try { sy = (await post('sync_get')).sync; } catch (e) { box.replaceChildren(h('p', null, e.message)); return box; }
+    const keys = new Set(sy.keys); let pilot = sy.pilot || (S.locations.find((l) => l.applied) || S.locations[0] || {}).id || ''; let mode = 'fill';
+    const run = async (refreshOnly) => {
+      if (!pilot) return toast('Pilih lokasi pilot.', true);
+      if (!refreshOnly && !keys.size) return toast('Centang minimal satu pengaturan untuk disalin, atau pakai "Muat ulang tampilan".', true);
+      if (!confirm(refreshOnly ? 'Muat ulang tampilan di semua lokasi yang sudah diaktifkan? (cache browser diperbarui)' : `Salin ${keys.size} pengaturan dari "${pilot}" ke semua lokasi lain (${mode === 'overwrite' ? 'MENIMPA yang sudah ada' : 'hanya mengisi yang kosong'})? Cadangan disimpan otomatis.`)) return;
+      try { const j = await post('sync_run', { pilot, keys: refreshOnly ? [] : [...keys], mode, refresh: true }); S = j.state; window.SmartHubContent?.reset(); render(); showResults(j); } catch (e) { toast(e.message, true); }
+    };
+    box.replaceChildren(
+      h('div', { class: 'sh-card__h' }, h('div', null, h('h3', null, 'Sinkron dari lokasi pilot'), h('p', null, 'Perubahan DESAIN front-end (paket badung-ui) dan pengaturan wilayah (_hub.json, _region.json) otomatis berlaku di semua lokasi begitu halaman dimuat ulang. Kartu ini untuk menyalin PENGATURAN struktur dari satu lokasi pilot ke lokasi lain (isi khas lokasi seperti fakta, layanan, pin tidak pernah disalin).'))),
+      h('div', { class: 'sc-grid' }, field('Lokasi pilot', select(S.locations.map((l) => [l.id, l.name]), pilot, (v) => { pilot = v; })), field('Cara menyalin', select([['fill', 'Isi yang kosong saja (aman)'], ['overwrite', 'Timpa yang sudah ada']], mode, (v) => { mode = v; }))),
+      h('div', { class: 'sh-note' }, h('b', null, 'Yang disalin:')),
+      h('div', { class: 'sc-grid' }, Object.entries(sy.available).map(([k, label]) => h('label', { class: 'sh-selall' }, h('input', { type: 'checkbox', checked: keys.has(k), onchange: (e) => { e.target.checked ? keys.add(k) : keys.delete(k); } }), label))),
+      h('div', { class: 'sh-bar' }, h('button', { type: 'button', class: 'save', disabled: !S.isAdmin || null, onclick: () => run(false) }, '⇄ Sinkronkan ke semua lokasi'), h('button', { type: 'button', class: 'translate', disabled: !S.isAdmin || null, onclick: () => run(true) }, '↻ Muat ulang tampilan semua lokasi')),
+      sy.last ? h('div', { class: 'sh-note' }, 'Sinkron terakhir: ' + sy.last.at) : null);
+    return box;
   }
   function showResults(j) {
     const box = document.getElementById('shResults'); if (!box) return toast(j.message);

@@ -114,10 +114,113 @@ function shStatus(array $st, array $tours): array
             'id' => $id, 'path' => $t['path'], 'name' => (string) ($content['REGION']['name'] ?? shHumanize($id)), 'url' => shWebUrl($t['dir']),
             'pack' => ['exists' => $scenes > 0, 'scenes' => (int) $scenes, 'content' => is_array($content), 'hubLocal' => is_file($packDir . '/hub.json'),
                 'type' => (string) ($content['REGION']['type'] ?? ''), 'counts' => ['layanan' => $count('SERVICES'), 'fakta' => $count('FACTS'), 'acara' => $count('EVENTS'), 'rute' => $count('ROUTES'), 'stempel' => $count('STAMPS')]],
-            'applied' => $applied !== '', 'appliedSrc' => $applied, 'runtimeReady' => $runtimeReady,
+            'applied' => $applied !== '', 'appliedSrc' => $applied,
+            'ready' => shReadiness(is_array($content) ? $content : null, (int) $scenes, is_file($packDir . '/pins.json') ? count((array) json_decode((string) file_get_contents($packDir . '/pins.json'), true)) : 0), 'runtimeReady' => $runtimeReady,
         ];
     }
     return $rows;
+}
+
+/** Kesiapan lokasi (0-100) + daftar periksa: mana yang sudah, mana yang masih perlu diisi tim konten. */
+function shReadiness(?array $c, int $scenes, int $pins): array
+{
+    $c = $c ?: []; $type = (string) ($c['REGION']['type'] ?? '');
+    $n = static fn(string $k): int => is_array($c[$k] ?? null) ? count($c[$k]) : 0;
+    $facts = array_filter((array) ($c['FACTS'] ?? []), static fn($f) => !empty($f['src']));
+    $needSafety = in_array($type, ['pantai', 'alam'], true);
+    $chk = [
+        ['w' => 15, 'ok' => !empty($c['REGION']['about']['text']) && !empty($c['REGION']['center']['lat']) && $type !== '' && $type !== 'umum', 'hint' => 'Isi deskripsi, jenis, dan koordinat lokasi'],
+        ['w' => 10, 'ok' => $n('SCENE_NAMES') > 0 && empty($c['_review']), 'hint' => 'Tinjau nama scene otomatis (tab Nama scene)'],
+        ['w' => 15, 'ok' => $pins >= 3, 'hint' => 'Tempatkan minimal 3 pin (tab Pin)'],
+        ['w' => 20, 'ok' => count($facts) >= 5, 'hint' => 'Tambah minimal 5 fakta bersumber'],
+        ['w' => 15, 'ok' => $n('SERVICES') >= 10, 'hint' => 'Tambah minimal 10 layanan sekitar'],
+        ['w' => 10, 'ok' => !$needSafety || $n('SAFETY') >= 1, 'hint' => 'Jenis ' . $type . ' wajib punya catatan keselamatan'],
+        ['w' => 5, 'ok' => $n('STAMPS') >= 1, 'hint' => 'Minimal 1 stempel'],
+        ['w' => 5, 'ok' => $n('OBJECTS') >= 1, 'hint' => 'Isi Objek Informasi'],
+        ['w' => 5, 'ok' => is_array($c['CREATORS']['items'] ?? null) && count($c['CREATORS']['items']) >= 1, 'hint' => 'Kurasi video Kata Kreator'],
+    ];
+    $score = 0; foreach ($chk as $x) if ($x['ok']) $score += $x['w'];
+    return ['score' => $score, 'todo' => array_values(array_map(static fn($x) => $x['hint'], array_filter($chk, static fn($x) => !$x['ok']))), 'scenes' => $scenes];
+}
+
+function shPinsFile(array $st, string $slug): string { return $st['path'] . '/packs/' . $st['wilayah'] . '/' . $slug . '/pins.json'; }
+
+/** Kurasi Kata Kreator dari URL YouTube/TikTok lewat oEmbed publik (tanpa kunci API); thumbnail disimpan ke packs/.../img/creator/. */
+function shCreatorFetch(array $st, string $slug, string $url): array
+{
+    $url = trim($url);
+    if (preg_match('~^https?://(?:www\.|m\.)?(?:youtube\.com/(?:watch\?(?:[^#]*&)?v=|shorts/)|youtu\.be/)([A-Za-z0-9_-]{11})~i', $url, $m)) { $pf = 'youtube'; $ref = $m[1]; $oe = 'https://www.youtube.com/oembed?format=json&url=' . rawurlencode('https://www.youtube.com/watch?v=' . $ref); $id = 'yt-' . $ref; }
+    elseif (preg_match('~^https?://(?:www\.|vm\.)?tiktok\.com/@([A-Za-z0-9._]+)/video/(\d{8,25})~i', $url, $m)) { $pf = 'tiktok'; $ref = $m[2]; $oe = 'https://www.tiktok.com/oembed?url=' . rawurlencode('https://www.tiktok.com/@' . $m[1] . '/video/' . $ref); $id = 'tt-' . $ref; }
+    else throw new RuntimeException('Tautan harus video YouTube (watch/shorts/youtu.be) atau video TikTok (tiktok.com/@akun/video/ID). Instagram tidak punya oEmbed tanpa kunci; tambahkan manual.');
+    $get = static function (string $u, int $max = 4000000): string {
+        $c = curl_init($u); curl_setopt_array($c, [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 3, CURLOPT_TIMEOUT => 15, CURLOPT_PROTOCOLS => CURLPROTO_HTTPS, CURLOPT_REDIR_PROTOCOLS => CURLPROTO_HTTPS, CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124 Safari/537.36']);
+        $b = curl_exec($c); $code = (int) curl_getinfo($c, CURLINFO_HTTP_CODE); curl_close($c);
+        if ($b === false || $code >= 400 || strlen($b) > $max) throw new RuntimeException('Gagal mengambil data video (HTTP ' . $code . '). Video mungkin privat atau dihapus.');
+        return $b;
+    };
+    $j = json_decode($get($oe, 200000), true); if (!is_array($j)) throw new RuntimeException('Respons oEmbed tidak valid.');
+    $item = ['id' => $id, 'platform' => $pf, 'kind' => 'video', 'ref' => $ref, 'url' => $url, 'title' => shStr($j['title'] ?? '', 160), 'creator' => $pf === 'tiktok' ? '@' . ltrim((string) ($j['author_unique_id'] ?? $m[1]), '@') : shStr($j['author_name'] ?? '', 80), 'tags' => []];
+    $th = (string) ($j['thumbnail_url'] ?? '');
+    if (preg_match('~^https://[a-z0-9.-]+/~i', $th) && !preg_match('~^https://[\d.]+/~', $th) && function_exists('imagecreatefromstring')) {
+        $img = @imagecreatefromstring($get($th));
+        if ($img) {
+            $w = imagesx($img); $h = imagesy($img); $tw = min(480, $w); $ths = (int) round($h * $tw / $w);
+            $dst = imagecreatetruecolor($tw, $ths); imagecopyresampled($dst, $img, 0, 0, 0, 0, $tw, $ths, $w, $h);
+            $dir = $st['path'] . '/packs/' . $st['wilayah'] . '/' . $slug . '/img/creator'; if (!is_dir($dir)) @mkdir($dir, 0775, true);
+            if (@imagewebp($dst, $dir . '/' . $id . '.webp', 80)) $item['thumb'] = 'img/creator/' . $id . '.webp';
+        }
+    }
+    return $item;
+}
+
+/* ------------------------------ sinkron dari lokasi pilot ------------------------------ */
+/** Kunci konten yang boleh disalin dari pilot ke lokasi lain (struktur/pengaturan, BUKAN isi khas lokasi seperti fakta atau layanan). */
+const SH_SYNC_KEYS = [
+    'REGION.features' => 'Fitur aktif/nonaktif', 'REGION.info' => 'Pengaturan tab Informasi', 'REGION.map' => 'Pengaturan peta & layer', 'REGION.live' => 'Pengaturan cuaca/live',
+    'REGION.passport' => 'Pengaturan Paspor', 'REGION.skin' => 'Gaya menu', 'REGION.companion' => 'Maskot', 'MENU' => 'Menu & transportasi', 'FACT_CATS' => 'Kategori fakta', 'CATS' => 'Kategori layanan',
+    'ETIQUETTE' => 'Etika kunjungan (umum)', 'QUIZ' => 'Kuis', 'SAFETY' => 'Keselamatan (umum)', 'WIZARD' => 'Trip Wizard',
+];
+
+function shSyncFile(array $st): string { return $st['path'] . '/packs/' . $st['wilayah'] . '/_sync.json'; }
+
+function shSyncGet(array $st): array
+{
+    $f = shSyncFile($st); $d = is_file($f) ? json_decode((string) file_get_contents($f), true) : null; $d = is_array($d) ? $d : [];
+    return ['pilot' => (string) ($d['pilot'] ?? ''), 'keys' => array_values(array_intersect(array_keys(SH_SYNC_KEYS), (array) ($d['keys'] ?? []))), 'available' => SH_SYNC_KEYS, 'last' => $d['last'] ?? null];
+}
+
+function shDigGet(array $a, string $path): mixed { $c = $a; foreach (explode('.', $path) as $k) { if (!is_array($c) || !array_key_exists($k, $c)) return null; $c = $c[$k]; } return $c; }
+function shDigSet(array &$a, string $path, mixed $v): void { $c = &$a; foreach (explode('.', $path) as $k) { if (!isset($c[$k]) || !is_array($c[$k])) $c[$k] = $c[$k] ?? []; $c = &$c[$k]; } $c = $v; }
+
+function shSyncRun(array $st, array $tours, string $pilot, array $keys, string $mode, array $targets, bool $refresh): array
+{
+    $keys = array_values(array_intersect(array_keys(SH_SYNC_KEYS), $keys));
+    $base = $st['path'] . '/packs/' . $st['wilayah'] . '/';
+    $src = is_file($base . $pilot . '/content.json') ? json_decode((string) file_get_contents($base . $pilot . '/content.json'), true) : null;
+    if (!is_array($src)) throw new RuntimeException('Konten lokasi pilot tidak terbaca: ' . $pilot);
+    $out = [];
+    foreach ($targets as $id) {
+        if ($id === $pilot) continue;
+        try {
+            $changed = [];
+            $f = $base . $id . '/content.json';
+            if ($keys && is_file($f)) {
+                $cur = json_decode((string) file_get_contents($f), true); if (!is_array($cur)) throw new RuntimeException('content.json tidak terbaca');
+                foreach ($keys as $k) {
+                    $v = shDigGet($src, $k); if ($v === null) continue;
+                    $has = shDigGet($cur, $k) !== null;
+                    if ($has && $mode !== 'overwrite') continue;
+                    if ($has && shDigGet($cur, $k) === $v) continue;
+                    shDigSet($cur, $k, $v); $changed[] = $k;
+                }
+                if ($changed) shWriteJson($f, $cur);
+            }
+            $msg = $changed ? 'diubah: ' . implode(', ', $changed) : ($keys ? 'sudah sama' : 'tanpa penyalinan');
+            if ($refresh && isset($tours[$id])) { $html = (string) @file_get_contents($tours[$id]['dir'] . '/index.html'); if (preg_match('~smart-kit/boot\.js~i', $html)) $msg .= '; ' . shApply($st, $tours[$id], true); }
+            $out[] = ['id' => $id, 'ok' => true, 'message' => $msg];
+        } catch (Throwable $e) { $out[] = ['id' => $id, 'ok' => false, 'message' => $e->getMessage()]; }
+    }
+    return $out;
 }
 
 function shHumanize(string $id): string { return mb_convert_case(trim((string) preg_replace('/[_-]+/', ' ', $id)), MB_CASE_TITLE, 'UTF-8'); }
@@ -300,6 +403,8 @@ function shBuildPack(array $st, array $tour): string
     // -E tetap mengabaikan variabel lingkungan Python tanpa menyembunyikan
     // dependensi yang dipasang untuk pengguna Windows yang menjalankan PHP.
     $cmd = [$st['python'], '-E', $script, '--tour', $tour['dir'], '--pack', $st['wilayah'] . '/' . $tour['id'], '--init'];
+    $pj = $st['path'] . '/packs/' . $st['wilayah'] . '/' . $tour['id'] . '/pins.json';
+    if (is_file($pj)) { $cmd[] = '--pins'; $cmd[] = $pj; }   // pin hasil editor CMS dibangun ulang bersama scene
     $proc = proc_open($cmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, ['PYTHONIOENCODING' => 'utf-8'] + getenv());
     if (!is_resource($proc)) throw new RuntimeException('Python tidak dapat dijalankan (' . $st['python'] . '). Atur jalur Python di Pengaturan.');
     $out = stream_get_contents($pipes[1]); $err = stream_get_contents($pipes[2]);
@@ -427,7 +532,7 @@ function shState(array $project): array
 }
 
 /* ------------------------------ konten lokasi & data wilayah (GUI "Isi Konten") ------------------------------ */
-const SH_CONTENT_KEYS = ['REGION', 'ZONES', 'CATS', 'SERVICES', 'GUIDE', 'FACT_CATS', 'FACTS', 'ETIQUETTE', 'QUIZ', 'SAFETY', 'ROUTES', 'STAMPS', 'REWARDS', 'COLLECTIONS', 'THEMED', 'EVENTS', 'DULU', 'SEATS', 'WIZARD', 'DESTINATIONS', 'MENU', 'REELS', 'LANDMARK', 'ZONEOF'];
+const SH_CONTENT_KEYS = ['OBJECTS', 'SCENE_NAMES', 'CREATORS', 'REGION', 'ZONES', 'CATS', 'SERVICES', 'GUIDE', 'FACT_CATS', 'FACTS', 'ETIQUETTE', 'QUIZ', 'SAFETY', 'ROUTES', 'STAMPS', 'REWARDS', 'COLLECTIONS', 'THEMED', 'EVENTS', 'DULU', 'SEATS', 'WIZARD', 'DESTINATIONS', 'MENU', 'REELS', 'LANDMARK', 'ZONEOF'];
 const SH_REGION_KEEP = ['brandLogo', 'menuArt', 'skin', 'brand', 'destImg', 'walk', 'aiGuide'];   // dikelola alat lain; tidak diterima dari GUI
 
 /** Normalisasi preferensi Tourism Guide per lokasi. Array kosong = konfigurasi default (semua aktif). */
@@ -587,7 +692,7 @@ if (!defined('SMART_HUB_INCLUDE_ONLY')) {
         $project = activeProject();
         $op = (string) ($payload['op'] ?? 'state');
         if ($op === 'state') cmsJsonResponse(['success' => true, 'state' => shState($project)]);
-        if (in_array($op, ['save_settings', 'apply', 'unapply', 'upload_logo'], true)) cmsRequireAdmin('Pengaturan Smart Kit, logo, Terapkan, dan Lepas');
+        if (in_array($op, ['save_settings', 'apply', 'unapply', 'upload_logo', 'activate'], true)) cmsRequireAdmin('Pengaturan Smart Kit, logo, Terapkan, dan Lepas');
         if ($op === 'save_settings') { shSaveSettings((string) $project['id'], (array) ($payload['settings'] ?? [])); cmsJsonResponse(['success' => true, 'message' => 'Pengaturan Smart Kit project disimpan.', 'state' => shState(activeProject())]); }
         $st = shSettings($project);
         if (!is_file($st['path'] . '/hub-catalog.json')) throw new RuntimeException('Smart Kit belum terhubung: atur folder Smart Kit di Pengaturan.');
@@ -627,6 +732,7 @@ if (!defined('SMART_HUB_INCLUDE_ONLY')) {
                 $cur = is_file($file) ? (json_decode((string) file_get_contents($file), true) ?: []) : [];
                 foreach (SH_REGION_KEEP as $k) if (isset($cur['REGION'][$k])) $clean['REGION'][$k] = $cur['REGION'][$k];
                 foreach ($cur as $k => $v) if (!in_array($k, SH_CONTENT_KEYS, true)) $clean[$k] = $v;
+                if (isset($clean['SCENE_NAMES'])) unset($clean['_review']); elseif (isset($cur['_review'])) $clean['_review'] = $cur['_review'];
                 $clean['REGION']['slug'] = $clean['REGION']['slug'] ?? $id;
                 $runtime = (array) ($clean['REGION']['jakartaRuntime'] ?? []);
                 if (($runtime['has_drone'] ?? false) === true && trim((string) ($runtime['drone'] ?? '')) !== '') $clean['REGION']['aerial'] = trim((string) $runtime['drone']);
@@ -658,6 +764,56 @@ if (!defined('SMART_HUB_INCLUDE_ONLY')) {
                 $spec = (array) ($payload['feed'] ?? []);
                 $clean = shValidateHub(['feeds' => ['pratinjau' => $spec]], shCatalog($st), shIcons($st));
                 cmsJsonResponse(['success' => true] + shPreviewFeed($st, $slug, (array) ((array) $clean['feeds'])['pratinjau']));
+            case 'sync_get':
+                cmsJsonResponse(['success' => true, 'sync' => shSyncGet($st)]);
+            case 'sync_run':
+                cmsRequireAdmin('Sinkronisasi dari lokasi pilot');
+                $pilot = cmsCleanKey((string) ($payload['pilot'] ?? '')); if (!isset($tours[$pilot])) throw new RuntimeException('Pilih lokasi pilot yang valid.');
+                $keys = array_map('strval', (array) ($payload['keys'] ?? [])); $mode = ($payload['mode'] ?? 'fill') === 'overwrite' ? 'overwrite' : 'fill';
+                $targets = !empty($payload['locations']) ? array_keys($pick((array) $payload['locations'])) : array_keys($tours);
+                $results = shSyncRun($st, $tours, $pilot, $keys, $mode, $targets, !empty($payload['refresh']));
+                shWriteJson(shSyncFile($st), ['pilot' => $pilot, 'keys' => array_values(array_intersect(array_keys(SH_SYNC_KEYS), $keys)), 'last' => ['at' => date(DATE_ATOM), 'mode' => $mode, 'refresh' => !empty($payload['refresh'])]]);
+                cmsAudit('smartkit.sinkron', ['pilot' => $pilot, 'kunci' => $keys, 'mode' => $mode]);
+                $okN = count(array_filter($results, static fn($r) => $r['ok']));
+                cmsJsonResponse(['success' => $okN > 0 || !$results, 'message' => 'Sinkron dari ' . $pilot . ': ' . $okN . ' dari ' . count($results) . ' lokasi.', 'results' => $results, 'state' => shState($project), 'sync' => shSyncGet($st)]);
+            case 'creator_fetch':
+                $id = cmsCleanKey((string) ($payload['location'] ?? '')); if (!isset($tours[$id])) throw new RuntimeException('Lokasi tidak ditemukan.');
+                cmsJsonResponse(['success' => true, 'item' => shCreatorFetch($st, $id, (string) ($payload['url'] ?? ''))]);
+            case 'pins_get':
+                $id = cmsCleanKey((string) ($payload['location'] ?? '')); if (!isset($tours[$id])) throw new RuntimeException('Lokasi tidak ditemukan.');
+                $f = shPinsFile($st, $id); $pins = is_file($f) ? (json_decode((string) file_get_contents($f), true) ?: []) : [];
+                $sc = shContentGet($st, $tours[$id])['scenes']; $ids = array_column($sc, 'id');
+                $orphans = array_values(array_map(static fn($p) => (string) ($p['id'] ?? '?'), array_filter($pins, static fn($p) => !in_array($p['scene'] ?? '', $ids, true))));
+                cmsJsonResponse(['success' => true, 'pins' => $pins, 'scenes' => $sc, 'orphans' => $orphans]);
+            case 'pins_save':
+                $id = cmsCleanKey((string) ($payload['location'] ?? '')); if (!isset($tours[$id])) throw new RuntimeException('Lokasi tidak ditemukan.');
+                $ids = array_column(shScenes($st, $id), 'id'); $out = []; $seen = [];
+                foreach ((array) ($payload['pins'] ?? []) as $p) {
+                    $p = (array) shClean($p); $pid = (string) ($p['id'] ?? '');
+                    if (!preg_match('~^[A-Za-z0-9_-]{1,60}$~', $pid) || isset($seen[$pid])) throw new RuntimeException('ID pin tidak valid atau ganda: ' . $pid);
+                    if (!in_array($p['scene'] ?? '', $ids, true)) throw new RuntimeException('Pin ' . $pid . ': scene tidak ada di tur.');
+                    if (!in_array($p['type'] ?? '', ['info', 'fact', 'safety', 'service', 'photo'], true)) throw new RuntimeException('Pin ' . $pid . ': jenis tidak dikenal.');
+                    $p['u'] = max(0, min(720, (float) ($p['u'] ?? 360))); $p['v'] = max(0, min(450, (float) ($p['v'] ?? 225)));
+                    if (($p['title'] ?? '') === '') throw new RuntimeException('Pin ' . $pid . ': judul wajib diisi.');
+                    $seen[$pid] = 1; $out[] = $p;
+                }
+                shWriteJson(shPinsFile($st, $id), $out);
+                $msg = shBuildPack($st, $tours[$id]);
+                cmsAudit('pin.simpan', ['pack' => $st['wilayah'] . '/' . $id, 'jumlah' => count($out)]);
+                cmsJsonResponse(['success' => true, 'message' => count($out) . ' pin disimpan dan dibangun ke pins.js.', 'log' => $msg, 'pins' => $out]);
+            case 'activate':
+                $results = [];
+                foreach ($pick((array) ($payload['locations'] ?? [])) as $id => $t) {
+                    try {
+                        shBuildPack($st, $t); $a = shApply($st, $t, true);
+                        $packDir = $st['path'] . '/packs/' . $st['wilayah'] . '/' . $id; $c = is_file($packDir . '/content.json') ? json_decode((string) file_get_contents($packDir . '/content.json'), true) : null;
+                        $pj = shPinsFile($st, $id); $r = shReadiness(is_array($c) ? $c : null, 0, is_file($pj) ? count((array) json_decode((string) file_get_contents($pj), true)) : 0);
+                        $results[] = ['id' => $id, 'ok' => true, 'message' => $a . '. Kesiapan konten ' . $r['score'] . '%' . ($r['todo'] ? "\nMasih perlu:\n- " . implode("\n- ", $r['todo']) : '')];
+                    } catch (Throwable $e) { $results[] = ['id' => $id, 'ok' => false, 'message' => $e->getMessage()]; }
+                }
+                cmsAudit('smartkit.aktifkan', ['lokasi' => array_column($results, 'id')]);
+                $okN = count(array_filter($results, static fn($r) => $r['ok']));
+                cmsJsonResponse(['success' => $okN > 0, 'message' => $okN . ' dari ' . count($results) . ' lokasi diaktifkan.', 'results' => $results, 'state' => shState($project)]);
             case 'build':
             case 'apply':
             case 'unapply':
