@@ -364,27 +364,63 @@
             <div class="actions"><button class="save" name="action" value="save_custom_css">Simpan Custom CSS</button></div>
         </form>
     <?php elseif ($activeTab === 'skin'): ?>
+        <?php
+        $activeSkinTemplate = $skinTemplates[$activeSkinTemplateId] ?? null;
+        $skinPreviewUrl = $activeSkinTemplate['preview'] ?? '';
+        if ($skinPreviewUrl === '' && $activeSkinTemplate) foreach ($skinStatuses as $previewId => $previewStatus) if ($previewStatus['skinMatches']) { $skinPreviewUrl = projectUrl($detectedTours[$previewId]['path'] . '/'); break; }
+        ?>
         <form method="post" class="editor skin-sync-editor">
             <input type="hidden" name="csrf" value="<?= e($_SESSION['cms_csrf']) ?>">
             <section class="card section">
-                <div class="section-heading"><div><span class="step">SK</span><div><h2>Template Skin Semua Lokasi</h2><p>Gunakan skin.js Monumen Nasional sebagai acuan untuk seluruh folder output.</p></div></div><span class="skin-template-badge">Sumber: monumen-nasional/skin.js</span></div>
+                <div class="section-heading"><div><span class="step">SK</span><div><h2>Template Skin</h2><p>Pilih template dari folder <code>skin-templates/</code> di CMS, lalu terapkan ke lokasi project ini.</p></div></div><span class="skin-template-badge"><?= $activeSkinTemplate ? 'Aktif: ' . e($activeSkinTemplate['name']) : 'Belum ada template dipilih' ?></span></div>
+                <?php if ($skinTemplates === []): ?>
+                    <div class="skin-notice"><strong>Belum ada template</strong><span>Buat folder di <code>cms-editor-pano2vr/skin-templates/&lt;nama&gt;/</code> berisi <code>skin.js</code> (dan <code>pano2vr_player.js</code>). Panduan: <code>skin-templates/README.md</code>.</span></div>
+                <?php else: ?>
+                    <div class="skin-sync-list">
+                        <?php foreach ($skinTemplates as $template): ?>
+                            <label class="skin-sync-item <?= $template['id'] === $activeSkinTemplateId ? 'synced' : '' ?>">
+                                <input type="radio" name="skin_template" value="<?= e($template['id']) ?>" <?= $template['id'] === $activeSkinTemplateId ? 'checked' : '' ?>>
+                                <span><strong><?= e($template['name']) ?></strong><small><?= e($template['description'] !== '' ? $template['description'] : 'skin-templates/' . $template['id']) ?></small><small><?= e(($template['ggsk'] !== '' ? $template['ggsk'] . ' · ' : '') . ($template['generated'] !== '' ? substr($template['generated'], 0, 10) . ' · ' : '') . $template['fileCount'] . ' file' . ($template['hasPlayer'] ? '' : ' · tanpa player')) ?></small></span>
+                                <?php if ($template['id'] === $activeSkinTemplateId): ?><em>Aktif</em><?php endif; ?>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
+                    <div class="actions"><button class="translate" name="action" value="select_skin_template">Simpan pilihan template</button></div>
+                <?php endif; ?>
+            </section>
+            <?php if ($activeSkinTemplate): ?>
+            <section class="card section">
+                <div class="section-heading"><div><span class="step">02</span><div><h2>Terapkan ke Lokasi</h2><p>Centang lokasi yang akan memakai template <?= e($activeSkinTemplate['name']) ?>.</p></div></div></div>
+                <?php if ($skinPreviewUrl !== ''): ?>
                 <div class="skin-preview">
                     <div class="skin-preview-heading">
-                        <div><strong>Preview Template Skin Jakarta</strong><small>Overlay modular assets/jkt</small></div>
-                        <div class="skin-preview-actions"><button type="button" id="loadSkinPreview">Lihat preview</button><a href="<?= e(projectUrl($skinTemplateId . '/')) ?>" target="_blank" rel="noopener">Buka penuh ↗</a></div>
+                        <div><strong>Preview Template <?= e($activeSkinTemplate['name']) ?></strong><small><?= e($skinPreviewUrl) ?></small></div>
+                        <div class="skin-preview-actions"><button type="button" id="loadSkinPreview">Lihat preview</button><a href="<?= e($skinPreviewUrl) ?>" target="_blank" rel="noopener">Buka penuh ↗</a></div>
                     </div>
                     <p>Preview dibuka sebagai popup agar posisi halaman CMS tetap terkunci.</p>
                 </div>
-                <div class="skin-preview-modal" id="skinPreviewModal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="skinPreviewTitle">
+                <div class="skin-preview-modal" id="skinPreviewModal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="skinPreviewTitle" data-preview-url="<?= e($skinPreviewUrl) ?>">
                     <div class="skin-preview-backdrop" data-close-skin-preview></div>
                     <div class="skin-preview-dialog">
-                        <div class="skin-preview-modal-heading"><div><strong id="skinPreviewTitle">Preview Template Skin Jakarta</strong><small>assets/jkt</small></div><button type="button" data-close-skin-preview aria-label="Tutup preview">×</button></div>
-                        <iframe id="skinPreviewFrame" title="Preview Template Skin Jakarta" allow="fullscreen; autoplay" allowfullscreen></iframe>
+                        <div class="skin-preview-modal-heading"><div><strong id="skinPreviewTitle">Preview Template <?= e($activeSkinTemplate['name']) ?></strong><small>skin-templates/<?= e($activeSkinTemplate['id']) ?></small></div><button type="button" data-close-skin-preview aria-label="Tutup preview">×</button></div>
+                        <iframe id="skinPreviewFrame" title="Preview Template <?= e($activeSkinTemplate['name']) ?>" allow="fullscreen; autoplay" allowfullscreen></iframe>
                     </div>
                 </div>
-                <div class="skin-notice"><strong>Satu klik untuk semua</strong><span>CMS mengganti <code>skin.js</code>, player, gambar skin, dan library pada seluruh lokasi selain Monumen Nasional. Setiap file lama dicadangkan lebih dulu ke <code>.skin-backups</code>. Panorama, pano.xml, tiles, video, dan data lokasi tetap dipertahankan.</span></div>
+                <?php endif; ?>
+                <div class="skin-sync-toolbar"><label><input type="checkbox" id="selectAllSkins"> Pilih semua lokasi</label><span><?= count(array_filter($skinStatuses, static fn(array $s): bool => $s['skinMatches'])) ?> / <?= count($skinStatuses) ?> lokasi sudah memakai template ini</span></div>
+                <div class="skin-sync-list">
+                    <?php foreach ($skinStatuses as $tourId => $status): ?>
+                        <label class="skin-sync-item <?= $status['same'] ? 'synced' : 'outdated' ?>">
+                            <input type="checkbox" name="skin_targets[]" value="<?= e($tourId) ?>" <?= $status['skinMatches'] ? '' : 'checked' ?>>
+                            <span><strong><?= e(humanizeLocationId($tourId)) ?></strong><small><?= e($status['skinMatches'] ? 'Sudah memakai ' . $activeSkinTemplate['name'] : ($status['currentTemplate'] !== '' ? 'Memakai template ' . $status['currentTemplate'] : 'Skin lain / versi lama')) ?><?= !$status['bootstrapReady'] || !$status['mapReady'] ? ' · bootstrap/peta belum lengkap' : '' ?></small></span>
+                            <em><?= $status['same'] ? 'Sesuai' : 'Perlu' ?></em>
+                        </label>
+                    <?php endforeach; ?>
+                </div>
+                <div class="skin-notice"><strong>Yang diganti</strong><span>Isi folder template (<code>skin.js</code>, <code>pano2vr_player.js</code>, <code>images/</code>, <code>3rdparty/</code>) disalin ke lokasi tercentang. File lama dicadangkan ke <code>.skin-backups</code> dan dikembalikan otomatis bila penyalinan gagal. Panorama, tiles, video, dan data lokasi tidak disentuh.</span></div>
             </section>
-            <div class="actions"><button class="save" name="action" value="sync_skin" data-cute-confirm data-confirm-icon="✨" data-confirm-title="Terapkan skin Monas ke semua lokasi?" data-confirm-message="Seluruh skin.js target akan diganti. File lama dicadangkan otomatis dan Monumen Nasional tidak diubah." data-confirm-action="Terapkan ke semua">Terapkan Skin ke Semua Lokasi</button></div>
+            <div class="actions"><button class="save" name="action" value="sync_skin" data-cute-confirm data-confirm-icon="✨" data-confirm-title="Terapkan template <?= e($activeSkinTemplate['name']) ?>?" data-confirm-message="skin.js lokasi tercentang akan diganti dengan template <?= e($activeSkinTemplate['name']) ?>. File lama dicadangkan otomatis." data-confirm-action="Terapkan">Terapkan Template ke Lokasi Terpilih</button></div>
+            <?php endif; ?>
         </form>
         <form method="post" id="projectTemplateForm"><input type="hidden" name="csrf" value="<?= e($_SESSION['cms_csrf']) ?>"><input type="hidden" name="project_action" value="set_template"></form>
     <?php elseif ($activeTab === 'object'): ?>
@@ -1948,7 +1984,7 @@ const loadSkinPreview = document.getElementById('loadSkinPreview');
 const skinPreviewModal = document.getElementById('skinPreviewModal');
 if (skinPreviewFrame && loadSkinPreview && skinPreviewModal) {
     loadSkinPreview.addEventListener('click', function () {
-        if (!skinPreviewFrame.getAttribute('src')) skinPreviewFrame.src = <?= json_encode(projectUrl($skinTemplateId . '/'), JSON_UNESCAPED_SLASHES) ?>;
+        if (!skinPreviewFrame.getAttribute('src')) skinPreviewFrame.src = skinPreviewModal.dataset.previewUrl;
         skinPreviewModal.classList.add('open');
         skinPreviewModal.setAttribute('aria-hidden', 'false');
         document.body.classList.add('modal-open');

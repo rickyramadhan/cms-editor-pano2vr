@@ -5,6 +5,7 @@ require_once __DIR__ . '/includes/bootstrap.php';
 
 require_once __DIR__ . '/language-manager.php';
 require_once __DIR__ . '/project-manager.php';
+require_once __DIR__ . '/skin-templates.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && !isset($_GET['project']) && !isset($_GET['tab'])) {
     header('Location: projects.php');
@@ -83,6 +84,8 @@ $oiDatabaseFile = $assetsRoot . '/oi-database.js';
 $customCssFile = $assetsRoot . '/custom.css';
 $skinTemplateId = (string) ($activeProject['template_tour'] ?? '');
 $skinTemplateDirectory = projectTemplateDirectory((string) $activeProject['id']);
+$skinTemplates = skinTemplateList();
+$activeSkinTemplateId = projectSkinTemplateId($activeProject, $skinTemplates);
 $message = '';
 $error = $error ?? '';
 
@@ -555,7 +558,7 @@ try {
 
         $action = (string) ($_POST['action'] ?? 'save_location');
         // tindakan yang memengaruhi seluruh lokasi / keamanan: khusus admin
-        if (in_array($action, ['remove_language', 'add_language', 'update_skin_template', 'sync_skin', 'save_custom_css', 'delete', 'save_config'], true)) cmsRequireAdmin('Tindakan "' . $action . '"');
+        if (in_array($action, ['remove_language', 'add_language', 'update_skin_template', 'select_skin_template', 'sync_skin', 'save_custom_css', 'delete', 'save_config'], true)) cmsRequireAdmin('Tindakan "' . $action . '"');
         $originalId = cleanKey((string) ($_POST['original_id'] ?? ''));
 
         if ($action === 'remove_language') {
@@ -592,55 +595,44 @@ try {
             $_SESSION['cms_flash'] = 'Paket skin modular assets/jkt berhasil divalidasi sebagai template aktif.';
             header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?') . '?tab=skin');
             exit;
+        } elseif ($action === 'select_skin_template') {
+            $templateId = (string) ($_POST['skin_template'] ?? '');
+            updateProjectSkinTemplate((string) $activeProject['id'], $templateId);
+            $_SESSION['cms_flash'] = 'Template skin ' . skinTemplateGet($templateId)['name'] . ' dipilih untuk project ini.';
+            header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?') . '?tab=skin');
+            exit;
         } elseif ($action === 'sync_skin') {
-            // sumber skin = lokasi template project (Konfigurasi project › template_tour), bukan nama lokasi tertentu; bawaan lama: monumen-nasional
-            $sourceId = $skinTemplateId !== '' ? $skinTemplateId : 'monumen-nasional';
-            if (!isset($detectedTours[$sourceId])) throw new RuntimeException('Folder lokasi template "' . $sourceId . '" tidak ditemukan. Atur template project terlebih dahulu.');
-            $sourceDirectory = $projectRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $detectedTours[$sourceId]['path']);
-            $sourceSkin = $sourceDirectory . '/skin.js';
-            if (!is_file($sourceSkin)) throw new RuntimeException('skin.js lokasi template ' . $sourceId . ' tidak ditemukan.');
-            $skinContent = (string) file_get_contents($sourceSkin);
-            $targets = array_keys($detectedTours);
-            $synced = 0;
+            // sumber skin = folder skin-templates/<id> (lihat skin-templates/README.md), bukan lokasi tertentu
+            $templateId = (string) ($_POST['skin_template'] ?? '') ?: $activeSkinTemplateId;
+            if ($templateId === '') throw new RuntimeException('Pilih template skin terlebih dahulu.');
+            $template = skinTemplateGet($templateId);
+            $requestedTargets = array_values(array_filter(array_map('strval', (array) ($_POST['skin_targets'] ?? [])), static fn(string $id): bool => $id !== ''));
+            foreach ($requestedTargets as $requestedId) if (!isset($detectedTours[$requestedId])) throw new RuntimeException('Lokasi "' . $requestedId . '" tidak ditemukan di project ini.');
+            if ($requestedTargets === []) throw new RuntimeException('Centang minimal satu lokasi yang akan memakai template.');
+            $targets = $requestedTargets;
+            $synced = 0; $failed = [];
             foreach ($targets as $targetId) {
-                if ($targetId === $sourceId) continue;
-                if (!isset($detectedTours[$targetId])) continue;
                 $targetDirectory = $projectRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $detectedTours[$targetId]['path']);
-                $targetSkin = $targetDirectory . '/skin.js';
-                if (!is_file($targetSkin)) continue;
-                $backupDirectory = $targetDirectory . '/.skin-backups';
-                if (!is_dir($backupDirectory) && !mkdir($backupDirectory, 0775, true) && !is_dir($backupDirectory)) throw new RuntimeException('Folder backup gagal dibuat untuk ' . $targetId . '.');
-                $stamp = date('Ymd-His');
-                if (!copy($targetSkin, $backupDirectory . '/' . $stamp . '-skin.js')) throw new RuntimeException('Backup skin gagal untuk ' . $targetId . '.');
-                if (file_put_contents($targetSkin, $skinContent, LOCK_EX) === false) throw new RuntimeException('skin.js gagal diterapkan ke ' . $targetId . '.');
-                $sourcePlayer = $sourceDirectory . '/pano2vr_player.js';
-                if (is_file($sourcePlayer)) {
-                    $targetPlayer = $targetDirectory . '/pano2vr_player.js';
-                    if (is_file($targetPlayer) && !copy($targetPlayer, $backupDirectory . '/' . $stamp . '-pano2vr_player.js')) throw new RuntimeException('Backup player gagal untuk ' . $targetId . '.');
-                    if (!copy($sourcePlayer, $targetPlayer)) throw new RuntimeException('Player gagal diterapkan ke ' . $targetId . '.');
+                try {
+                    applySkinTemplate($template, $projectRoot, $targetDirectory, $targetId);
+                    $backupDirectory = $targetDirectory . '/.skin-backups';
+                    $targetIndex = $targetDirectory . '/index.html';
+                    if (is_file($targetIndex)) {
+                        if (!copy($targetIndex, $backupDirectory . '/' . date('Ymd-His') . '-index.html')) throw new RuntimeException('Backup index.html gagal untuk ' . $targetId . '.');
+                        ensureTourBootstrap($targetIndex);
+                    }
+                    $targetPano = $targetDirectory . '/pano.xml';
+                    if (is_file($targetPano)) {
+                        if (!copy($targetPano, $backupDirectory . '/' . date('Ymd-His') . '-pano.xml')) throw new RuntimeException('Backup pano.xml gagal untuk ' . $targetId . '.');
+                        enableTourSounds($targetPano);
+                        ensureTourMap($targetPano);
+                    }
+                    $synced++;
+                } catch (Throwable $targetError) {
+                    $failed[] = $targetId . ': ' . $targetError->getMessage();
                 }
-                preg_match_all('~images/([A-Za-z0-9_.-]+\.(?:png|webp|json|svg|jpe?g|gif))~i', $skinContent, $skinImageMatches);
-                $targetImages = $targetDirectory . '/images';
-                if (!is_dir($targetImages) && !mkdir($targetImages, 0775, true) && !is_dir($targetImages)) throw new RuntimeException('Folder images gagal dibuat untuk ' . $targetId . '.');
-                foreach (array_unique($skinImageMatches[1] ?? []) as $imageName) {
-                    $sourceImage = $sourceDirectory . '/images/' . $imageName;
-                    if (is_file($sourceImage) && !copy($sourceImage, $targetImages . '/' . $imageName)) throw new RuntimeException('Asset skin gagal disalin: ' . $imageName);
-                }
-                copyDirectoryContents($sourceDirectory . '/3rdparty', $targetDirectory . '/3rdparty');
-                $targetIndex = $targetDirectory . '/index.html';
-                if (is_file($targetIndex)) {
-                    if (!copy($targetIndex, $backupDirectory . '/' . date('Ymd-His') . '-index.html')) throw new RuntimeException('Backup index.html gagal untuk ' . $targetId . '.');
-                    ensureTourBootstrap($targetIndex);
-                }
-                $targetPano = $targetDirectory . '/pano.xml';
-                if (is_file($targetPano)) {
-                    if (!copy($targetPano, $backupDirectory . '/' . date('Ymd-His') . '-pano.xml')) throw new RuntimeException('Backup pano.xml gagal untuk ' . $targetId . '.');
-                    enableTourSounds($targetPano);
-                    ensureTourMap($targetPano);
-                }
-                $synced++;
             }
-            $_SESSION['cms_flash'] = $synced . ' lokasi berhasil memakai skin.js ' . humanizeLocationId($sourceId) . '. File lama telah dicadangkan.';
+            $_SESSION['cms_flash'] = $synced . ' lokasi berhasil memakai template skin ' . $template['name'] . '. File lama telah dicadangkan ke .skin-backups.' . ($failed !== [] ? ' Gagal (' . count($failed) . '): ' . implode(' | ', $failed) : '');
             header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?') . '?tab=skin');
             exit;
         } elseif ($action === 'save_custom_css') {
@@ -795,8 +787,6 @@ foreach ($languageRegistry as $code => $language) {
     $fileCode = $language['audio'];
     $voiceAudioAvailability[$code] = is_file($assetsBaseRoot . '/audio/' . $selectedId . '/' . $fileCode . '.mp3');
 }
-$skinTemplateFile = $assetsBaseRoot . '/jkt/jakarta-skin.html';
-$skinTemplateUpdatedAt = is_file($skinTemplateDirectory . '/updated-at.txt') ? trim((string) file_get_contents($skinTemplateDirectory . '/updated-at.txt')) : '';
 $skinStatuses = [];
 $video360Items = [];
 $video360Root = $assetsBaseRoot . '/360/videos';
@@ -809,7 +799,8 @@ if (is_dir($video360Root)) foreach (new DirectoryIterator($video360Root) as $ent
 }
 uksort($video360Items, 'strnatcasecmp');
 if ($activeTab === 'skin') {
-    $modularPackageReady = is_file($skinTemplateFile) && is_file($assetsBaseRoot . '/jkt/jakarta-skin-loader.js') && is_dir($assetsBaseRoot . '/jkt/image-skin');
+    $activeSkinTemplateHash = $activeSkinTemplateId !== '' ? $skinTemplates[$activeSkinTemplateId]['skinHash'] : '';
+    $skinHashNames = array_column($skinTemplates, 'name', 'skinHash');
     foreach ($detectedTours as $id => $tour) {
         $tourDirectory = $projectRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $tour['path']);
         $skinFile = $tourDirectory . '/skin.js';
@@ -818,7 +809,9 @@ if ($activeTab === 'skin') {
         $runtimeUrlPrefix = $runtimeDirectoryName === $assetsDirectoryName ? '' : $runtimeDirectoryName . '/';
         $bootstrapReady = str_contains($indexHtml, '../' . $assetsDirectoryName . '/' . $runtimeUrlPrefix . 'main-loader.js') && str_contains($indexHtml, '../' . $assetsDirectoryName . '/' . $runtimeUrlPrefix . 'custom.css') && str_contains($indexHtml, '3rdparty/leaflet/leaflet.js');
         $mapReady = (bool) preg_match('/<map\b[^>]*\bid="Map01"[^>]*\/?\s*>/i', $panoXml);
-        $skinStatuses[$id] = ['same' => $modularPackageReady && $bootstrapReady && $mapReady, 'skinMatches' => $modularPackageReady, 'missingAssets' => 0, 'bootstrapReady' => $bootstrapReady, 'mapReady' => $mapReady, 'size' => is_file($skinFile) ? filesize($skinFile) : 0];
+        $skinHash = is_file($skinFile) ? (string) md5_file($skinFile) : '';
+        $skinMatches = $activeSkinTemplateHash !== '' && $skinHash === $activeSkinTemplateHash;
+        $skinStatuses[$id] = ['same' => $skinMatches && $bootstrapReady && $mapReady, 'skinMatches' => $skinMatches, 'currentTemplate' => $skinHashNames[$skinHash] ?? '', 'bootstrapReady' => $bootstrapReady, 'mapReady' => $mapReady, 'size' => is_file($skinFile) ? filesize($skinFile) : 0];
     }
 }
 $dashboardTours = [];

@@ -5,7 +5,7 @@ CMS web (PHP, tanpa database) untuk mengelola banyak virtual tour hasil export *
 ## Fitur
 - **Project & lokasi**: deteksi tur otomatis (folder berisi `pano.xml` + `skin.js`), dashboard kelengkapan, kategori, pencarian.
 - **Data lokasi & bahasa**: nama dan teks sambutan per bahasa, manajemen bahasa, Translation Center, terjemah otomatis.
-- **Skin template**: terapkan satu skin ke semua lokasi (dengan cadangan `.skin-backups`).
+- **Skin template**: template disimpan per folder di `skin-templates/<nama>/` (mis. `jakarta`, `badung`); pilih di tab Template Skin lalu terapkan ke lokasi terpilih (dengan cadangan `.skin-backups`). Tambah template = tambah folder, lihat `skin-templates/README.md`.
 - **Media**: video mobile/desktop, video 360 (HLS), voice over (ElevenLabs), optimizer gambar WebP, audit `pano.xml`.
 - **Smart Hub**: bangun paket konten per lokasi, isi konten lewat formulir/CSV (Tourism Guide, fakta, kalender, dll.), atur aksi tombol, menu, sumber data, identitas (logo), dan **front-end kustom** dari developer lain. Membutuhkan folder **Smart Kit** (repo/folder terpisah).
 - **Optimasi Loading**: menjalankan mesin optimasi loading tur (`optimize-tour.js`) dari CMS, dengan progres, hentikan, dan undo. Lihat [OPTIMASI.md](OPTIMASI.md).

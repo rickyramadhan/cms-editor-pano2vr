@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/bootstrap.php';   // sesi aman + login
 header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/project-manager.php';
+require_once __DIR__ . '/skin-templates.php';
 
 function respond(int $status, bool $success, string $message, array $extra = []): never
 {
@@ -197,10 +198,18 @@ try {
         saveDatabase($databaseFile, $database);
     } elseif ($action === 'skin') {
         cmsRequireAdmin('Menerapkan skin');
-        $skinPackage = activeProjectAssetBaseRoot() . '/jkt';
-        if (!is_file($skinPackage . '/jakarta-skin.html') || !is_file($skinPackage . '/jakarta-skin-loader.js')) throw new RuntimeException('Paket skin modular assets/jkt tidak ditemukan.');
+        // template = folder skin-templates/<id> yang dipilih untuk project (tab Template Skin)
+        $templateId = projectSkinTemplateId(activeProject(), skinTemplateList());
+        if ($templateId === '') throw new RuntimeException('Belum ada template skin yang dipilih untuk project ini. Pilih di tab Template Skin.');
+        $template = skinTemplateGet($templateId);
         foreach ($ids as $id) {
-            try { syncSkin($root, $id); $results[] = ['id' => $id, 'success' => true]; }
+            try {
+                $targetDirectory = findTourDirectory($root, $id);
+                if ($targetDirectory === null) throw new RuntimeException('Folder tur ' . $id . ' tidak ditemukan.');
+                applySkinTemplate($template, $root, $targetDirectory, $id);
+                syncSkin($root, $id);
+                $results[] = ['id' => $id, 'success' => true];
+            }
             catch (Throwable $error) { $results[] = ['id' => $id, 'success' => false, 'message' => $error->getMessage()]; }
         }
     } else respond(422, false, 'Aksi massal tidak dikenali.');
