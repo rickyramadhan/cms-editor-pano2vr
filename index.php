@@ -610,29 +610,18 @@ try {
             foreach ($requestedTargets as $requestedId) if (!isset($detectedTours[$requestedId])) throw new RuntimeException('Lokasi "' . $requestedId . '" tidak ditemukan di project ini.');
             if ($requestedTargets === []) throw new RuntimeException('Centang minimal satu lokasi yang akan memakai template.');
             $targets = $requestedTargets;
-            $synced = 0; $failed = [];
+            $synced = 0; $loaders = 0; $failed = [];
             foreach ($targets as $targetId) {
                 $targetDirectory = $projectRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $detectedTours[$targetId]['path']);
                 try {
-                    applySkinTemplate($template, $projectRoot, $targetDirectory, $targetId);
-                    $backupDirectory = $targetDirectory . '/.skin-backups';
-                    $targetIndex = $targetDirectory . '/index.html';
-                    if (is_file($targetIndex)) {
-                        if (!copy($targetIndex, $backupDirectory . '/' . date('Ymd-His') . '-index.html')) throw new RuntimeException('Backup index.html gagal untuk ' . $targetId . '.');
-                        ensureTourBootstrap($targetIndex);
-                    }
-                    $targetPano = $targetDirectory . '/pano.xml';
-                    if (is_file($targetPano)) {
-                        if (!copy($targetPano, $backupDirectory . '/' . date('Ymd-His') . '-pano.xml')) throw new RuntimeException('Backup pano.xml gagal untuk ' . $targetId . '.');
-                        enableTourSounds($targetPano);
-                        ensureTourMap($targetPano);
-                    }
+                    $applied = applySkinTemplate($template, $projectRoot, $targetDirectory, $targetId);
+                    if (!empty($applied['loader'])) $loaders++;
                     $synced++;
                 } catch (Throwable $targetError) {
                     $failed[] = $targetId . ': ' . $targetError->getMessage();
                 }
             }
-            $_SESSION['cms_flash'] = $synced . ' lokasi berhasil memakai template skin ' . $template['name'] . '. File lama telah dicadangkan ke .skin-backups.' . ($failed !== [] ? ' Gagal (' . count($failed) . '): ' . implode(' | ', $failed) : '');
+            $_SESSION['cms_flash'] = $synced . ' lokasi berhasil memakai skin.js dari template ' . $template['name'] . '.' . ($loaders > 0 ? ' Pemuat skin dipasang di index.html ' . $loaders . ' lokasi.' : '') . ' File lama telah dicadangkan ke .skin-backups.' . ($failed !== [] ? ' Gagal (' . count($failed) . '): ' . implode(' | ', $failed) : '');
             header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?') . '?tab=skin');
             exit;
         } elseif ($action === 'save_custom_css') {
@@ -804,14 +793,12 @@ if ($activeTab === 'skin') {
     foreach ($detectedTours as $id => $tour) {
         $tourDirectory = $projectRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $tour['path']);
         $skinFile = $tourDirectory . '/skin.js';
-        $indexHtml = is_file($tourDirectory . '/index.html') ? (string) file_get_contents($tourDirectory . '/index.html') : '';
-        $panoXml = is_file($tourDirectory . '/pano.xml') ? (string) file_get_contents($tourDirectory . '/pano.xml') : '';
-        $runtimeUrlPrefix = $runtimeDirectoryName === $assetsDirectoryName ? '' : $runtimeDirectoryName . '/';
-        $bootstrapReady = str_contains($indexHtml, '../' . $assetsDirectoryName . '/' . $runtimeUrlPrefix . 'main-loader.js') && str_contains($indexHtml, '../' . $assetsDirectoryName . '/' . $runtimeUrlPrefix . 'custom.css') && str_contains($indexHtml, '3rdparty/leaflet/leaflet.js');
-        $mapReady = (bool) preg_match('/<map\b[^>]*\bid="Map01"[^>]*\/?\s*>/i', $panoXml);
         $skinHash = is_file($skinFile) ? (string) md5_file($skinFile) : '';
         $skinMatches = $activeSkinTemplateHash !== '' && $skinHash === $activeSkinTemplateHash;
-        $skinStatuses[$id] = ['same' => $skinMatches && $bootstrapReady && $mapReady, 'skinMatches' => $skinMatches, 'currentTemplate' => $skinHashNames[$skinHash] ?? '', 'bootstrapReady' => $bootstrapReady, 'mapReady' => $mapReady, 'size' => is_file($skinFile) ? filesize($skinFile) : 0];
+        // template dengan "loader": lokasi baru dianggap sesuai bila tag pemuat juga sudah ada di index.html
+        $activeLoader = $activeSkinTemplateId !== '' ? (string) $skinTemplates[$activeSkinTemplateId]['loader'] : '';
+        $loaderReady = $activeLoader === '' || skinLoaderPresent(is_file($tourDirectory . '/index.html') ? (string) file_get_contents($tourDirectory . '/index.html') : '', $activeLoader);
+        $skinStatuses[$id] = ['same' => $skinMatches && $loaderReady, 'skinMatches' => $skinMatches, 'loaderReady' => $loaderReady, 'currentTemplate' => $skinHashNames[$skinHash] ?? '', 'size' => is_file($skinFile) ? filesize($skinFile) : 0];
     }
 }
 $dashboardTours = [];

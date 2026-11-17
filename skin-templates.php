@@ -2,8 +2,9 @@
 declare(strict_types=1);
 
 /**
- * Template Skin berbasis folder: skin-templates/<id>/ (skin.js wajib; pano2vr_player.js, images/, 3rdparty/ opsional).
- * Tidak terikat ke lokasi atau wilayah tertentu — tambah template cukup dengan menambah folder (lihat skin-templates/README.md).
+ * Template Skin berbasis folder: skin-templates/<id>/skin.js (+ template.json).
+ * Template dipilih dan disimpan eksplisit per project. Penerapan mengganti skin.js; bila template.json punya "loader",
+ * satu tag <script src="loader"> disisipkan tepat setelah tag skin.js di index.html (bila belum ada). Selain itu tidak ada yang diubah.
  */
 
 const SKIN_TEMPLATE_ID_PATTERN = '/^[a-z0-9][a-z0-9_-]{0,63}$/';
@@ -13,22 +14,10 @@ function skinTemplatesRoot(): string
     return __DIR__ . '/skin-templates';
 }
 
-/** Daftar file yang akan disalin dari template: [relatif => path absolut]. */
+/** Berkas tunggal yang boleh diterapkan oleh Template Skin. */
 function skinTemplateFiles(string $directory): array
 {
-    $files = [];
-    foreach (['skin.js', 'pano2vr_player.js'] as $name) if (is_file($directory . '/' . $name)) $files[$name] = $directory . '/' . $name;
-    foreach (['images', '3rdparty'] as $folder) {
-        if (!is_dir($directory . '/' . $folder)) continue;
-        $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory . '/' . $folder, FilesystemIterator::SKIP_DOTS));
-        foreach ($iterator as $item) {
-            if (!$item->isFile()) continue;
-            $relative = $folder . '/' . str_replace('\\', '/', substr($item->getPathname(), strlen($directory . '/' . $folder) + 1));
-            if (str_contains($relative, '..')) continue;
-            $files[$relative] = $item->getPathname();
-        }
-    }
-    return $files;
+    return is_file($directory . '/skin.js') ? ['skin.js' => $directory . '/skin.js'] : [];
 }
 
 function skinTemplateList(): array
@@ -41,23 +30,56 @@ function skinTemplateList(): array
         if ($entry->isDot() || !$entry->isDir() || !preg_match(SKIN_TEMPLATE_ID_PATTERN, $id)) continue;
         $directory = $entry->getPathname();
         if (!is_file($directory . '/skin.js')) continue;
-        $meta = is_file($directory . '/template.json') ? (json_decode((string) file_get_contents($directory . '/template.json'), true) ?: []) : [];
+        // template.json yang disimpan editor Windows sering ber-BOM; buang dulu agar json_decode tidak gagal diam-diam
+        $meta = is_file($directory . '/template.json') ? (json_decode(preg_replace('/^\xEF\xBB\xBF/', '', (string) file_get_contents($directory . '/template.json')), true) ?: []) : [];
         $skinHead = (string) file_get_contents($directory . '/skin.js', false, null, 0, 400);
         $templates[$id] = [
             'id' => $id,
             'name' => trim((string) ($meta['name'] ?? '')) ?: ucwords(str_replace(['-', '_'], ' ', $id)),
             'description' => trim((string) ($meta['description'] ?? '')),
             'preview' => trim((string) ($meta['preview'] ?? '')),
+            'loader' => skinTemplateLoader((string) ($meta['loader'] ?? '')),
             'directory' => $directory,
             'ggsk' => preg_match('~//\s*Filename:\s*(\S+)~', $skinHead, $m) ? $m[1] : '',
             'generated' => preg_match('~//\s*Generated\s+(\S+)~', $skinHead, $m) ? $m[1] : '',
             'skinHash' => (string) md5_file($directory . '/skin.js'),
-            'hasPlayer' => is_file($directory . '/pano2vr_player.js'),
             'fileCount' => count(skinTemplateFiles($directory)),
         ];
     }
     uasort($templates, static fn(array $a, array $b): int => strnatcasecmp($a['name'], $b['name']));
     return $templates;
+}
+
+/**
+ * Alamat pemuat dari template.json › loader. Hanya jalur relatif ke berkas .js di server yang sama
+ * (mis. ../assets/template-skin/template-skin-loader.js?v=3); selain itu diabaikan.
+ */
+function skinTemplateLoader(string $value): string
+{
+    $value = trim($value);
+    if ($value === '' || str_contains($value, '//') || str_contains($value, '..\\')) return '';
+    return preg_match('~^(?:\.{1,2}/)*[A-Za-z0-9_][A-Za-z0-9_./-]*\.js(?:\?[A-Za-z0-9=&._-]*)?$~', $value) ? $value : '';
+}
+
+/** Apakah index.html sudah memuat pemuat ini (dibandingkan tanpa ?versi). */
+function skinLoaderPresent(string $html, string $loader): bool
+{
+    return $loader !== '' && str_contains($html, (string) strtok($loader, '?'));
+}
+
+/** Sisipkan satu tag pemuat tepat setelah tag skin.js; selain baris itu, isi index.html tidak berubah. */
+function skinInsertLoader(string $html, string $loader): string
+{
+    if (!preg_match('~<script\b[^>]*\bsrc=["\']skin\.js[^"\']*["\'][^>]*>\s*</script>~i', $html, $match, PREG_OFFSET_CAPTURE)) {
+        throw new RuntimeException('Tag skin.js tidak ditemukan di index.html.');
+    }
+    $end = $match[0][1] + strlen($match[0][0]);
+    $newline = str_contains($html, "\r\n") ? "\r\n" : "\n";
+    $indent = preg_match('~([ \t]*)$~', substr($html, 0, $match[0][1]), $m) ? $m[1] : '';
+    $line = $newline . $indent . '<script src="' . htmlspecialchars($loader, ENT_QUOTES) . '"></script>';
+    $updated = substr($html, 0, $end) . $line . substr($html, $end);
+    if (strlen($updated) !== strlen($html) + strlen($line) || !skinLoaderPresent($updated, $loader)) throw new RuntimeException('Penyisipan pemuat tidak terverifikasi.');
+    return $updated;
 }
 
 function skinTemplateGet(string $id): array
@@ -67,13 +89,11 @@ function skinTemplateGet(string $id): array
     return $templates[$id];
 }
 
-/** Template terpilih untuk project: pilihan tersimpan › template yang namanya cocok dengan id project › kosong. */
+/** Template terpilih untuk project: hanya pilihan yang sudah disimpan operator. */
 function projectSkinTemplateId(array $project, array $templates): string
 {
     $saved = (string) ($project['skin_template'] ?? '');
     if ($saved !== '' && isset($templates[$saved])) return $saved;
-    $projectId = strtolower((string) ($project['id'] ?? ''));
-    foreach (array_keys($templates) as $id) if ($projectId === $id || str_starts_with($projectId, $id . '-')) return $id;
     return '';
 }
 
@@ -87,8 +107,8 @@ function updateProjectSkinTemplate(string $projectId, string $templateId): void
 }
 
 /**
- * Salin file template ke satu folder lokasi.
- * Lock per lokasi, backup ke .skin-backups/<stempel>/, verifikasi hash, dan rollback otomatis bila ada yang gagal.
+ * Ganti skin.js pada satu folder lokasi, lalu (bila template punya "loader") sisipkan satu tag pemuat di index.html.
+ * Lock per lokasi, backup ke .skin-backups/<stempel>/, verifikasi hash, dan rollback otomatis (skin.js + index.html) bila ada yang gagal.
  */
 function applySkinTemplate(array $template, string $projectRoot, string $targetDirectory, string $locationId): array
 {
@@ -126,6 +146,23 @@ function applySkinTemplate(array $template, string $projectRoot, string $targetD
             if (!is_dir(dirname($destination)) && !mkdir(dirname($destination), 0775, true) && !is_dir(dirname($destination))) throw new RuntimeException('Folder ' . dirname($relative) . ' gagal dibuat untuk ' . $locationId . '.');
             if (!copy($source, $destination) || md5_file($source) !== md5_file($destination)) throw new RuntimeException($relative . ' gagal disalin ke ' . $locationId . ' (hash tidak cocok).');
         }
+        // pemuat skin (mis. video intro Badung) dipasang lewat index.html, bukan dari skin.js: sisipkan satu tag bila template memintanya
+        $loaderInserted = false;
+        $loader = (string) ($template['loader'] ?? '');
+        $indexFile = $target . '/index.html';
+        if ($loader !== '' && is_file($indexFile)) {
+            $html = file_get_contents($indexFile);
+            if ($html === false) throw new RuntimeException('index.html tidak dapat dibaca untuk ' . $locationId . '.');
+            if (!skinLoaderPresent($html, $loader)) {
+                $updated = skinInsertLoader($html, $loader);
+                $backup = $backupDirectory . '/index.html';
+                if (!is_dir($backupDirectory) && !mkdir($backupDirectory, 0775, true) && !is_dir($backupDirectory)) throw new RuntimeException('Folder backup gagal dibuat untuk ' . $locationId . '.');
+                if (!copy($indexFile, $backup)) throw new RuntimeException('Backup index.html gagal untuk ' . $locationId . '.');
+                $backedUp['index.html'] = $backup;
+                if (file_put_contents($indexFile, $updated, LOCK_EX) === false || md5_file($indexFile) !== md5($updated)) throw new RuntimeException('Pemuat gagal dipasang di index.html ' . $locationId . '.');
+                $loaderInserted = true;
+            }
+        }
     } catch (Throwable $error) {
         foreach ($backedUp as $relative => $backup) @copy($backup, $target . '/' . $relative);
         foreach ($created as $relative) @unlink($target . '/' . $relative);
@@ -135,6 +172,6 @@ function applySkinTemplate(array $template, string $projectRoot, string $targetD
         flock($lock, LOCK_UN);
         fclose($lock);
     }
-    if (function_exists('cmsAudit')) cmsAudit('skin_template_applied', ['template' => $template['id'], 'location' => $locationId, 'files' => count($files), 'backup' => $backedUp === [] ? '' : '.skin-backups/' . $stamp]);
-    return ['files' => count($files), 'backup' => $backedUp === [] ? '' : $stamp];
+    if (function_exists('cmsAudit')) cmsAudit('skin_template_applied', ['template' => $template['id'], 'location' => $locationId, 'files' => count($files), 'loader' => $loaderInserted ? $loader : '', 'backup' => $backedUp === [] ? '' : '.skin-backups/' . $stamp]);
+    return ['files' => count($files), 'loader' => $loaderInserted, 'backup' => $backedUp === [] ? '' : $stamp];
 }

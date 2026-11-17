@@ -369,7 +369,7 @@
         $skinPreviewUrl = $activeSkinTemplate['preview'] ?? '';
         if ($skinPreviewUrl === '' && $activeSkinTemplate) foreach ($skinStatuses as $previewId => $previewStatus) if ($previewStatus['skinMatches']) { $skinPreviewUrl = projectUrl($detectedTours[$previewId]['path'] . '/'); break; }
         ?>
-        <form method="post" class="editor skin-sync-editor">
+        <form method="post" class="editor skin-sync-editor" data-action-form>
             <input type="hidden" name="csrf" value="<?= e($_SESSION['cms_csrf']) ?>">
             <section class="card section">
                 <div class="section-heading"><div><span class="step">SK</span><div><h2>Template Skin</h2><p>Pilih template dari folder <code>skin-templates/</code> di CMS, lalu terapkan ke lokasi project ini.</p></div></div><span class="skin-template-badge"><?= $activeSkinTemplate ? 'Aktif: ' . e($activeSkinTemplate['name']) : 'Belum ada template dipilih' ?></span></div>
@@ -380,7 +380,7 @@
                         <?php foreach ($skinTemplates as $template): ?>
                             <label class="skin-sync-item <?= $template['id'] === $activeSkinTemplateId ? 'synced' : '' ?>">
                                 <input type="radio" name="skin_template" value="<?= e($template['id']) ?>" <?= $template['id'] === $activeSkinTemplateId ? 'checked' : '' ?>>
-                                <span><strong><?= e($template['name']) ?></strong><small><?= e($template['description'] !== '' ? $template['description'] : 'skin-templates/' . $template['id']) ?></small><small><?= e(($template['ggsk'] !== '' ? $template['ggsk'] . ' · ' : '') . ($template['generated'] !== '' ? substr($template['generated'], 0, 10) . ' · ' : '') . $template['fileCount'] . ' file' . ($template['hasPlayer'] ? '' : ' · tanpa player')) ?></small></span>
+                                <span><strong><?= e($template['name']) ?></strong><small><?= e($template['description'] !== '' ? $template['description'] : 'skin-templates/' . $template['id']) ?></small><small><?= e(($template['ggsk'] !== '' ? $template['ggsk'] . ' · ' : '') . ($template['generated'] !== '' ? substr($template['generated'], 0, 10) . ' · ' : '') . 'skin.js tersimpan') ?></small></span>
                                 <?php if ($template['id'] === $activeSkinTemplateId): ?><em>Aktif</em><?php endif; ?>
                             </label>
                         <?php endforeach; ?>
@@ -407,17 +407,17 @@
                     </div>
                 </div>
                 <?php endif; ?>
-                <div class="skin-sync-toolbar"><label><input type="checkbox" id="selectAllSkins"> Pilih semua lokasi</label><span><?= count(array_filter($skinStatuses, static fn(array $s): bool => $s['skinMatches'])) ?> / <?= count($skinStatuses) ?> lokasi sudah memakai template ini</span></div>
+                <div class="skin-sync-toolbar"><label><input type="checkbox" id="selectAllSkins"> Pilih semua lokasi</label><span><?= count(array_filter($skinStatuses, static fn(array $s): bool => $s['same'])) ?> / <?= count($skinStatuses) ?> lokasi sudah memakai template ini</span></div>
                 <div class="skin-sync-list">
                     <?php foreach ($skinStatuses as $tourId => $status): ?>
                         <label class="skin-sync-item <?= $status['same'] ? 'synced' : 'outdated' ?>">
-                            <input type="checkbox" name="skin_targets[]" value="<?= e($tourId) ?>" <?= $status['skinMatches'] ? '' : 'checked' ?>>
-                            <span><strong><?= e(humanizeLocationId($tourId)) ?></strong><small><?= e($status['skinMatches'] ? 'Sudah memakai ' . $activeSkinTemplate['name'] : ($status['currentTemplate'] !== '' ? 'Memakai template ' . $status['currentTemplate'] : 'Skin lain / versi lama')) ?><?= !$status['bootstrapReady'] || !$status['mapReady'] ? ' · bootstrap/peta belum lengkap' : '' ?></small></span>
+                            <input type="checkbox" name="skin_targets[]" value="<?= e($tourId) ?>" <?= $status['same'] ? '' : 'checked' ?>>
+                            <span><strong><?= e(humanizeLocationId($tourId)) ?></strong><small><?= e(($status['skinMatches'] ? 'Sudah memakai ' . $activeSkinTemplate['name'] : ($status['currentTemplate'] !== '' ? 'Memakai template ' . $status['currentTemplate'] : 'Skin lain / versi lama')) . (empty($status['loaderReady']) ? ' · pemuat skin belum terpasang di index.html' : '')) ?></small></span>
                             <em><?= $status['same'] ? 'Sesuai' : 'Perlu' ?></em>
                         </label>
                     <?php endforeach; ?>
                 </div>
-                <div class="skin-notice"><strong>Yang diganti</strong><span>Isi folder template (<code>skin.js</code>, <code>pano2vr_player.js</code>, <code>images/</code>, <code>3rdparty/</code>) disalin ke lokasi tercentang. File lama dicadangkan ke <code>.skin-backups</code> dan dikembalikan otomatis bila penyalinan gagal. Panorama, tiles, video, dan data lokasi tidak disentuh.</span></div>
+                <div class="skin-notice"><strong>Yang diganti</strong><span>Hanya <code>skin.js</code> tersimpan yang diterapkan ke lokasi tercentang. Skin lama dicadangkan ke <code>.skin-backups</code> dan dikembalikan otomatis bila penyalinan gagal. Player, panorama, peta, tiles, video, aset, dan data lokasi tidak disentuh.</span></div>
             </section>
             <div class="actions"><button class="save" name="action" value="sync_skin" data-cute-confirm data-confirm-icon="✨" data-confirm-title="Terapkan template <?= e($activeSkinTemplate['name']) ?>?" data-confirm-message="skin.js lokasi tercentang akan diganti dengan template <?= e($activeSkinTemplate['name']) ?>. File lama dicadangkan otomatis." data-confirm-action="Terapkan">Terapkan Template ke Lokasi Terpilih</button></div>
             <?php endif; ?>
@@ -805,7 +805,9 @@ if (languageAddForm) languageAddForm.addEventListener('submit', async event => {
         progressBox.classList.add('error');title.textContent='Proses terhenti';detail.textContent=error.message+' Bahasa yang sudah tersimpan dapat dilanjutkan melalui Translation Center.';button.disabled=false;languagePreset.disabled=false;delete languageAddForm.dataset.running;
     }
 });
-const guardedEditorForms = Array.from(document.querySelectorAll('form.editor'));
+// form aksi (mis. Template Skin: lokasi yang perlu sudah tercentang sejak awal) tidak ikut penjaga "perubahan belum disimpan";
+// tanpa pengecualian ini tombol Terapkan nonaktif karena isi form dianggap "tidak berubah"
+const guardedEditorForms = Array.from(document.querySelectorAll('form.editor:not([data-action-form])'));
 let allowEditorNavigation = false;
 const editorFormState = form => JSON.stringify(Array.from(form.elements).filter(field => field.name && !['submit', 'button'].includes(field.type)).map(field => [field.name, ['checkbox', 'radio'].includes(field.type) ? field.checked : field.value]));
 const initialEditorStates = new Map(guardedEditorForms.map(form => [form, editorFormState(form)]));
@@ -835,9 +837,22 @@ guardedEditorForms.forEach(form => {
     };
     form.addEventListener('input', syncDirtyState);
     form.addEventListener('change', syncDirtyState);
-    form.addEventListener('submit', () => {
+    form.addEventListener('submit', event => {
         allowEditorNavigation = true;
-        saveButtons.forEach(button => { if (!button.disabled) { button.disabled = true; button.dataset.label = button.textContent; button.textContent = 'Menyimpan…'; } });
+        const submitter = event.submitter;
+        saveButtons.forEach(button => {
+            if (button.disabled) return;
+            button.dataset.label = button.textContent;
+            button.textContent = 'Menyimpan…';
+            if (button === submitter) {
+                // Submitter harus tetap enabled sampai browser membentuk FormData;
+                // jika disabled, name="action" hilang dan backend mengira save_location.
+                button.setAttribute('aria-disabled', 'true');
+                button.style.pointerEvents = 'none';
+            } else {
+                button.disabled = true;
+            }
+        });
     });
     syncDirtyState();
 });

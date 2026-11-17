@@ -1,7 +1,7 @@
 // Garden Gnome Software - Skin
 // Pano2VR 7.1.12/21036
-// Filename: badung.ggsk
-// Generated 2026-11-16T13:57:08
+// Filename: 
+// Generated 2026-11-16T10:50:36
 
 function pano2vrSkin(player,base) {
 	player.addVariable('vis_url_popup', 2, false, { ignoreInState: 0  });
@@ -208,62 +208,6 @@ function pano2vrSkin(player,base) {
 				}
 			}
 		}
-		el=me._shadow_up=document.createElement('div');
-		el.ggId="Shadow Up";
-		el.ggDx=0;
-		el.ggParameter={ rx:0,ry:0,a:0,sx:1,sy:1,def:'' };
-		el.ggVisible=true;
-		el.className="ggskin ggskin_rectangle shadow-up";
-		el.ggType='rectangle';
-		hs ='';
-		hs+='border : 0px solid #000000;';
-		hs+='height : 15%;';
-		hs+='left : calc(50% - ((100% + 0px) / 2) + 0%);';
-		hs+='position : absolute;';
-		hs+='top : 0%;';
-		hs+='visibility : inherit;';
-		hs+='width : 100%;';
-		hs+='pointer-events:none;';
-		hs+='background: linear-gradient(to bottom, rgba(0,0,0,0.4), rgba(0,0,0,0));';
-		el.setAttribute('style',hs);
-		el.style.transformOrigin='50% 50%';
-		me._shadow_up.ggIsActive=function() {
-			return false;
-		}
-		el.ggElementNodeId=function() {
-			return player.getCurrentNode();
-		}
-		me._shadow_up.ggUpdatePosition=function (useTransition) {
-		}
-		me.divSkin.appendChild(me._shadow_up);
-		el=me._shadow_bottom=document.createElement('div');
-		el.ggId="Shadow Bottom";
-		el.ggDx=0;
-		el.ggParameter={ rx:0,ry:0,a:0,sx:1,sy:1,def:'' };
-		el.ggVisible=true;
-		el.className="ggskin ggskin_rectangle shadow-bottom";
-		el.ggType='rectangle';
-		hs ='';
-		hs+='border : 0px solid #000000;';
-		hs+='bottom : 0%;';
-		hs+='height : 15%;';
-		hs+='left : calc(50% - ((100% + 0px) / 2) + 0%);';
-		hs+='position : absolute;';
-		hs+='visibility : inherit;';
-		hs+='width : 100%;';
-		hs+='pointer-events:none;';
-		hs+='background: linear-gradient(to bottom, rgba(0,0,0,0), rgba(0,0,0,0.8));';
-		el.setAttribute('style',hs);
-		el.style.transformOrigin='50% 50%';
-		me._shadow_bottom.ggIsActive=function() {
-			return false;
-		}
-		el.ggElementNodeId=function() {
-			return player.getCurrentNode();
-		}
-		me._shadow_bottom.ggUpdatePosition=function (useTransition) {
-		}
-		me.divSkin.appendChild(me._shadow_bottom);
 		el=me._hotspot=document.createElement('div');
 		el.ggId="hotspot";
 		el.ggDx=-0.02;

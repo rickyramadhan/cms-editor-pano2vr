@@ -104,46 +104,6 @@ function findTourDirectory(string $root, string $id): ?string
     return null;
 }
 
-function syncSkin(string $root, string $id, string $templateDirectory = ''): void
-{
-    $targetDirectory = findTourDirectory($root, $id);
-    if ($targetDirectory === null) throw new RuntimeException('Folder tur ' . $id . ' tidak ditemukan.');
-    $backup = $targetDirectory . '/.skin-backups';
-    if (!is_dir($backup) && !mkdir($backup, 0775, true) && !is_dir($backup)) throw new RuntimeException('Folder backup gagal dibuat untuk ' . $id . '.');
-    $stamp = date('Ymd-His');
-    $indexFile = $targetDirectory . '/index.html';
-    if (is_file($indexFile)) {
-        if (!copy($indexFile, $backup . '/' . $stamp . '-index.html')) throw new RuntimeException('Backup index.html gagal untuk ' . $id . '.');
-        $html = (string) file_get_contents($indexFile);
-        $version = (string) time();
-        $html = preg_replace('/src=(["\'])(pano2vr_player\.js|skin\.js)(?:\?[^"\']*)?\1/i', 'src=$1$2?v=' . $version . '$1', $html) ?? $html;
-        $html = preg_replace('/pano\.readConfigUrlAsync\((["\'])pano\.xml(?:\?[^"\']*)?\1\)/i', 'pano.readConfigUrlAsync($1pano.xml?v=' . $version . '$1)', $html) ?? $html;
-        $assetName = basename(activeProjectAssetBaseRoot());
-        $runtimeName = basename(activeProjectAssetsRoot());
-        $runtimePrefix = $runtimeName === $assetName ? '' : $runtimeName . '/';
-        if (!str_contains($html, '../' . $assetName . '/' . $runtimePrefix . 'main-loader.js')) {
-            $tags = '<link rel="stylesheet" href="../' . $assetName . '/' . $runtimePrefix . 'custom.css"/>\n\t\t<script src="../' . $assetName . '/' . $runtimePrefix . 'main-loader.js"></script>';
-            $html = preg_replace('/(<script[^>]+src=["\']skin\.js[^>]*>\s*<\/script>)/i', '$1' . "\n\t\t" . $tags, $html, 1, $inserted) ?? $html;
-            if (($inserted ?? 0) !== 1) throw new RuntimeException('Bootstrap skin modular gagal dipasang untuk ' . $id . '.');
-        }
-        if (file_put_contents($indexFile, $html, LOCK_EX) === false) throw new RuntimeException('index.html gagal diperbarui untuk ' . $id . '.');
-    }
-
-    $panoFile = $targetDirectory . '/pano.xml';
-    if (is_file($panoFile)) {
-        if (!copy($panoFile, $backup . '/' . $stamp . '-pano.xml')) throw new RuntimeException('Backup pano.xml gagal untuk ' . $id . '.');
-        $xml = (string) file_get_contents($panoFile);
-        $xml = preg_replace('/(<tour\b[^>]*\bhassounds=")[01](")/i', '${1}1$2', $xml, 1, $soundCount) ?? $xml;
-        if (($soundCount ?? 0) === 0) $xml = preg_replace('/<tour\b/i', '<tour hassounds="1"', $xml, 1) ?? $xml;
-        if (!preg_match('/<map\b[^>]*\bid="Map01"[^>]*\/?\s*>/i', $xml)) {
-            $map = '  <map mapurltemplate="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" mapmaxzoom="18" type="web" index="0" mapprovider="openstreetmap" mapstyle="streets" title="" googlecustomstylecode="" id="Map01"/>';
-            $xml = preg_replace('/\s*<\/tour>\s*$/i', "\n" . $map . "\n</tour>\n", $xml, 1, $mapCount) ?? $xml;
-            if (($mapCount ?? 0) !== 1) throw new RuntimeException('Konfigurasi map gagal dipasang untuk ' . $id . '.');
-        }
-        if (file_put_contents($panoFile, $xml, LOCK_EX) === false) throw new RuntimeException('pano.xml gagal diperbarui untuk ' . $id . '.');
-    }
-}
-
 try {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') respond(405, false, 'Metode tidak diizinkan.');
     $payload = json_decode((string) file_get_contents('php://input'), true, 64, JSON_THROW_ON_ERROR);
@@ -207,7 +167,6 @@ try {
                 $targetDirectory = findTourDirectory($root, $id);
                 if ($targetDirectory === null) throw new RuntimeException('Folder tur ' . $id . ' tidak ditemukan.');
                 applySkinTemplate($template, $root, $targetDirectory, $id);
-                syncSkin($root, $id);
                 $results[] = ['id' => $id, 'success' => true];
             }
             catch (Throwable $error) { $results[] = ['id' => $id, 'success' => false, 'message' => $error->getMessage()]; }

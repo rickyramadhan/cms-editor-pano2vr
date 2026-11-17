@@ -17,7 +17,7 @@ function elevenLabsApiKey(): string
     return trim($key);
 }
 const ELEVENLABS_MODEL_ID = 'eleven_v3';
-const ELEVENLABS_VOICE_ID = '65oH2vf8DV9U5dqEre2g';
+const ELEVENLABS_VOICE_ID = 'wUEbQz5ZH5YUSedD37xR';
 const MAX_CHUNK_LENGTH = 450;
 
 function respond(int $status, bool $success, string $message, array $extra = []): never

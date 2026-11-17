@@ -1,5 +1,6 @@
 {
     "name": "Badung",
-    "description": "Skin Badung (badung.ggsk). Disalin dari air-terjun-nungnung/skin.js.",
-    "preview": ""
+    "description": "Skin Badung (badung.ggsk). Snapshot skin.js dari pantai-kuta.",
+    "preview": "/badung/pantai-kuta/",
+    "loader": "../assets/template-skin/template-skin-loader.js?v=3"
 }
