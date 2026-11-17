@@ -3,7 +3,7 @@
 ?>
 <section class="ah" id="aiHub" aria-label="AI Guide Hub">
     <div class="ah-head">
-        <p class="ah-intro">Daftarkan setiap lokasi ke AI Guide Hub, sinkronkan nama dan teks sambutan dari CMS, lalu terbitkan paket AI ke folder tur. Setelah itu Jali menjawab pertanyaan pengunjung memakai data Anda.</p>
+        <p class="ah-intro">Daftarkan setiap lokasi ke AI Guide Hub, sinkronkan nama dan teks sambutan dari CMS, lalu terbitkan paket AI ke folder tur. Setelah itu pemandu virtual menjawab pertanyaan pengunjung memakai data Anda.</p>
         <div class="ah-conn" id="ahConn" role="status"></div>
     </div>
 

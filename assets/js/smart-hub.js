@@ -39,7 +39,7 @@
   const codeBox = (text, label) => h('div', { class: 'sh-code' }, h('div', { class: 'sh-code__h' }, h('span', null, label || 'Kode'), h('button', { type: 'button', class: 'translate', onclick: () => copy(text) }, 'Salin')), h('pre', null, text));
 
   const C = () => S.catalog || { features: {}, actionTypes: {}, sources: {}, slots: {}, menus: {}, events: {} };
-  const EXTRA = { peta: { label: 'Peta', icon: 'map', type: 'peta' }, jali: { label: 'Tanya Jali', icon: 'chat', type: 'jali' }, 'sembunyikan-ui': { label: 'Sembunyikan tampilan', icon: 'eye', type: 'ui', op: 'sembunyikan' }, 'tutup-semua': { label: 'Tutup popup', icon: 'x', type: 'ui', op: 'tutup' } };
+  const EXTRA = { peta: { label: 'Peta', icon: 'map', type: 'peta' }, jali: { label: 'Tanya pemandu', icon: 'chat', type: 'jali' }, 'sembunyikan-ui': { label: 'Sembunyikan tampilan', icon: 'eye', type: 'ui', op: 'sembunyikan' }, 'tutup-semua': { label: 'Tutup popup', icon: 'x', type: 'ui', op: 'tutup' } };
   const builtins = () => { const o = {}; for (const [f, m] of Object.entries(C().features)) o[f] = { label: m.label, icon: m.icon, type: 'fitur', feature: f, args: {} }; return { ...o, ...EXTRA }; };
   const allActions = () => ({ ...builtins(), ...(hub?.actions || {}) });
   const isBuiltin = (id) => id in builtins();
