@@ -404,12 +404,12 @@ function analyzeTourCompletion(string $root, string $id, array $tour, array $loc
     $audioScore = $audioDone * 25;
     if ($audioDone < 4) $missing[] = (4 - $audioDone) . ' audio belum tersedia';
 
-    $videoDone = 0;
-    foreach (['mobile', 'desktop'] as $videoType) {
-        if (is_file($tourDirectory . '/video/' . $videoType . '.webm') || is_file($tourDirectory . '/video/' . $videoType . '.mp4')) $videoDone++;
-    }
-    $videoScore = $videoDone * 50;
-    if ($videoDone < 2) $missing[] = (2 - $videoDone) . ' video belum tersedia';
+    $hasMobileVideo = is_file($tourDirectory . '/video/mobile.webm') || is_file($tourDirectory . '/video/mobile.mp4');
+    $hasDesktopVideo = is_file($tourDirectory . '/video/desktop.webm') || is_file($tourDirectory . '/video/desktop.mp4');
+    // Video mobile bersifat opsional: runtime memakai video desktop dengan
+    // object-fit: cover bila berkas mobile belum tersedia.
+    $videoScore = $hasDesktopVideo ? 100 : ($hasMobileVideo ? 50 : 0);
+    if (!$hasDesktopVideo) $missing[] = 'video desktop belum tersedia';
 
     $hotspotTotal = count($audit['hotspots']);
     $linkDone = max(0, $hotspotTotal - (int) $audit['stats']['errors']);
@@ -456,6 +456,32 @@ function analyzeTourCompletion(string $root, string $id, array $tour, array $loc
         'large_assets' => $largeAssets,
         'search_text' => strtolower(implode(' ', $searchParts)),
     ];
+}
+
+/**
+ * Terjemahan yang terisi tapi kemungkinan salah (untuk filter sidebar "Terjemahan mencurigakan"):
+ * - welcome text sama persis dengan versi Indonesia (belum diterjemahkan);
+ * - teks Mandarin/Arab yang tidak memuat satu pun huruf Han/Arab.
+ * Nama lokasi yang sama dengan Indonesia tidak dihitung: nama tempat memang sering tidak diterjemahkan.
+ */
+function translationSuspects(array $location): array
+{
+    $source = $location['bahasa']['id'] ?? [];
+    $scripts = ['zh' => '/\p{Han}/u', 'cn' => '/\p{Han}/u', 'ar' => '/\p{Arabic}/u'];
+    $labels = cmsLanguages();
+    $found = [];
+    foreach ((array) ($location['bahasa'] ?? []) as $code => $texts) {
+        if ($code === 'id' || !is_array($texts)) continue;
+        $label = $labels[$code] ?? strtoupper((string) $code);
+        foreach (['lokasi' => 'nama lokasi', 'welcomeText' => 'welcome text'] as $field => $fieldLabel) {
+            $value = trim((string) ($texts[$field] ?? ''));
+            if ($value === '') continue;
+            $original = trim((string) ($source[$field] ?? ''));
+            if ($field === 'welcomeText' && $original !== '' && $value === $original) $found[] = $label . ': ' . $fieldLabel . ' masih sama dengan Indonesia';
+            elseif (isset($scripts[$code]) && !preg_match($scripts[$code], $value)) $found[] = $label . ': ' . $fieldLabel . ' tidak memakai aksara ' . $label;
+        }
+    }
+    return $found;
 }
 
 function tourCategory(string $id): string

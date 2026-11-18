@@ -507,6 +507,27 @@ function shScenes(array $st, string $slug): array
     return $out;
 }
 
+/** Hotspot bawaan Pano2VR untuk panduan penempatan pin; hanya dibaca, tidak mengubah export tur. */
+function shTourHotspots(string $tourDir): array
+{
+    $file = rtrim($tourDir, '/\\') . '/pano.xml';
+    if (!is_file($file)) return [];
+    $xml = (string) file_get_contents($file); $out = [];
+    if (!preg_match_all('~<panorama\b((?:[^>\"]|\"[^\"]*\")*)>(.*?)</panorama>~s', $xml, $nodes, PREG_SET_ORDER)) return [];
+    foreach ($nodes as $node) {
+        if (!preg_match('~\bid="([^"]+)"~', $node[1], $id)) continue;
+        $rows = [];
+        if (preg_match_all('~<hotspot\b((?:[^>\"]|\"[^\"]*\")*)/>~s', $node[2], $spots, PREG_SET_ORDER)) foreach ($spots as $spot) {
+            preg_match_all('~([\w:]+)="([^"]*)"~', $spot[1], $pairs, PREG_SET_ORDER);
+            $a = []; foreach ($pairs as $pair) $a[$pair[1]] = html_entity_decode($pair[2], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            if (!is_numeric($a['pan'] ?? null) || !is_numeric($a['tilt'] ?? null)) continue;
+            $rows[] = ['id' => (string) ($a['id'] ?? ''), 'pan' => (float) $a['pan'], 'tilt' => (float) $a['tilt'], 'title' => (string) ($a['title'] ?? 'Hotspot tur'), 'skin' => (string) ($a['skinid'] ?? '')];
+        }
+        $out[$id[1]] = $rows;
+    }
+    return $out;
+}
+
 function shVideos(array $project): array
 {
     $root = projectAssetsDirectory($project) . '/360/videos';
@@ -783,6 +804,9 @@ if (!defined('SMART_HUB_INCLUDE_ONLY')) {
                 $id = cmsCleanKey((string) ($payload['location'] ?? '')); if (!isset($tours[$id])) throw new RuntimeException('Lokasi tidak ditemukan.');
                 $f = shPinsFile($st, $id); $pins = is_file($f) ? (json_decode((string) file_get_contents($f), true) ?: []) : [];
                 $sc = shContentGet($st, $tours[$id])['scenes']; $ids = array_column($sc, 'id');
+                $hotspots = shTourHotspots((string) $tours[$id]['dir']);
+                foreach ($sc as &$scene) $scene['hotspots'] = $hotspots[$scene['id']] ?? [];
+                unset($scene);
                 $orphans = array_values(array_map(static fn($p) => (string) ($p['id'] ?? '?'), array_filter($pins, static fn($p) => !in_array($p['scene'] ?? '', $ids, true))));
                 cmsJsonResponse(['success' => true, 'pins' => $pins, 'scenes' => $sc, 'orphans' => $orphans]);
             case 'pins_save':
@@ -792,7 +816,7 @@ if (!defined('SMART_HUB_INCLUDE_ONLY')) {
                     $p = (array) shClean($p); $pid = (string) ($p['id'] ?? '');
                     if (!preg_match('~^[A-Za-z0-9_-]{1,60}$~', $pid) || isset($seen[$pid])) throw new RuntimeException('ID pin tidak valid atau ganda: ' . $pid);
                     if (!in_array($p['scene'] ?? '', $ids, true)) throw new RuntimeException('Pin ' . $pid . ': scene tidak ada di tur.');
-                    if (!in_array($p['type'] ?? '', ['info', 'fact', 'safety', 'service', 'photo'], true)) throw new RuntimeException('Pin ' . $pid . ': jenis tidak dikenal.');
+                    if (!in_array($p['type'] ?? '', ['info', 'fact', 'safety', 'service', 'photo', 'stamp', 'run', 'etiquette', 'seat', 'landmark', 'reel'], true)) throw new RuntimeException('Pin ' . $pid . ': jenis tidak dikenal.');
                     $p['u'] = max(0, min(720, (float) ($p['u'] ?? 360))); $p['v'] = max(0, min(450, (float) ($p['v'] ?? 225)));
                     if (($p['title'] ?? '') === '') throw new RuntimeException('Pin ' . $pid . ': judul wajib diisi.');
                     $seen[$pid] = 1; $out[] = $p;

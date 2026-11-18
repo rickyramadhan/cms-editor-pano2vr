@@ -61,6 +61,13 @@ try {
         $query = '//panorama[@id=' . xpathLiteral($nodeId) . ']//hotspot[@id=' . xpathLiteral($id) . ']';
         $element = $xpath->query($query)?->item(0);
         if (!$element instanceof DOMElement) continue;
+        if (($item['deleted'] ?? false) === true) {
+            // Hapus hotspot beserta spasi/indentasi sebelumnya agar XML tetap rapi.
+            $previous = $element->previousSibling;
+            if ($previous instanceof DOMText && trim($previous->nodeValue ?? '') === '') $previous->parentNode?->removeChild($previous);
+            $element->parentNode?->removeChild($element);
+            continue;
+        }
         foreach (['title', 'url', 'target'] as $field) $element->setAttribute($field, trim((string) ($item[$field] ?? '')));
     }
     $jsonNode = $xpath->query('//masternode/translations/json')?->item(0);

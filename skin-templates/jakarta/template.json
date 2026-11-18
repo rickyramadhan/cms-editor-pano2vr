@@ -1,5 +1,10 @@
 {
     "name": "Jakarta",
     "description": "Skin Jakarta (jakarta-skin.ggsk). Disalin dari monumen-nasional/skin.js.",
-    "preview": ""
+    "preview": "/jakarta/monumen-nasional/",
+    "loader": "../assets/main-loader/main-loader.js?v=20261113-oi-jakarta-font-9",
+    "remove": [
+        "3rdparty/leaflet/leaflet.css",
+        "3rdparty/leaflet/leaflet.js"
+    ]
 }

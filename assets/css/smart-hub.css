@@ -191,11 +191,14 @@ html, body, button, input, select, textarea { font-family: "Plus Jakarta Sans", 
 .sc-guide__cat { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 72px; padding: 13px 14px; border: 1px solid var(--sh-line); border-radius: 12px; background: #f8fafd; cursor: pointer; transition: border-color .16s, background .16s, box-shadow .16s; }
 .sc-guide__cat:hover { border-color: #bfd3ff; }
 .sc-guide__cat.is-on { border-color: #c7d7fe; background: var(--sh-accent-soft); box-shadow: inset 3px 0 0 var(--sh-accent); }
+.sc-guide__cat.is-auto { cursor: default; opacity: .72; }
+.sc-guide__cat.is-auto:hover { border-color: var(--sh-line); }
 .sc-guide__copy { display: grid; gap: 3px; min-width: 0; }
 .sc-guide__copy b { font-size: 13px; }
 .sc-guide__copy small { color: var(--sh-muted); font-size: 11px; }
 .sc-guide__switch { position: relative; width: 38px; height: 22px; flex: none; }
 .sc-guide__switch input { position: absolute; inset: 0; z-index: 1; width: 100% !important; height: 100% !important; opacity: 0; cursor: pointer; }
+.sc-guide__switch input:disabled { cursor: not-allowed; }
 .sc-guide__switch i { position: absolute; inset: 0; border-radius: 999px; background: #cbd3df; transition: background .16s; }
 .sc-guide__switch i::after { content: ''; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(15, 23, 42, .25); transition: transform .16s; }
 .sc-guide__switch input:checked + i { background: var(--sh-accent); }

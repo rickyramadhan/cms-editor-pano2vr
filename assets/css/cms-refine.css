@@ -540,3 +540,14 @@ input:not([type=checkbox]):not([type=radio]), select, textarea { border-color: #
   .pe-preview-dialog>footer { flex-wrap:wrap; }
   .pe-preview-hotspots { width:100%; }
 }
+
+/* Hotspot editor: hapus / batal hapus */
+.audit-editor .pano-edit-card header .pe-hs-delete,.audit-editor .pano-edit-card header .pe-hs-restore { flex:none;min-height:0;padding:4px 10px;border:1px solid #d7dde6;border-radius:999px;background:#fff;color:#4a5566;font:600 11px/1.3 var(--ui-font);cursor:pointer;box-shadow:none; }
+.audit-editor .pano-edit-card header .pe-hs-delete:hover { border-color:#9aa6b6;background:#f3f5f8;color:#1f2a37; }
+.audit-editor .pano-edit-card header .pe-hs-restore { display:none;border-color:#b9d3fb;color:#014E91;background:#eef5ff; }
+.audit-editor .pe-delete-badge { display:none;padding:3px 8px;border-radius:999px;color:#4a5566;background:#eceff3;font:700 10px/1.3 var(--ui-font);white-space:nowrap; }
+.audit-editor .pano-edit-card.is-deleted { border-style:dashed;border-color:#c5ccd6;background:#f7f8fa;box-shadow:none; }
+.audit-editor .pano-edit-card.is-deleted>*:not(header) { opacity:.45; }
+.audit-editor .pano-edit-card.is-deleted header strong { text-decoration:line-through;color:#6b7686; }
+.audit-editor .pano-edit-card.is-deleted .pe-delete-badge,.audit-editor .pano-edit-card.is-deleted header .pe-hs-restore { display:inline-block; }
+.audit-editor .pano-edit-card.is-deleted header .pe-hs-delete,.audit-editor .pano-edit-card.is-deleted .pe-dirty-badge,.audit-editor .pano-edit-card.is-deleted .pe-status { display:none; }

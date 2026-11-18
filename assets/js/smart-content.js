@@ -268,7 +268,19 @@
     if (!ST.sec || !sections.some((s) => s.id === ST.sec)) ST.sec = sections[0].id;
     let sec = sections.find((s) => s.id === ST.sec);
     const mark = () => { ST.dirty = true; saveBtn.disabled = false; saveBtn.classList.add('is-dirty'); saveBtn.textContent = 'Simpan konten'; box.querySelector('.sc-dirty-state')?.classList.add('is-dirty'); };
-    const guideHidden = () => new Set(Array.isArray(d.content.GUIDE?.hiddenCategories) ? d.content.GUIDE.hiddenCategories : []);
+    const guideServiceCounts = () => (d.content.SERVICES || []).reduce((out, row) => {
+      if (row?.cat) out[row.cat] = (out[row.cat] || 0) + 1;
+      return out;
+    }, {});
+    const guideAutoHidden = () => {
+      const counts = guideServiceCounts();
+      return new Set(schema.SVC_CATS.map(([id]) => id).filter((id) => !counts[id]));
+    };
+    const guideHidden = () => {
+      const hidden = new Set(Array.isArray(d.content.GUIDE?.hiddenCategories) ? d.content.GUIDE.hiddenCategories : []);
+      guideAutoHidden().forEach((id) => hidden.add(id));
+      return hidden;
+    };
     const countOf = (s) => s.guideCategories
       ? schema.SVC_CATS.filter(([id]) => !guideHidden().has(id)).length
       : (s.blocks || []).reduce((n, b) => { const v = get(d.content, b.path); return n + (Array.isArray(v) ? v.length : v && typeof v === 'object' ? (b.kind === 'dict' ? Object.keys(v).length : 1) : 0); }, 0);
@@ -281,12 +293,13 @@
     const panel = h('div', { class: 'sc-panel' });
     const guideEditor = () => {
       const hidden = guideHidden();
-      const serviceCounts = (d.content.SERVICES || []).reduce((out, row) => {
-        if (row?.cat) out[row.cat] = (out[row.cat] || 0) + 1;
-        return out;
-      }, {});
+      const serviceCounts = guideServiceCounts();
+      const autoHidden = guideAutoHidden();
       const store = (next) => {
-        const ids = schema.SVC_CATS.map(([id]) => id).filter((id) => next.has(id));
+        // Kategori kosong selalu nonaktif otomatis dan tidak perlu disimpan
+        // sebagai pilihan manual. Saat layanan pertama ditambahkan, kategori
+        // itu kembali mengikuti pilihan manual/default pengguna.
+        const ids = schema.SVC_CATS.map(([id]) => id).filter((id) => next.has(id) && !autoHidden.has(id));
         if (ids.length) (d.content.GUIDE ||= {}).hiddenCategories = ids;
         else {
           if (d.content.GUIDE) delete d.content.GUIDE.hiddenCategories;
@@ -306,14 +319,14 @@
             h('button', { type: 'button', class: 'translate', onclick: () => setAll(false) }, 'Nonaktifkan semua'),
             h('button', { type: 'button', class: 'translate', onclick: () => store(new Set()) }, 'Pulihkan default'))),
         h('div', { class: 'sc-guide__grid' }, schema.SVC_CATS.map(([id, label]) => {
-          const active = !hidden.has(id);
-          return h('label', { class: `sc-guide__cat${active ? ' is-on' : ''}` },
-            h('span', { class: 'sc-guide__copy' }, h('b', null, label), h('small', null, `${serviceCounts[id] || 0} layanan · ${active ? 'Tampil' : 'Disembunyikan'}`)),
-            h('span', { class: 'sc-guide__switch' }, h('input', { type: 'checkbox', checked: active, onchange: (e) => {
+          const empty = autoHidden.has(id), active = !hidden.has(id);
+          return h('label', { class: `sc-guide__cat${active ? ' is-on' : ''}${empty ? ' is-auto' : ''}` },
+            h('span', { class: 'sc-guide__copy' }, h('b', null, label), h('small', null, `${serviceCounts[id] || 0} layanan · ${empty ? 'Otomatis nonaktif' : active ? 'Tampil' : 'Disembunyikan'}`)),
+            h('span', { class: 'sc-guide__switch' }, h('input', { type: 'checkbox', checked: active, disabled: empty || null, onchange: (e) => {
               const next = guideHidden();
               if (e.target.checked) next.delete(id); else next.add(id);
               store(next);
-            }, 'aria-label': `${active ? 'Nonaktifkan' : 'Aktifkan'} ${label}` }), h('i', null)));
+            }, 'aria-label': empty ? `${label} otomatis nonaktif karena belum memiliki layanan` : `${active ? 'Nonaktifkan' : 'Aktifkan'} ${label}` }), h('i', null)));
         })));
     };
     const paint = () => {
@@ -365,29 +378,101 @@
     const { h, post, toast } = A();
     const wrap = h('div', { class: 'card sh-card' }, h('div', { class: 'sh-empty' }, 'Memuat pin…'));
     let j; try { j = await post('pins_get', { location: ST.loc }); } catch (e) { wrap.replaceChildren(h('div', { class: 'sh-warn' }, e.message)); return wrap; }
-    const pins = j.pins; const scenes = j.scenes; let dirty = false; const TYPES = [['info', 'Informasi'], ['fact', 'Fakta'], ['safety', 'Keselamatan'], ['service', 'Layanan'], ['photo', 'Spot foto']];
+    const pins = j.pins; const scenes = j.scenes; let dirty = false;
+    const TYPES = [['info', 'Informasi'], ['fact', 'Fakta'], ['safety', 'Keselamatan'], ['service', 'Layanan'], ['photo', 'Spot foto'], ['stamp', 'Stempel'], ['run', 'Rute'], ['etiquette', 'Etika'], ['seat', 'Mode duduk'], ['landmark', 'Landmark'], ['reel', 'Reel']];
+    const ptToUv = (scene, pan, tilt) => {
+      const fw = 100, cropW = 1.45 * fw, cropH = .90625 * fw;
+      const a = ((-Number(pan) % 360) + 360) % 360;
+      const face = Math.round(a / 90) % 4;
+      let delta = a - face * 90; if (delta > 180) delta -= 360; if (delta < -180) delta += 360;
+      const local = Math.tan(delta * Math.PI / 180) * fw / 2;
+      const xs = face * fw + fw / 2 + local;
+      const cx = (((-Number(scene?.start?.pan || 0)) % 360 + 360) % 360) / 90 * fw + fw / 2;
+      let dx = xs - cx; while (dx > 2 * fw) dx -= 4 * fw; while (dx < -2 * fw) dx += 4 * fw;
+      const u = 720 * (.5 + dx / cropW);
+      const hyp = Math.hypot(fw / 2, local);
+      const y = -Math.tan(Number(tilt) * Math.PI / 180) * hyp;
+      const v = 450 * (.5 + y / cropH);
+      return { u, v, visible: u >= 0 && u <= 720 && v >= 0 && v <= 450 };
+    };
+    const occupied = (scene, except) => [
+      ...(scene?.hotspots || []).map((x) => ({ ...ptToUv(scene, x.pan, x.tilt), title: x.title || 'Hotspot tur', kind: 'tour' })),
+      ...pins.filter((x) => x !== except && x.scene === scene?.id).map((x) => ({ u: +x.u || 360, v: +x.v || 225, title: x.title || 'Pin Smart Kit', kind: 'pin', visible: true })),
+    ].filter((x) => x.visible);
+    const nearest = (p, points) => points.reduce((best, x) => {
+      const distance = Math.hypot(p.u - x.u, p.v - x.v);
+      return !best || distance < best.distance ? { ...x, distance } : best;
+    }, null);
+    const bestPlace = (scene, except) => {
+      const points = occupied(scene, except); let best = { u: 360, v: 210, score: -1 };
+      for (let v = 65; v <= 385; v += 20) for (let u = 75; u <= 645; u += 24) {
+        const gap = points.length ? Math.min(...points.map((x) => Math.hypot(u - x.u, v - x.v))) : 999;
+        const edge = Math.min(u - 55, 665 - u, v - 45, 405 - v);
+        const score = Math.min(gap, edge * 1.35);
+        if (score > best.score) best = { u, v, score };
+      }
+      return best;
+    };
     const list = h('div', { class: 'sc-list' });
     const save = h('button', { type: 'button', class: 'save', onclick: async () => { save.disabled = true; try { const r = await post('pins_save', { location: ST.loc, pins }); dirty = false; toast(r.message); A().reloadPreview(); } catch (e) { toast(e.message, true); } finally { save.disabled = false; } } }, 'Simpan & bangun pin');
     const draw = () => {
       list.replaceChildren();
       pins.forEach((p, i) => {
         const sc = scenes.find((s) => s.id === p.scene);
-        const dot = h('i', { style: 'position:absolute;width:16px;height:16px;border-radius:50%;background:#1a5cff;border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.5);transform:translate(-50%,-50%);pointer-events:none' });
-        const place = () => { dot.style.left = (p.u / 720 * 100) + '%'; dot.style.top = (p.v / 450 * 100) + '%'; };
-        const stage = h('div', { style: 'position:relative;width:100%;max-width:420px;aspect-ratio:720/450;border-radius:10px;overflow:hidden;cursor:crosshair;background:#0001' }, h('img', { src: sc?.thumb || '', alt: '', style: 'width:100%;height:100%;object-fit:cover;display:block' }), dot);
-        stage.addEventListener('click', (e) => { const r = stage.getBoundingClientRect(); p.u = Math.round((e.clientX - r.left) / r.width * 720); p.v = Math.round((e.clientY - r.top) / r.height * 450); place(); dirty = true; mark2(); });
+        const points = occupied(sc, p);
+        const notice = h('p', { class: 'sc-hint', style: 'margin:8px 0 0' });
+        const markers = points.map((x) => h('i', { title: x.title, style: `position:absolute;left:${x.u / 720 * 100}%;top:${x.v / 450 * 100}%;width:${x.kind === 'tour' ? 13 : 10}px;height:${x.kind === 'tour' ? 13 : 10}px;border-radius:50%;background:${x.kind === 'tour' ? '#e0a000' : '#64748b'};border:2px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,.45);transform:translate(-50%,-50%);pointer-events:none` }));
+        const dot = h('i', { style: 'position:absolute;width:20px;height:20px;border-radius:50%;background:#014e91;border:3px solid #fff;box-shadow:0 2px 9px rgba(0,0,0,.55);transform:translate(-50%,-50%);pointer-events:none' });
+        const place = () => {
+          p.u = Math.max(0, Math.min(720, Math.round(+p.u || 360))); p.v = Math.max(0, Math.min(450, Math.round(+p.v || 225)));
+          dot.style.left = (p.u / 720 * 100) + '%'; dot.style.top = (p.v / 450 * 100) + '%';
+          const near = nearest(p, points);
+          notice.textContent = near && near.distance < 70 ? `Terlalu dekat (${Math.round(near.distance)} px) dengan ${near.title}. Geser lagi atau pilih Cari ruang kosong.` : near ? `Aman · jarak terdekat ${Math.round(near.distance)} px dari ${near.title}.` : 'Aman · tidak ada hotspot lain di area tampilan ini.';
+          notice.style.color = near && near.distance < 70 ? '#8a5a00' : '';
+        };
+        const stage = h('div', { style: 'position:relative;width:100%;max-width:560px;aspect-ratio:720/450;border-radius:10px;overflow:hidden;cursor:grab;touch-action:none;background:#0001;user-select:none' }, h('img', { src: sc?.thumb || '', alt: '', draggable: 'false', style: 'width:100%;height:100%;object-fit:cover;display:block;pointer-events:none' }), markers, dot);
+        let dragging = false;
+        const move = (e) => { const r = stage.getBoundingClientRect(); p.u = (e.clientX - r.left) / r.width * 720; p.v = (e.clientY - r.top) / r.height * 450; place(); };
+        stage.addEventListener('pointerdown', (e) => { dragging = true; stage.setPointerCapture(e.pointerId); stage.style.cursor = 'grabbing'; move(e); });
+        stage.addEventListener('pointermove', (e) => { if (dragging) move(e); });
+        stage.addEventListener('pointerup', (e) => { if (!dragging) return; dragging = false; stage.releasePointerCapture(e.pointerId); stage.style.cursor = 'grab'; dirty = true; mark2(); });
         place();
+        const autoPlace = h('button', { type: 'button', class: 'translate', onclick: () => { const best = bestPlace(sc, p); p.u = best.u; p.v = best.v; dirty = true; mark2(); draw(); } }, 'Cari ruang kosong');
         const f = (label, key, type = 'text') => h('label', { class: 'sc-field' }, h('span', null, label), type === 'textarea' ? h('textarea', { rows: 3, oninput: (e) => { p[key] = e.target.value; mark2(); } }, p[key] ?? '') : h('input', { value: p[key] ?? '', oninput: (e) => { p[key] = e.target.value; mark2(); } }));
         const sel = (label, key, opts, after) => h('label', { class: 'sc-field' }, h('span', null, label), h('select', { onchange: (e) => { p[key] = e.target.value; mark2(); after && after(); } }, opts.map(([v, t]) => h('option', { value: v, selected: v === p[key] ? true : null }, t))));
         const det = h('details', { class: 'sc-item' }, h('summary', null, h('span', { class: 'sc-item__t' }, `${p.title || '(tanpa judul)'} · ${sc?.name || p.scene}`), h('span', { class: 'sc-item__a' }, h('button', { type: 'button', class: 'danger', onclick: (e) => { e.preventDefault(); if (!confirm('Hapus pin ini?')) return; pins.splice(i, 1); dirty = true; mark2(); draw(); } }, 'Hapus'))),
-          h('div', { class: 'sc-item__b' }, h('p', { class: 'sc-hint' }, 'Klik pada gambar untuk menaruh pin tepat di objeknya.'), stage, h('div', { class: 'sc-grid' }, sel('Scene', 'scene', scenes.map((s) => [s.id, s.name]), draw), sel('Jenis', 'type', TYPES), f('ID pin', 'id'), f('Judul', 'title'), f('Keterangan singkat', 'sub'), f('Rujukan (ID fakta/layanan)', 'ref'), f('Deskripsi', 'desc', 'textarea'))));
+          h('div', { class: 'sc-item__b' }, h('div', { class: 'sc-toolbar' }, h('p', { class: 'sc-hint' }, 'Seret pin biru. Titik kuning = hotspot tur; titik abu-abu = pin Smart Kit lain.'), autoPlace), stage, notice, h('div', { class: 'sc-grid' }, sel('Scene', 'scene', scenes.map((s) => [s.id, s.name]), draw), sel('Jenis', 'type', TYPES), f('ID pin', 'id'), f('Judul', 'title'), f('Keterangan singkat', 'sub'), f('Rujukan (ID fakta/layanan)', 'ref'), f('Deskripsi', 'desc', 'textarea'))));
         list.append(det);
       });
       if (!pins.length) list.append(h('div', { class: 'sh-empty' }, 'Belum ada pin. Tekan "＋ Tambah pin".'));
     };
     const mark2 = () => { save.classList.add('is-dirty'); window.__shPinsDirty = true; };
+    const spreadFacts = () => {
+      const facts = Array.isArray(d.content.FACTS) ? d.content.FACTS : [];
+      if (!facts.length || !scenes.length) return toast('Belum ada fakta atau scene yang dapat disebar.', true);
+      const byRef = new Map(pins.filter((p) => p.type === 'fact' && p.ref).map((p) => [p.ref, p]));
+      const ids = new Set(pins.map((p) => p.id)); let serial = 1;
+      const factPins = facts.map((fact) => {
+        let pin = byRef.get(fact.id);
+        if (!pin) {
+          let id; do { id = `pin-${ST.loc}-fact-${serial++}`; } while (ids.has(id)); ids.add(id);
+          pin = { id, type: 'fact', scene: scenes[0].id, u: 360, v: 225, title: 'Fakta menarik', icon: 'bulb', ref: fact.id };
+          pins.push(pin); byRef.set(fact.id, pin);
+        }
+        pin.type = 'fact'; pin.icon = pin.icon || 'bulb'; pin.title = pin.title || 'Fakta menarik';
+        return pin;
+      });
+      factPins.forEach((pin, i) => {
+        const scene = scenes[Math.min(scenes.length - 1, Math.floor(i * scenes.length / factPins.length))];
+        pin.scene = scene.id;
+        const best = bestPlace(scene, pin); pin.u = best.u; pin.v = best.v;
+      });
+      dirty = true; mark2(); draw();
+      toast(`${factPins.length} fakta disebar ke ${new Set(factPins.map((p) => p.scene)).size} scene. Tinjau posisi, lalu simpan.`);
+    };
     const add = h('button', { type: 'button', class: 'translate', onclick: () => { const n = pins.length + 1; pins.push({ id: 'pin-' + ST.loc + '-' + n, type: 'info', scene: scenes[0]?.id, u: 360, v: 225, title: '', icon: 'info' }); mark2(); draw(); list.lastElementChild?.setAttribute('open', ''); } }, '＋ Tambah pin');
-    wrap.replaceChildren(j.orphans.length ? h('div', { class: 'sh-warn' }, 'Pin yatim (scene tidak ada lagi di tur, mungkin akibat export ulang): ' + j.orphans.join(', ') + '. Pindahkan ke scene yang benar atau hapus.') : null, h('div', { class: 'sc-toolbar' }, add, save), list);
+    const spread = h('button', { type: 'button', class: 'translate', onclick: spreadFacts }, 'Sebar fakta otomatis');
+    wrap.replaceChildren(j.orphans.length ? h('div', { class: 'sh-warn' }, 'Pin yatim (scene tidak ada lagi di tur, mungkin akibat export ulang): ' + j.orphans.join(', ') + '. Pindahkan ke scene yang benar atau hapus.') : null, h('div', { class: 'sc-toolbar' }, add, spread, save), list);
     draw();
     return wrap;
   }

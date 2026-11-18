@@ -51,18 +51,54 @@
             <div class="sidebar-title"><div><h2>Lokasi</h2><small><?= count($detectedTours) ?> tur terdeteksi</small></div><a href="?tab=lokasi&lokasi=baru" class="add">＋ Baru</a></div>
             <div class="sidebar-tools">
                 <input type="search" id="locationSearch" placeholder="Cari lokasi…" aria-label="Cari lokasi">
+                <?php if ($sidebarTourStatus !== []): ?>
+                <div class="sidebar-sort">
+                    <select id="locationSort" aria-label="Urutkan lokasi">
+                        <option value="default">Urutan bawaan</option>
+                        <option value="score-asc">Persen terendah</option>
+                        <option value="score-desc">Persen tertinggi</option>
+                        <option value="name">Nama A–Z</option>
+                    </select>
+                    <select id="locationFilter" aria-label="Saring lokasi">
+                        <option value="all">Semua lokasi</option>
+                        <option value="complete">Sudah lengkap</option>
+                        <option value="incomplete">Belum lengkap</option>
+                        <option value="video">Video belum lengkap</option>
+                        <option value="audio">Audio belum lengkap</option>
+                        <option value="welcome">Welcome text belum lengkap</option>
+                        <option value="translations">Terjemahan belum lengkap</option>
+                        <option value="suspect">Terjemahan mencurigakan</option>
+                        <option value="links">Link hotspot kosong</option>
+                        <option value="objects">Object Informasi belum lengkap</option>
+                        <option value="unsaved">Belum disimpan</option>
+                    </select>
+                </div>
+                <?php endif; ?>
             </div>
             <nav class="sidebar-location-list" id="sidebarLocationList">
-                <?php foreach ($sidebarLocations as $id => $item): $isUnsaved = isset($detectedTours[$id]) && !isset($database[$id]); $tourStatus = $sidebarTourStatus[$id] ?? null; $isComplete = $tourStatus !== null && $tourStatus['score'] === 100; $locationName = $item['bahasa']['id']['lokasi'] ?? humanizeLocationId($id); ?>
-                    <a class="location <?= $id === $selectedId ? 'active' : '' ?> <?= $isUnsaved ? 'unsaved' : '' ?> <?= $isComplete ? 'complete' : '' ?>" data-location-category="<?= e(tourCategory($id)) ?>" data-location-search="<?= e(strtolower($locationName . ' ' . $id)) ?>" href="?tab=<?= e($activeTab) ?>&lokasi=<?= e($id) ?>">
-                        <span class="location-title"><strong><?= e($locationName) ?></strong><?php if ($isUnsaved): ?><i>Belum disimpan</i><?php elseif ($isComplete): ?><i class="complete-badge" title="Semua komponen lengkap">✓ Lengkap</i><?php elseif ($tourStatus !== null): ?><i class="progress-badge"><?= e($tourStatus['score']) ?>%</i><?php endif; ?></span>
+                <?php foreach ($sidebarLocations as $id => $item): $isUnsaved = isset($detectedTours[$id]) && !isset($database[$id]); $tourStatus = $sidebarTourStatus[$id] ?? null; $isComplete = $tourStatus !== null && $tourStatus['score'] === 100; $locationName = $item['bahasa']['id']['lokasi'] ?? humanizeLocationId($id);
+                    // data untuk urut/saring di sidebar (cms-shell.js); skor komponen null = komponen tidak berlaku
+                    $statusAttrs = '';
+                    if ($tourStatus !== null) {
+                        $suspects = translationSuspects($database[$id] ?? []);
+                        $statusAttrs .= ' data-score="' . (int) $tourStatus['score'] . '" data-suspect="' . count($suspects) . '"';
+                        foreach (['video', 'audio', 'welcome', 'translations', 'links', 'objects'] as $part) {
+                            $value = $tourStatus['scores'][$part] ?? null;
+                            if ($value !== null) $statusAttrs .= ' data-' . $part . '="' . (int) $value . '"';
+                        }
+                        $issues = array_merge($tourStatus['missing'], $suspects);
+                        $statusAttrs .= ' data-issues="' . e(implode("\n", $issues)) . '"';
+                    }
+                    if ($isUnsaved) $statusAttrs .= ' data-unsaved="1"'; ?>
+                    <a class="location <?= $id === $selectedId ? 'active' : '' ?> <?= $isUnsaved ? 'unsaved' : '' ?> <?= $isComplete ? 'complete' : '' ?>" data-location-category="<?= e(tourCategory($id)) ?>" data-location-search="<?= e(strtolower($locationName . ' ' . $id)) ?>"<?= $statusAttrs ?> href="?tab=<?= e($activeTab) ?>&lokasi=<?= e($id) ?>">
+                        <span class="location-title"><strong><?= e($locationName) ?></strong><?php if ($isUnsaved): ?><i>Belum disimpan</i><?php elseif ($isComplete): ?><i class="complete-badge" title="Semua komponen lengkap">✓ Lengkap</i><?php elseif ($tourStatus !== null): ?><i class="progress-badge" title="<?= e(implode("\n", $issues ?? [])) ?>"><?= e($tourStatus['score']) ?>%</i><?php endif; ?></span>
                         <small><?= e($id) ?><?= isset($detectedTours[$id]) ? ' · ' . e($detectedTours[$id]['path']) : '' ?></small>
                     </a>
                 <?php endforeach; ?>
                 <div class="sidebar-empty" id="sidebarLocationEmpty" hidden>Tidak ada lokasi yang cocok.</div>
             </nav>
         </aside>
-        <script src="assets/js/cms-shell.js"></script>
+        <script src="assets/js/cms-shell.js?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/js/cms-shell.js')) ?>"></script>
         <div class="location-workspace">
             <div class="location-toolbar">
             <nav class="location-tabs" aria-label="Bagian pengelolaan lokasi">
@@ -452,7 +488,7 @@
         </section>
     <?php elseif ($activeTab === 'video'): ?>
         <section class="card section video-editor">
-            <div class="section-heading"><div><span class="step">VD</span><h2>Video Mobile & Desktop</h2></div><p>Upload baru akan menimpa video lama.</p></div>
+            <div class="section-heading"><div><span class="step">VD</span><h2>Video Mobile & Desktop</h2></div><p>Upload baru akan menimpa video lama. Jika video mobile kosong, tur memakai video desktop dan memotongnya otomatis agar memenuhi layar ponsel.</p></div>
             <select id="videoLocation" hidden><option value="<?= e($selectedId) ?>" data-path="<?= e($detectedTours[$selectedId]['path'] ?? '') ?>" selected><?= e($selectedId) ?></option></select>
             <div class="video-grid">
                 <article class="video-card">
@@ -525,15 +561,29 @@
                         </summary>
                         <div class="pano-editor-grid">
                         <?php if ($sourceHotspots === []): ?><div class="pano-group-empty">Panorama ini belum memiliki hotspot.</div><?php endif; ?>
-                        <?php foreach ($sourceHotspots as $hotspot): $isEst = stripos($hotspot['title'], 'est') !== false; $targetNodeId = trim((string) $hotspot['url'], '{}'); $targetPanorama = null; foreach ($selectedPanoramas as $candidatePanorama) if (strcasecmp($candidatePanorama['nodeId'], $targetNodeId) === 0 || ($candidatePanorama['customNodeId'] !== '' && strcasecmp($candidatePanorama['customNodeId'], $targetNodeId) === 0)) { $targetPanorama = $candidatePanorama; break; } $isPanoTarget = $hotspot['url'] === '' || $targetPanorama !== null; ?>
-                            <article class="pano-edit-card <?= $hotspot['url'] === '' ? 'needs-attention' : '' ?> <?= $isEst ? 'est-hotspot' : '' ?>" data-node-id="<?= e($hotspot['nodeId']) ?>" data-hotspot-id="<?= e($hotspot['id']) ?>">
-                                <header><div><strong data-hs-heading><?= e($hotspot['title'] !== '' ? $hotspot['title'] : $hotspot['id']) ?></strong><small title="Skin: <?= e($hotspot['skinId']) ?>">ID <?= e($hotspot['id']) ?></small></div><span class="pe-status" data-hs-status <?= $hotspot['url'] === '' ? '' : 'hidden' ?>>Belum ada tujuan</span><span class="pe-dirty-badge">Diubah</span></header>
+                        <?php foreach ($sourceHotspots as $hotspot):
+                            // Jenis tujuan mengikuti skin hotspot:
+                            //  - box_ui_location_* (kotak lokasi/kategori) → URL destinasi
+                            //  - 360_video_experience_* → video 360 (window.GV360.open)
+                            //  - selain itu (hotspot darat, pintu, drone, keluar 360, node) → panorama
+                            $skinKey = strtolower((string) $hotspot['skinId']);
+                            $hsKind = str_contains($skinKey, '360_video_experience') ? 'video360' : (str_starts_with($skinKey, 'box_ui_location') ? 'url' : 'pano');
+                            if ($hsKind === 'pano' && $skinKey === '' && stripos($hotspot['title'], 'est') !== false) $hsKind = 'url';
+                            $isEst = $hsKind === 'url';
+                            $targetNodeId = trim((string) $hotspot['url'], '{}'); $targetPanorama = null; foreach ($selectedPanoramas as $candidatePanorama) if (strcasecmp($candidatePanorama['nodeId'], $targetNodeId) === 0 || ($candidatePanorama['customNodeId'] !== '' && strcasecmp($candidatePanorama['customNodeId'], $targetNodeId) === 0)) { $targetPanorama = $candidatePanorama; break; }
+                            $isPanoTarget = $hotspot['url'] === '' || $targetPanorama !== null;
+                            $kindLabel = ['pano' => 'Ke panorama', 'url' => 'Ke URL', 'video360' => 'Video 360'][$hsKind]; ?>
+                            <article class="pano-edit-card <?= $hotspot['url'] === '' ? 'needs-attention' : '' ?> <?= $isEst ? 'est-hotspot' : '' ?>" data-node-id="<?= e($hotspot['nodeId']) ?>" data-hotspot-id="<?= e($hotspot['id']) ?>" data-hs-kind="<?= e($hsKind) ?>">
+                                <header><div><strong data-hs-heading><?= e($hotspot['title'] !== '' ? $hotspot['title'] : $hotspot['id']) ?></strong><small title="Skin: <?= e($hotspot['skinId']) ?>">ID <?= e($hotspot['id']) ?> · <?= e($kindLabel) ?></small></div><span class="pe-status" data-hs-status <?= $hotspot['url'] === '' ? '' : 'hidden' ?>>Belum ada tujuan</span><span class="pe-dirty-badge">Diubah</span><span class="pe-delete-badge">Akan dihapus</span><button type="button" class="pe-hs-delete" data-hs-delete title="Hapus hotspot ini dari pano.xml" aria-label="Hapus hotspot <?= e($hotspot['id']) ?>">Hapus</button><button type="button" class="pe-hs-restore" data-hs-restore>Batal hapus</button></header>
+                                <input type="hidden" data-pano-field="deleted" value="">
                                 <label class="pe-field"><span>Judul hotspot</span><input data-pano-field="title" value="<?= e($hotspot['title']) ?>" placeholder="mis. Menuju area parkir"></label>
-                                <?php if ($isEst): ?>
-                                <label class="pe-field"><span>Destinasi EST</span><select data-pano-field="url" data-est-url><option value="">— Pilih destinasi —</option><?php foreach (EST_DESTINATIONS as $slug): $url = 'https://jakarta.govirtual.id/' . $slug; ?><option value="<?= e($url) ?>" <?= $hotspot['url'] === $url ? 'selected' : '' ?>><?= e(mb_convert_case(str_replace('-', ' ', $slug), MB_CASE_TITLE, 'UTF-8')) ?></option><?php endforeach; ?></select></label>
+                                <?php if ($hsKind === 'url'): $estUrls = array_map(static fn(string $slug): string => 'https://jakarta.govirtual.id/' . $slug, EST_DESTINATIONS); ?>
+                                <label class="pe-field"><span>URL tujuan (destinasi)</span><select data-pano-field="url" data-est-url><option value="">— Pilih destinasi —</option><?php if ($hotspot['url'] !== '' && !in_array($hotspot['url'], $estUrls, true)): ?><option value="<?= e($hotspot['url']) ?>" selected><?= e($hotspot['url']) ?></option><?php endif; ?><?php foreach (EST_DESTINATIONS as $slug): $url = 'https://jakarta.govirtual.id/' . $slug; ?><option value="<?= e($url) ?>" <?= $hotspot['url'] === $url ? 'selected' : '' ?>><?= e(mb_convert_case(str_replace('-', ' ', $slug), MB_CASE_TITLE, 'UTF-8')) ?></option><?php endforeach; ?></select></label>
+                                <?php elseif ($hsKind === 'video360'): $videoUrls = array_column($video360Items, 'code'); ?>
+                                <label class="pe-field"><span>Video 360 tujuan</span><select data-pano-field="url" data-video360-url><option value="">— Pilih video 360 —</option><?php if ($hotspot['url'] !== '' && !in_array($hotspot['url'], $videoUrls, true)): ?><option value="<?= e($hotspot['url']) ?>" selected>Lainnya: <?= e($hotspot['url']) ?></option><?php endif; ?><?php foreach ($video360Items as $videoId => $videoItem): ?><option value="<?= e($videoItem['code']) ?>" <?= $hotspot['url'] === $videoItem['code'] ? 'selected' : '' ?>><?= e($videoId) ?><?= $videoItem['ready'] ? '' : ' (belum di-encode)' ?></option><?php endforeach; ?></select><small class="pe-hint"><?= $video360Items === [] ? 'Belum ada video 360. Tambahkan dulu di tab 360 Video.' : 'Daftar diambil dari tab 360 Video.' ?></small></label>
                                 <?php else: ?>
                                 <div class="pe-field pe-target" data-hs-target>
-                                    <div class="pe-target-head"><span>Tujuan</span><div class="pe-seg" role="group" aria-label="Jenis tujuan"><button type="button" data-hs-mode="pano" class="<?= $isPanoTarget ? 'active' : '' ?>" aria-pressed="<?= $isPanoTarget ? 'true' : 'false' ?>">Panorama</button><button type="button" data-hs-mode="url" class="<?= $isPanoTarget ? '' : 'active' ?>" aria-pressed="<?= $isPanoTarget ? 'false' : 'true' ?>">URL</button></div></div>
+                                    <div class="pe-target-head"><span>Panorama tujuan</span><div class="pe-seg" role="group" aria-label="Jenis tujuan" <?= $isPanoTarget ? 'hidden' : '' ?> title="Tujuan lama bukan panorama; pilih Panorama untuk memperbaikinya"><button type="button" data-hs-mode="pano" class="<?= $isPanoTarget ? 'active' : '' ?>" aria-pressed="<?= $isPanoTarget ? 'true' : 'false' ?>">Panorama</button><button type="button" data-hs-mode="url" class="<?= $isPanoTarget ? '' : 'active' ?>" aria-pressed="<?= $isPanoTarget ? 'false' : 'true' ?>">URL</button></div></div>
                                     <input type="hidden" data-pano-field="url" value="<?= e($hotspot['url']) ?>">
                                     <div class="pe-target-pano" data-hs-pane="pano" <?= $isPanoTarget ? '' : 'hidden' ?>>
                                         <button type="button" class="pe-target-btn" data-hs-open-picker aria-haspopup="dialog"><span class="pe-target-thumb" data-hs-thumb><?php if ($targetPanorama && $targetPanorama['thumbnail'] !== ''): ?><img src="<?= e($targetPanorama['thumbnail']) ?>" alt=""><?php else: ?><i><?= $targetPanorama ? '360°' : '＋' ?></i><?php endif; ?></span><span class="pe-target-label"><strong data-hs-target-title><?= e($targetPanorama ? ($targetPanorama['title'] !== '' ? $targetPanorama['title'] : 'Panorama ' . $targetPanorama['nodeId']) : 'Pilih panorama tujuan') ?></strong><small data-hs-target-node><?= e($targetPanorama ? $targetPanorama['nodeId'] : 'Klik untuk memilih dari daftar') ?></small></span><span class="pe-target-change"><?= $targetPanorama ? 'Ganti' : 'Pilih' ?></span></button>
@@ -542,7 +592,11 @@
                                     <div class="pe-target-url" data-hs-pane="url" <?= $isPanoTarget ? 'hidden' : '' ?>><input data-hs-url value="<?= e($isPanoTarget ? '' : $hotspot['url']) ?>" placeholder="https://… atau {nodeID}" spellcheck="false"></div>
                                 </div>
                                 <?php endif; ?>
+                                <?php if ($hsKind === 'pano'): ?>
                                 <label class="pe-field"><span>Arah pandang saat tiba <em>opsional</em></span><input data-pano-field="target" value="<?= e($hotspot['target']) ?>" placeholder="pan/tilt/fov, mis. 35/-1/90" spellcheck="false"><small class="pe-hint">Kosongkan untuk memakai arah bawaan panorama tujuan.</small></label>
+                                <?php else: ?>
+                                <input type="hidden" data-pano-field="target" value="<?= e($hotspot['target']) ?>">
+                                <?php endif; ?>
                             </article>
                         <?php endforeach; ?>
                         </div>
@@ -1075,7 +1129,7 @@ if (panoSaveButton) {
     // --- Status bar & penanda perubahan
     let saving = false, dirtyCount = 0, hideTimer = 0, dirtyFrame = 0;
     const flash = (message, tone = '') => { clearTimeout(hideTimer); panoProgress.textContent = message; saveBar.dataset.tone = tone; saveBar.classList.add('visible'); };
-    const readHotspot = card => ({nodeId:card.dataset.nodeId,id:card.dataset.hotspotId,title:card.querySelector('[data-pano-field="title"]').value,url:card.querySelector('[data-pano-field="url"]').value,target:card.querySelector('[data-pano-field="target"]').value});
+    const readHotspot = card => ({nodeId:card.dataset.nodeId,id:card.dataset.hotspotId,deleted:card.querySelector('[data-pano-field="deleted"]')?.value === '1',title:card.querySelector('[data-pano-field="title"]').value,url:card.querySelector('[data-pano-field="url"]').value,target:card.querySelector('[data-pano-field="target"]').value});
     const readPanorama = card => ({nodeId:card.dataset.panoramaNodeId,title:card.querySelector('[data-panorama-field="title"]').value,customNodeId:card.querySelector('[data-panorama-field="customNodeId"]').value,latitude:card.querySelector('[data-panorama-field="latitude"]').value,longitude:card.querySelector('[data-panorama-field="longitude"]').value});
     const readTranslation = row => Array.from(row.querySelectorAll('[data-translation-index]')).map(field => field.value);
     const itemKey = el => el.dataset.hotspotId !== undefined ? 'h:'+el.dataset.nodeId+'/'+el.dataset.hotspotId : el.dataset.panoramaNodeId !== undefined ? 'p:'+el.dataset.panoramaNodeId : 't:'+el.dataset.source;
@@ -1099,7 +1153,7 @@ if (panoSaveButton) {
 
     // --- Hotspot: status tujuan & jumlah per grup
     const refreshHotspotState = card => {
-        const missing = card.querySelector('[data-pano-field="url"]').value.trim() === '';
+        const missing = !card.classList.contains('is-deleted') && card.querySelector('[data-pano-field="url"]').value.trim() === '';
         card.classList.toggle('needs-attention', missing);
         const status = card.querySelector('[data-hs-status]'); if (status) status.hidden = !missing;
     };
@@ -1176,7 +1230,7 @@ if (panoSaveButton) {
     });
     hotspotEditor.addEventListener('change', event => {
         if (event.target.matches('[data-hs-target-select]')) { const target = event.target.closest('[data-hs-target]'); setTargetUrl(target, event.target.value ? '{'+event.target.value+'}' : ''); updateTargetThumb(target); }
-        if (event.target.matches('[data-est-url]')) { refreshHotspotState(event.target.closest('.pano-edit-card')); refreshGroupCounts(); }
+        if (event.target.matches('[data-est-url], [data-video360-url]')) { refreshHotspotState(event.target.closest('.pano-edit-card')); refreshGroupCounts(); }
     });
     hotspotEditor.addEventListener('input', event => {
         if (event.target.matches('[data-hs-url]')) setTargetUrl(event.target.closest('[data-hs-target]'), event.target.value.trim());
@@ -1186,6 +1240,30 @@ if (panoSaveButton) {
             if (/\best\.?\b/i.test(event.target.value)) { const url=card.querySelector('[data-est-url]');if(url&&!url.value.trim()){const match=findEstDestination(event.target.value);if(match){url.value=match;refreshHotspotState(card);refreshGroupCounts();}} }
         }
     });
+
+    // --- Hotspot: tandai hapus / batal hapus (baru benar-benar dihapus saat Simpan)
+    const setHotspotDeleted = (card, deleted) => {
+        card.querySelector('[data-pano-field="deleted"]').value = deleted ? '1' : '';
+        card.classList.toggle('is-deleted', deleted);
+        card.querySelectorAll('input:not([type="hidden"]), select, textarea, .pe-target-btn, [data-hs-mode]').forEach(field => { field.disabled = deleted; });
+        refreshHotspotState(card); refreshGroupCounts(); scheduleDirty();
+    };
+    hotspotEditor.addEventListener('click', event => {
+        const del = event.target.closest('[data-hs-delete]'), restore = event.target.closest('[data-hs-restore]');
+        if (del) { const card = del.closest('.pano-edit-card'); if (confirm('Hapus hotspot “' + card.querySelector('[data-hs-heading]').textContent + '” (' + card.dataset.hotspotId + ')? Hotspot benar-benar dihapus dari pano.xml setelah Anda menekan Simpan.')) setHotspotDeleted(card, true); }
+        if (restore) setHotspotDeleted(restore.closest('.pano-edit-card'), false);
+    });
+    const removeDeletedHotspots = () => {
+        document.querySelectorAll('.pano-edit-card.is-deleted').forEach(card => {
+            const group = card.closest('.pano-hotspot-group'); card.remove();
+            if (!group) return;
+            const left = group.querySelectorAll('.pano-edit-card').length, count = group.querySelector('.pe-count');
+            if (count) count.textContent = left + ' hotspot';
+            if (left === 0) { group.dataset.empty = ''; group.querySelector('.pano-editor-grid').insertAdjacentHTML('afterbegin', '<div class="pano-group-empty">Panorama ini belum memiliki hotspot.</div>'); }
+        });
+        const tabCount = document.querySelector('[data-pano-editor-tab="hotspot"] span'); if (tabCount) tabCount.textContent = hotspotCards().length;
+        refreshGroupCounts();
+    };
 
     // --- Hotspot: pencarian, filter, buka/tutup semua
     let hotspotFilter = 'all';
@@ -1490,7 +1568,7 @@ if (panoSaveButton) {
             const response = await fetch('save-pano.php', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({csrf:<?= json_encode($_SESSION['cms_csrf']) ?>, id_lokasi:<?= json_encode($auditId) ?>, hotspots, translations, panoramas})});
             const result = await response.json();
             if (!response.ok || !result.success) throw new Error(result.message || 'Gagal menyimpan.');
-            takeBaseline(); saving = false; refreshDirty();
+            removeDeletedHotspots(); takeBaseline(); saving = false; refreshDirty();
             flash('✓ ' + result.message, 'success');
             hideTimer = setTimeout(() => { if (!dirtyCount && !saving) saveBar.classList.remove('visible'); }, 3500);
         } catch (error) {
@@ -1562,7 +1640,10 @@ if (translateButton) {
                 translateButton.textContent = 'Menerjemahkan ke ' + fieldCode.toUpperCase() + '…';
                 for (const [field, text] of [['lokasi', sourceLocation], ['welcomeText', sourceWelcome]]) {
                     if (!text) continue;
-                    document.querySelector('[name="' + field + '[' + fieldCode + ']"]').value = await translateText(text, apiCode);
+                    const target = document.querySelector('[name="' + field + '[' + fieldCode + ']"]');
+                    target.value = await translateText(text, apiCode);
+                    // nilai yang diisi lewat kode tidak memicu event: beri tahu penjaga perubahan agar tombol Simpan aktif
+                    target.dispatchEvent(new Event('input', { bubbles: true }));
                 }
             }
             document.querySelector('[data-tab="en"]').click();
@@ -1595,12 +1676,26 @@ document.querySelectorAll('.panorama-option').forEach(function (option) {
                 if(!player){setTimeout(wait,150);return;}
                 try{
                     const frameDocument=droneViewFrame.contentDocument;
+                    // Mode atur arah: hanya panorama yang tampil. Semua lapisan di atasnya (skin Jakarta, Smart Kit, onboarding,
+                    // pin) disembunyikan lewat CSS di dalam iframe. PENTING: elemen kontrol mouse Pano2VR (player.control) adalah
+                    // div skin/hotspot itu sendiri, jadi div-nya harus tetap tampil dan menerima mouse; yang disembunyikan hanya isinya.
+                    const control=player.control||player.divSkin||null;
+                    if(control&&!control.id)control.id='cms-pano-control';
+                    const controlSel=control?'#'+(control.id||'hotspots'):'#hotspots';
+                    if(frameDocument&&!frameDocument.getElementById('cms-target-view-style')){
+                        const style=frameDocument.createElement('style');style.id='cms-target-view-style';
+                        style.textContent='html>:not(head):not(body),body>:not(#container):not(script):not(link):not(style):not(noscript){display:none!important}'
+                            +'#container #smt-pinlayer,#container #hotspottext{display:none!important}'
+                            +controlSel+'>*{display:none!important}'
+                            +controlSel+'{display:block!important;visibility:visible!important;pointer-events:auto!important;cursor:grab}'
+                            +controlSel+':active{cursor:grabbing}';
+                        (frameDocument.head||frameDocument.documentElement).appendChild(style);
+                    }
                     const removeFrameOverlays=()=>{frameDocument?.getElementById('jakarta-skin-overlay')?.remove();frameDocument?.getElementById('jakarta-skin-boot-cover')?.remove();};
                     removeFrameOverlays();
                     if(frameDocument?.documentElement)new MutationObserver(removeFrameOverlays).observe(frameDocument.documentElement,{childList:true,subtree:true});
-                    const cover=frameDocument?.getElementById('jakarta-skin-boot-cover');if(cover)cover.remove();
-                    if(player.divSkin){player.divSkin.style.display='none';player.divSkin.style.pointerEvents='none';}
-                    if(droneViewFrame.contentWindow?.skin?.divSkin){droneViewFrame.contentWindow.skin.divSkin.style.display='none';}
+                    try{player.stopAutorotate?.();}catch(_){}
+                    try{player.setLockedMouse?.(false);player.setLockedWheel?.(false);}catch(_){}
                     player.openNext('{'+pendingDroneNode+'}');
                     player.setLocked?.(false);
                 }catch(_){}
@@ -1620,7 +1715,7 @@ function closePanoramaPicker() {
     panoramaModal.classList.remove('open'); panoramaModal.setAttribute('aria-hidden', 'true'); document.body.classList.remove('modal-open');
 }
 document.getElementById('droneViewBack')?.addEventListener('click',()=>{cancelAnimationFrame(droneViewTimer);droneViewFrame.src='';droneViewPicker.hidden=true;panoramaGrid.hidden=false;document.getElementById('panoramaTitle').textContent='Pilih panorama drone';});
-document.getElementById('saveDroneView')?.addEventListener('click',()=>{const value=droneViewValues();document.getElementById('droneInput').value=pendingDroneNode;document.getElementById('dronePan').value=value.pan.toFixed(2);document.getElementById('droneTilt').value=value.tilt.toFixed(2);document.getElementById('droneFov').value=value.fov.toFixed(2);document.getElementById('droneViewSummary').textContent='Target view: pan '+value.pan.toFixed(1)+'° · tilt '+value.tilt.toFixed(1)+'° · FoV '+value.fov.toFixed(1)+'°';closePanoramaPicker();});
+document.getElementById('saveDroneView')?.addEventListener('click',()=>{const value=droneViewValues();document.getElementById('droneInput').value=pendingDroneNode;document.getElementById('dronePan').value=value.pan.toFixed(2);document.getElementById('droneTilt').value=value.tilt.toFixed(2);document.getElementById('droneFov').value=value.fov.toFixed(2);document.getElementById('droneViewSummary').textContent='Target view: pan '+value.pan.toFixed(1)+'° · tilt '+value.tilt.toFixed(1)+'° · FoV '+value.fov.toFixed(1)+'°';document.getElementById('droneInput').dispatchEvent(new Event('input',{bubbles:true}));closePanoramaPicker();});
 document.getElementById('openPanoramaPicker')?.addEventListener('click', openPanoramaPicker);
 document.querySelectorAll('[data-close-panorama]').forEach(function (element) { element.addEventListener('click', closePanoramaPicker); });
 document.addEventListener('keydown', function (event) { if (event.key === 'Escape') closePanoramaPicker(); });
