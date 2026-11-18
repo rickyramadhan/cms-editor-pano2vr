@@ -192,7 +192,7 @@
       } else if (a.type === 'video360') {
         box.append(field('Video 360', S.videos.length ? select([['', '— pilih —'], ...S.videos.map((v) => [v, v])], a.video, (v) => set('video', v)) : input(a.video, (v) => set('video', v)), 'Dari folder assets/360/videos project (diunggah di menu Video 360).'));
       } else if (a.type === 'jali') {
-        box.append(field('Pertanyaan otomatis (opsional)', input(a.q, (v) => set('q', v), { placeholder: 'Kosongkan = buka menu Jali' })));
+        box.append(field('Pertanyaan otomatis (opsional)', input(a.q, (v) => set('q', v), { placeholder: 'Kosongkan = buka menu pemandu' })));
       } else if (a.type === 'bahasa') {
         box.append(field('Kode bahasa', input(a.lang, (v) => set('lang', v), { placeholder: 'id / en / zh / ar' })));
       } else if (a.type === 'ui') {
@@ -333,7 +333,7 @@
           field('Logo', h('div', { class: 'sh-actions', style: 'justify-content:flex-start' }, h('button', { type: 'button', class: 'translate', onclick: () => file.click() }, brand.logo ? 'Ganti logo' : 'Unggah logo'), brand.logo ? h('button', { type: 'button', class: 'danger', onclick: () => setBrand('logo', '') }, 'Hapus logo') : null, file), 'PNG/WebP/JPG, maks 1,5 MB. Disarankan persegi dengan latar transparan (± 512×512 px).'),
           h('div', { class: 'sh-row2' },
             field('Nama instansi', input(brand.name || '', (v) => setBrand('name', v.trim()), { placeholder: 'mis. PEMERINTAH KABUPATEN BADUNG', maxlength: 90 }), 'Baris kecil di atas nama tempat.'),
-            field('Nama singkat', input(brand.short || '', (v) => setBrand('short', v.trim()), { placeholder: 'mis. Badung', maxlength: 40 }), 'Dipakai di sapaan Jali & kartu pos.')))),
+            field('Nama singkat', input(brand.short || '', (v) => setBrand('short', v.trim()), { placeholder: 'mis. Badung', maxlength: 40 }), 'Dipakai di sapaan pemandu & kartu pos.')))),
       S.kitOk ? null : null));
     /* Front-end kustom (skin, menu, halaman popup dari developer lain) */
     const feBox = h('div', { class: 'card sh-card' }, h('div', { class: 'sh-empty' }, 'Memuat paket front-end…'));

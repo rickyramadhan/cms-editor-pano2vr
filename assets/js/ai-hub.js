@@ -103,7 +103,7 @@
     function dataCell(r) {
         const x = r.hub || {};
         const bits = [];
-        if (state.cmsRuntime) bits.push(r.cms.hasText ? 'Teks sambutan ' + r.cms.langs.length + ' bahasa' : 'Belum ada teks sambutan');
+        if (state.cmsRuntime) bits.push(r.cms.hasText ? 'Teks sambutan ' + r.cms.langs.length + ' bahasa' : (r.smart && r.smart.pack ? 'Profil lokasi dari Smart Kit' : 'Belum ada teks sambutan'));
         else bits.push(x.registered ? 'Teks dikelola di Hub' : 'Belum ada di Hub');
         if (x.registered && (x.scenes || 0) > 0) bits.push(x.scenes + ' scene');
         const pr = x.parity;
@@ -111,7 +111,7 @@
             ? h('small', { class: pr.complete ? 'ah-ok' : 'ah-warn' }, icon(pr.complete ? 'circle-check' : 'triangle-alert'),
                 pr.nodes.hub + '/' + pr.nodes.cms + ' node · ' + pr.hotspots.hub + '/' + pr.hotspots.cms + ' hotspot · ' + pr.translations.inKnowledge + '/' + pr.translations.cms + ' terjemahan')
             : (x.registered ? h('small', { class: 'ah-muted' }, 'Isi pano.xml belum disinkronkan') : null);
-        const warn = state.cmsRuntime && !r.cms.hasText ? 'Isi teks sambutan di Data Lokasi agar Jali punya bahan jawaban.' : (x.registered && x.exportOk === false ? 'Folder tur tidak ditemukan di Hub. Jalankan lagi.' : '');
+        const warn = state.cmsRuntime && !r.cms.hasText && !(r.smart && r.smart.pack) ? 'Isi teks sambutan di Data Lokasi agar pemandu punya bahan jawaban.' : (x.registered && x.exportOk === false ? 'Folder tur tidak ditemukan di Hub. Jalankan lagi.' : '');
         return h('div', { class: 'ah-data' }, h('span', {}, bits.join(' · ')), parity, warn ? h('small', { class: 'ah-warn' }, icon('triangle-alert'), warn) : null,
             r.smart && state.smartkit.enabled ? h('small', { class: 'ah-muted' }, 'Smart Kit: ' + (r.smart.applied ? 'diterapkan' : (r.smart.pack ? 'paket belum diterapkan' : 'belum dibuat'))) : null);
     }
