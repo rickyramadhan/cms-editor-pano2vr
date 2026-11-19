@@ -302,3 +302,47 @@ html, body, button, input, select, textarea { font-family: "Plus Jakarta Sans", 
   .sh-preview__head { align-items: flex-start; flex-direction: column; }
   .sh-preview__head select { width: 100%; max-width: none; }
 }
+
+/* Kurasi Tourism Guide (CMS > Isi Konten > Tourism Guide): kartu tempat + thumbnail + konfirmasi PIC */
+.sv-panel { gap: 14px; }
+.sv-head { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: flex-start; }
+.sv-head h3 { margin: 0 0 4px; font-size: 16px; }
+.sv-head p { margin: 0; max-width: 700px; color: var(--sh-muted, #687386); font-size: 12.5px; line-height: 1.6; }
+.sv-stats { display: flex; gap: 8px; flex-wrap: wrap; }
+.sv-stat { padding: 6px 11px; border-radius: 999px; background: #f2f4f8; color: #39455a; font-size: 12px; font-weight: 700; }
+.sv-stat b { margin-left: 6px; }
+.sv-stat--wait { background: #fff7df; color: #8a5a00; } .sv-stat--ok { background: #e8f6ee; color: #17784a; } .sv-stat--no { background: #fdecec; color: #b3261e; }
+.sv-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.sv-bar input[type="search"], .sv-bar select { min-height: 40px; padding: 0 10px; border: 1px solid var(--sh-line, #e5e9f0); border-radius: 8px; background: #fff; font: inherit; font-size: 13px; }
+.sv-bar input[type="search"] { flex: 1 1 220px; min-width: 160px; }
+.sv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px; }
+.sv-card { display: flex; flex-direction: column; border: 1px solid var(--sh-line, #e5e9f0); border-radius: 14px; overflow: hidden; background: #fff; }
+.sv-card.is-ditolak { opacity: .62; }
+.sv-thumb { position: relative; aspect-ratio: 16 / 10; background: #eef1f6; cursor: pointer; overflow: hidden; }
+.sv-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.sv-thumb__ph { position: absolute; inset: 0; display: grid; place-items: center; padding: 10px; background: linear-gradient(135deg, #eef1f6, #dfe5ee); color: #8893a6; font-size: 13px; font-weight: 700; text-align: center; }
+.sv-thumb__hint { position: absolute; right: 8px; bottom: 8px; padding: 4px 9px; border-radius: 99px; background: rgba(15, 23, 42, .72); color: #fff; font-size: 11px; font-weight: 700; opacity: 0; transition: opacity .15s; }
+.sv-thumb:hover .sv-thumb__hint, .sv-thumb:focus-within .sv-thumb__hint { opacity: 1; }
+.sv-pill { position: absolute; top: 8px; left: 8px; padding: 4px 9px; border-radius: 99px; background: #fff7df; color: #8a5a00; font-size: 11px; font-weight: 800; }
+.sv-pill--disetujui { background: #e8f6ee; color: #17784a; } .sv-pill--ditolak { background: #fdecec; color: #b3261e; }
+.sv-body { display: grid; gap: 4px; padding: 12px 14px 6px; }
+.sv-body b { font-size: 14.5px; line-height: 1.3; }
+.sv-meta { color: var(--sh-muted, #687386); font-size: 12px; line-height: 1.45; }
+.sv-note { color: #8a5a00; }
+.sv-links { display: flex; gap: 10px; flex-wrap: wrap; font-size: 12px; }
+.sv-links a { color: var(--sh-accent, #3157d5); font-weight: 700; text-decoration: none; }
+.sv-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; padding: 8px 14px 12px; }
+.sv-actions button { min-height: 34px; padding: 6px 11px; border: 1px solid var(--sh-line, #e5e9f0); border-radius: 8px; background: #fff; color: #39455a; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.sv-actions button.ok { background: #17784a; border-color: #17784a; color: #fff; }
+.sv-actions button.no { border-color: #f0c4c1; color: #b3261e; }
+.sv-edit { display: grid; gap: 10px; padding: 12px 14px 14px; border-top: 1px solid var(--sh-line, #e5e9f0); background: #fafbfd; }
+.sv-edit[hidden] { display: none; }
+.sv-card { min-width: 0; }
+.sv-card.is-open { grid-column: 1 / -1; }
+.sv-edit .sc-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.sv-edit .sc-f.is-wide { grid-column: 1 / -1; }
+.sv-card.is-open { display: grid; grid-template-columns: 280px minmax(0, 1fr); grid-template-rows: auto 1fr auto; }
+.sv-card.is-open .sv-thumb { grid-row: 1 / span 2; aspect-ratio: auto; min-height: 170px; }
+.sv-card.is-open .sv-body, .sv-card.is-open .sv-actions { grid-column: 2; }
+.sv-card.is-open .sv-edit { grid-column: 1 / -1; grid-row: 3; }
+@media (max-width: 760px) { .sv-card.is-open { display: flex; } .sv-card.is-open .sv-thumb { min-height: 0; aspect-ratio: 16 / 10; } }

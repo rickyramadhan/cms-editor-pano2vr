@@ -133,7 +133,7 @@ function shReadiness(?array $c, int $scenes, int $pins): array
         ['w' => 10, 'ok' => $n('SCENE_NAMES') > 0 && empty($c['_review']), 'hint' => 'Tinjau nama scene otomatis (tab Nama scene)'],
         ['w' => 15, 'ok' => $pins >= 3, 'hint' => 'Tempatkan minimal 3 pin (tab Pin)'],
         ['w' => 20, 'ok' => count($facts) >= 5, 'hint' => 'Tambah minimal 5 fakta bersumber'],
-        ['w' => 15, 'ok' => $n('SERVICES') >= 10, 'hint' => 'Tambah minimal 10 layanan sekitar'],
+        ['w' => 15, 'ok' => count(array_filter((array) ($c['SERVICES'] ?? []), static fn($s) => is_array($s) && empty($s['hidden']))) >= 10, 'hint' => 'Tambah minimal 10 layanan sekitar (yang ditolak PIC tidak dihitung)'],
         ['w' => 10, 'ok' => !$needSafety || $n('SAFETY') >= 1, 'hint' => 'Jenis ' . $type . ' wajib punya catatan keselamatan'],
         ['w' => 5, 'ok' => $n('STAMPS') >= 1, 'hint' => 'Minimal 1 stempel'],
         ['w' => 5, 'ok' => $n('OBJECTS') >= 1, 'hint' => 'Isi Objek Informasi'],
@@ -378,6 +378,39 @@ function shSaveContentImage(array $st, string $location, string $dataUrl): array
     return ['ref' => 'img/' . $name . '?v=' . time(), 'url' => $st['url'] . 'packs/' . $st['wilayah'] . '/' . $location . '/img/' . $name . '?v=' . time()];
 }
 
+/** Thumbnail tempat (kurasi Tourism Guide): dipotong rasio 16:10, diperkecil maks 800 px, disimpan WebP di packs/<wilayah>/<lokasi>/img/places/<id>.webp. */
+function shSaveServiceThumb(array $st, string $location, string $svcId, string $dataUrl): array
+{
+    $svcId = (string) preg_replace('/[^A-Za-z0-9_.-]/', '', $svcId);
+    if ($svcId === '' || strlen($svcId) > 60) throw new RuntimeException('ID tempat tidak valid. Simpan konten lebih dulu bila tempat baru.');
+    $pos = strpos($dataUrl, ';base64,');
+    $mime = ($pos !== false && str_starts_with($dataUrl, 'data:image/')) ? substr($dataUrl, 11, $pos - 11) : '';
+    if (!in_array($mime, ['png', 'jpeg', 'webp'], true)) throw new RuntimeException('Gambar harus berformat PNG, JPG, atau WebP.');
+    $bin = base64_decode(substr($dataUrl, $pos + 8), true);
+    if ($bin === false || $bin === '' || strlen($bin) > 8 * 1024 * 1024) throw new RuntimeException('Gambar rusak atau melebihi 8 MB.');
+    $info = @getimagesizefromstring($bin); $map = [IMAGETYPE_PNG => 'png', IMAGETYPE_JPEG => 'jpg', IMAGETYPE_WEBP => 'webp'];
+    if (!$info || !isset($map[$info[2]])) throw new RuntimeException('Berkas bukan gambar PNG/JPG/WebP yang valid.');
+    if ($info[0] > 12000 || $info[1] > 12000 || $info[0] < 40 || $info[1] < 40) throw new RuntimeException('Dimensi gambar tidak wajar (40-12.000 px).');
+    $dir = $st['path'] . '/packs/' . $st['wilayah'] . '/' . $location . '/img/places';
+    if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) throw new RuntimeException('Folder gambar tempat gagal dibuat.');
+    foreach (glob($dir . '/' . $svcId . '.*') ?: [] as $old) @unlink($old);
+    $ext = $map[$info[2]]; $out = $bin;
+    if (function_exists('imagecreatefromstring') && function_exists('imagewebp')) {
+        $src = @imagecreatefromstring($bin);
+        if ($src) {
+            $w = imagesx($src); $h = imagesy($src); $tw = min(800, $w); $th = (int) round($tw * 10 / 16);
+            $scale = max($tw / $w, $th / $h); $cw = (int) round($tw / $scale); $ch = (int) round($th / $scale);
+            $dst = imagecreatetruecolor($tw, $th);
+            imagecopyresampled($dst, $src, 0, 0, (int) max(0, ($w - $cw) / 2), (int) max(0, ($h - $ch) / 2), $tw, $th, $cw, $ch);
+            ob_start(); $ok = imagewebp($dst, null, 82); $webp = (string) ob_get_clean();
+            if ($ok && $webp !== '') { $out = $webp; $ext = 'webp'; }
+        }
+    }
+    $name = $svcId . '.' . $ext; $v = time();
+    if (file_put_contents($dir . '/' . $name, $out, LOCK_EX) === false) throw new RuntimeException('Thumbnail gagal disimpan (izin folder?).');
+    return ['ref' => 'img/places/' . $name . '?v=' . $v, 'url' => $st['url'] . 'packs/' . $st['wilayah'] . '/' . $location . '/img/places/' . $name . '?v=' . $v];
+}
+
 function shWriteHub(array $st, array $hub): void
 {
     $file = shHubFile($st);
@@ -568,7 +601,10 @@ function shNormalizeGuide(array &$content): void
         if (preg_match(SH_ID_RE, $id)) $hidden[$id] = true;
     }
     $hidden = array_map('strval', array_slice(array_keys($hidden), 0, 100));
-    if ($hidden) $content['GUIDE'] = ['hiddenCategories' => $hidden];
+    $out = [];
+    if ($hidden) $out['hiddenCategories'] = $hidden;
+    if (is_array($guide) && ($guide['onlyApproved'] ?? false) === true) $out['onlyApproved'] = true;   // kurasi PIC: tampilkan hanya tempat yang disetujui
+    if ($out) $content['GUIDE'] = $out;
     else unset($content['GUIDE']);
 }
 
@@ -741,6 +777,12 @@ if (!defined('SMART_HUB_INCLUDE_ONLY')) {
                 $image = shSaveContentImage($st, $id, (string) ($payload['data'] ?? ''));
                 cmsAudit('konten.gambar', ['pack' => $st['wilayah'] . '/' . $id]);
                 cmsJsonResponse(['success' => true, 'message' => 'Gambar latar info berhasil diunggah.'] + $image);
+            case 'svc_upload_thumb':
+                $id = cmsCleanKey((string) ($payload['location'] ?? ''));
+                if (!isset($tours[$id])) throw new RuntimeException('Lokasi tidak ditemukan.');
+                $image = shSaveServiceThumb($st, $id, (string) ($payload['id'] ?? ''), (string) ($payload['data'] ?? ''));
+                cmsAudit('layanan.thumbnail', ['pack' => $st['wilayah'] . '/' . $id, 'id' => (string) ($payload['id'] ?? '')]);
+                cmsJsonResponse(['success' => true, 'message' => 'Thumbnail tempat diunggah. Tekan "Simpan konten" agar dipakai di Tourism Guide.'] + $image);
             case 'content_save':
                 $id = cmsCleanKey((string) ($payload['location'] ?? ''));
                 if (!isset($tours[$id])) throw new RuntimeException('Lokasi tidak ditemukan.');

@@ -241,6 +241,145 @@
       h('button', { type: 'button', class: 'translate', disabled: !rows.length || null, onclick: () => download('layanan.csv', CSV_COLS.join(',') + '\n' + rows.map(toRow).join('\n')) }, '⬇ Ekspor CSV'), panel);
   }
 
+  /* ---------------- Kurasi Tourism Guide: tempat, foto, setujui/tolak, konfirmasi PIC ----------------
+   * Data = content.json › SERVICES. Status: menunggu (default) · disetujui (verified:true) · ditolak (hidden:true, data tetap tersimpan).
+   * Smart Kit (Badung & Jakarta) menyembunyikan tempat `hidden`; GUIDE.onlyApproved = hanya tampilkan yang disetujui. Foto = img/places/<id>.webp. */
+  const CUR = { cat: '', st: '', q: '', open: new Set() };
+  // Persetujuan kurasi (curation.status) terpisah dari `verified` (lencana "Terverifikasi" untuk pengunjung): menyetujui tidak mengklaim verifikasi.
+  const svcState = (s) => (s.hidden ? 'ditolak' : s.curation?.status === 'disetujui' ? 'disetujui' : 'menunggu');
+  const pillText = (s) => (svcState(s) === 'disetujui' && s.curation?.provisional ? 'Disetujui sementara' : ST_LABEL[svcState(s)]);
+  const ST_LABEL = { menunggu: 'Menunggu PIC', disetujui: 'Disetujui PIC', ditolak: 'Ditolak' };
+  const kmText = (s) => { const k = Number(s.distKm); if (!Number.isFinite(k) || s.distKm == null) return ''; return k < 1 ? '± ' + Math.round(k * 1000) + ' m' : '± ' + k.toFixed(1).replace('.', ',') + ' km'; };
+  const todayStr = () => new Date().toISOString().slice(0, 10);
+  const downloadText = (name, text, type) => { const { h } = A(); const a = h('a', { href: URL.createObjectURL(new Blob([text], { type })), download: name }); document.body.append(a); a.click(); a.remove(); };
+  const mapsLink = (s) => s.maps || (s.lat != null && s.lng != null ? 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent([s.name, s.addr].filter(Boolean).join(' ')) : '');
+  const PIC_COLS = ['no', 'kategori', 'nama', 'alamat', 'jarak', 'maps', 'website', 'sumber', 'keputusan_pic', 'catatan_pic', 'id'];
+
+  function curationPanel(d, ctx, mark, rerender) {
+    const { h, post, toast } = A();
+    const content = d.content;
+    const rows = () => content.SERVICES || [];
+    const cats = ctx.svcCats || [];
+    const catLabel = (id) => (cats.find(([k]) => k === id) || [id, id || 'Tanpa kategori'])[1];
+    const catOrder = (id) => { const i = cats.findIndex(([k]) => k === id); return i < 0 ? 99 : i; };
+    const mutate = () => { mark(); rerender(); };
+    const cleanCuration = (s) => { if (s.curation && !Object.keys(s.curation).length) delete s.curation; };
+    const setState = (s, st) => {
+      delete s.hidden;
+      if (st === 'ditolak') s.hidden = true;
+      s.curation = { ...(s.curation || {}) }; delete s.curation.provisional;
+      if (st === 'menunggu') { delete s.curation.status; delete s.curation.at; } else { s.curation.status = st; s.curation.at = todayStr(); }
+      cleanCuration(s); mutate();
+    };
+    const counts = { menunggu: 0, disetujui: 0, ditolak: 0 };
+    rows().forEach((s) => { counts[svcState(s)]++; });
+    const provN = rows().filter((s) => svcState(s) === 'disetujui' && s.curation?.provisional).length;
+
+    /* ---- unggah foto (satu input untuk seluruh panel) ---- */
+    let uploadFor = null;
+    const fileInput = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', hidden: true, onchange: async (e) => {
+      const f = e.target.files?.[0]; const s = uploadFor; e.target.value = ''; if (!f || !s) return;
+      if (f.size > 8 * 1024 * 1024) return toast('Gambar maksimal 8 MB.', true);
+      const data = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(f); });
+      try { const j = await post('svc_upload_thumb', { location: ctx.location, id: s.id, data }); s.img = j.ref; mark(); toast(j.message); rerender(); } catch (err) { toast(err.message, true); }
+    } });
+    const pickPhoto = (s) => { uploadFor = s; fileInput.click(); };
+
+    /* ---- tambah tempat ---- */
+    const addPlace = () => {
+      const cat = CUR.cat || 'stay'; const ids = new Set(rows().map((r) => r.id)); let n = 1; const pre = 'sv-' + cat + '-';
+      while (ids.has(pre + String(n).padStart(2, '0'))) n++;
+      const row = { id: pre + String(n).padStart(2, '0'), cat, name: '' };
+      (content.SERVICES ||= []).push(row); CUR.open.add(row.id); CUR.q = ''; CUR.st = '';
+      mutate(); toast('Tempat baru ditambahkan. Isi nama, alamat, dan koordinat, lalu tekan "Simpan konten".');
+    };
+
+    /* ---- ekspor / impor untuk PIC ---- */
+    const sorted = () => rows().map((s, i) => ({ s, i })).sort((a, b) => catOrder(a.s.cat) - catOrder(b.s.cat) || (a.s.distKm ?? 99) - (b.s.distKm ?? 99) || String(a.s.name).localeCompare(String(b.s.name), 'id'));
+    const csvCell = (v) => { const t = v == null ? '' : String(v); return /[",;\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+    const exportCsv = () => {
+      const lines = sorted().filter(({ s }) => svcState(s) !== 'ditolak' || true).map(({ s }, n) => [n + 1, catLabel(s.cat), s.name, s.addr || s.area || '', kmText(s), mapsLink(s), s.url || '', s.src || '', (svcState(s) === 'disetujui' && s.curation?.provisional ? '' : { disetujui: 'ya', ditolak: 'tidak', menunggu: '' }[svcState(s)]), s.curation?.note || '', s.id].map(csvCell).join(','));
+      downloadText('kurasi-tourism-guide-' + ctx.location + '.csv', '\ufeff' + PIC_COLS.join(',') + '\n' + lines.join('\n'), 'text/csv;charset=utf-8');
+      toast('CSV dibuat. Kirim ke PIC; isi kolom keputusan_pic dengan "ya" atau "tidak", lalu impor kembali.');
+    };
+    const waText = () => {
+      const by = {}; sorted().forEach(({ s }) => { if (svcState(s) !== 'ditolak') (by[s.cat] ||= []).push(s); });
+      const lines = ['*Kurasi Tourism Guide — ' + (content.REGION?.place || ctx.location) + '*', 'Mohon konfirmasi apakah tempat-tempat berikut layak ditampilkan kepada pengunjung (balas: nomor + layak / tidak layak, boleh disertai catatan).', ''];
+      Object.keys(by).sort((a, b) => catOrder(a) - catOrder(b)).forEach((c) => { lines.push('*' + catLabel(c) + '*'); by[c].forEach((s, i) => lines.push((i + 1) + '. ' + s.name + (s.addr || s.area ? ' — ' + (s.addr || s.area) : '') + (mapsLink(s) ? '\n    ' + mapsLink(s) : ''))); lines.push(''); });
+      return lines.join('\n').trim();
+    };
+    const copyWa = async () => { const t = waText(); try { await navigator.clipboard.writeText(t); toast('Teks WhatsApp disalin. Tempel ke chat PIC.'); } catch { const ta = h('textarea', { style: 'position:fixed;opacity:0' }, t); document.body.append(ta); ta.select(); document.execCommand('copy'); ta.remove(); toast('Teks WhatsApp disalin. Tempel ke chat PIC.'); } };
+    const importInput = h('input', { type: 'file', accept: '.csv,text/csv', hidden: true, onchange: async (e) => {
+      const f = e.target.files?.[0]; e.target.value = ''; if (!f) return;
+      const all = parseCsv(await f.text()); if (all.length < 2) return toast('CSV kosong.', true);
+      const head = all[0].map((x) => String(x).trim().toLowerCase()); const col = (k) => head.indexOf(k);
+      const iId = col('id'), iDec = col('keputusan_pic') >= 0 ? col('keputusan_pic') : col('keputusan'), iNote = col('catatan_pic') >= 0 ? col('catatan_pic') : col('catatan');
+      if (iId < 0 || iDec < 0) return toast('Kolom "id" dan "keputusan_pic" tidak ditemukan. Gunakan CSV dari tombol "Ekspor untuk PIC".', true);
+      let ok = 0, no = 0, miss = 0, same = 0;
+      all.slice(1).forEach((r) => {
+        const s = rows().find((x) => x.id === String(r[iId] ?? '').trim()); if (!s) { if (String(r[iId] ?? '').trim()) miss++; return; }
+        const dec = String(r[iDec] ?? '').trim().toLowerCase(); const note = String(r[iNote] ?? '').trim();
+        const yes = /^(ya|y|ok|oke|setuju|disetujui|layak|1|x|✓)$/.test(dec), nope = /^(tidak|t|no|n|tolak|ditolak|tdk|tidak layak|0)$/.test(dec);
+        if (!yes && !nope) { if (note) { s.curation = { ...(s.curation || {}), note }; } same++; return; }
+        delete s.hidden; if (yes) ok++; else { s.hidden = true; no++; }
+        s.curation = { ...(s.curation || {}), status: yes ? 'disetujui' : 'ditolak', at: todayStr() }; delete s.curation.provisional; if (note) s.curation.note = note;
+      });
+      mark(); rerender(); toast(`Keputusan PIC diterapkan: ${ok} disetujui, ${no} ditolak, ${same} tanpa keputusan, ${miss} id tidak ditemukan. Tekan "Simpan konten".`);
+    } });
+
+    /* ---- daftar kartu ---- */
+    const FIELDS = [
+      { k: 'name', label: 'Nama tempat', type: 'text', wide: true }, { k: 'cat', label: 'Kategori', type: 'select', opts: cats },
+      { k: 'sub', label: 'Keterangan singkat', type: 'text', wide: true }, { k: 'addr', label: 'Alamat', type: 'text', wide: true }, { k: 'area', label: 'Area / jalan', type: 'text' },
+      { k: 'lat', label: 'Lintang (lat)', type: 'number' }, { k: 'lng', label: 'Bujur (lng)', type: 'number' },
+      { k: 'maps', label: 'Tautan Google Maps', type: 'text', wide: true, hint: 'Klik kartu di Tourism Guide membuka tautan ini. Bila kosong dibuat otomatis dari nama + alamat.' },
+      { k: 'url', label: 'Website / tautan resmi', type: 'text', wide: true, hint: 'Untuk hotel, klik kartu membuka website ini bila diisi.' },
+      { k: 'price', label: 'Kisaran harga', type: 'text' }, { k: 'wa', label: 'WhatsApp', type: 'text' }, { k: 'src', label: 'Sumber data', type: 'text', wide: true } ];
+    const listBox = h('div', { class: 'sv-grid' });
+    const card = (s) => {
+      const st = svcState(s); const open = CUR.open.has(s.id);
+      const title = h('b', null, s.name || '(tanpa nama — isi dulu)');
+      const thumb = h('div', { class: 'sv-thumb', title: s.img ? 'Ganti foto' : 'Unggah foto', onclick: () => pickPhoto(s) },
+        s.img ? h('img', { src: ctx.assetUrl(s.img), alt: '', loading: 'lazy' }) : h('div', { class: 'sv-thumb__ph' }, catLabel(s.cat)),
+        h('span', { class: 'sv-pill sv-pill--' + st }, pillText(s)), h('span', { class: 'sv-thumb__hint' }, s.img ? 'Ganti foto' : '＋ Unggah foto'));
+      const links = [mapsLink(s) ? h('a', { href: mapsLink(s), target: '_blank', rel: 'noopener' }, 'Peta') : null, s.url ? h('a', { href: s.url, target: '_blank', rel: 'noopener' }, 'Website') : null, /^https?:/.test(s.src || '') ? h('a', { href: s.src, target: '_blank', rel: 'noopener' }, 'Sumber') : null].filter(Boolean);
+      const edit = h('div', { class: 'sv-edit', hidden: !open || null }, fieldsGrid(FIELDS, s, () => { title.textContent = s.name || '(tanpa nama — isi dulu)'; mark(); }, ctx),
+        h('label', { class: 'sh-field sc-f is-wide' }, h('span', null, 'Catatan PIC'), h('input', { value: s.curation?.note || '', placeholder: 'mis. "hotel ini sudah tutup" / "layak, kontak 08…"', oninput: (e) => { s.curation = { ...(s.curation || {}) }; if (e.target.value) s.curation.note = e.target.value; else delete s.curation.note; cleanCuration(s); mark(); } })),
+        s.img ? h('button', { type: 'button', class: 'translate', onclick: () => { delete s.img; mutate(); } }, 'Hapus foto') : null);
+      return h('article', { class: 'sv-card is-' + st + (open ? ' is-open' : '') },
+        thumb,
+        h('div', { class: 'sv-body' }, title, h('span', { class: 'sv-meta' }, [catLabel(s.cat), s.area || s.addr || '', kmText(s)].filter(Boolean).join(' · ')), s.curation?.note ? h('span', { class: 'sv-meta sv-note' }, 'Catatan: ' + s.curation.note) : null, links.length ? h('div', { class: 'sv-links' }, links) : null),
+        h('div', { class: 'sv-actions' },
+          st !== 'disetujui' ? h('button', { type: 'button', class: 'ok', onclick: () => setState(s, 'disetujui') }, '✓ Setujui') : null,
+          st !== 'ditolak' ? h('button', { type: 'button', class: 'no', onclick: () => setState(s, 'ditolak') }, 'Tolak') : null,
+          st !== 'menunggu' ? h('button', { type: 'button', onclick: () => setState(s, 'menunggu') }, 'Pulihkan') : null,
+          h('button', { type: 'button', onclick: (e) => { if (CUR.open.has(s.id)) CUR.open.delete(s.id); else CUR.open.add(s.id); edit.hidden = !CUR.open.has(s.id); e.currentTarget.closest('.sv-card').classList.toggle('is-open', CUR.open.has(s.id)); } }, 'Edit'),
+          h('button', { type: 'button', class: 'no', title: 'Hapus permanen dari daftar', onclick: () => { if (!confirm('Hapus "' + (s.name || s.id) + '" dari daftar? Data ini tidak dapat dipulihkan setelah disimpan.')) return; const i = rows().indexOf(s); if (i >= 0) rows().splice(i, 1); CUR.open.delete(s.id); mutate(); } }, 'Hapus')),
+        edit);
+    };
+    const draw = () => {
+      const q = CUR.q.trim().toLowerCase();
+      const list = sorted().map((x) => x.s).filter((s) => (!CUR.cat || s.cat === CUR.cat) && (!CUR.st || svcState(s) === CUR.st) && (!q || JSON.stringify([s.name, s.addr, s.area, s.sub, s.id]).toLowerCase().includes(q)));
+      listBox.replaceChildren(...(list.length ? list.map(card) : [h('div', { class: 'sh-empty' }, rows().length ? 'Tidak ada tempat yang cocok dengan filter.' : 'Belum ada tempat. Tekan "＋ Tambah tempat".')]));
+    };
+    const used = [...new Set(rows().map((s) => s.cat))].sort((a, b) => catOrder(a) - catOrder(b));
+    const search = h('input', { type: 'search', placeholder: 'Cari nama / alamat…', value: CUR.q, oninput: (e) => { CUR.q = e.target.value; draw(); } });
+    const catSel = h('select', { 'aria-label': 'Kategori', onchange: (e) => { CUR.cat = e.target.value; draw(); } }, h('option', { value: '' }, 'Semua kategori'), used.map((c) => h('option', { value: c, selected: CUR.cat === c ? true : null }, `${catLabel(c)} (${rows().filter((s) => s.cat === c).length})`)));
+    const stSel = h('select', { 'aria-label': 'Status', onchange: (e) => { CUR.st = e.target.value; draw(); } }, h('option', { value: '' }, 'Semua status'), Object.entries(ST_LABEL).map(([k, t]) => h('option', { value: k, selected: CUR.st === k ? true : null }, `${t} (${counts[k]})`)));
+    const only = h('label', { class: 'sh-check' }, h('input', { type: 'checkbox', checked: content.GUIDE?.onlyApproved === true, onchange: (e) => { if (e.target.checked) (content.GUIDE ||= {}).onlyApproved = true; else if (content.GUIDE) { delete content.GUIDE.onlyApproved; if (!Object.keys(content.GUIDE).length) delete content.GUIDE; } mark(); } }), 'Tampilkan di Tourism Guide hanya tempat berstatus Disetujui');
+    draw();
+    return h('div', { class: 'card sh-card sv-panel' },
+      h('div', { class: 'sv-head' }, h('div', null, h('h3', null, 'Kurasi tempat untuk konfirmasi PIC'),
+        h('p', null, 'Daftar hotel, sewa motor/mobil, kuliner, dan lainnya di sekitar lokasi. Unggah foto, tambah atau hapus tempat, lalu kirim ke PIC untuk ditentukan layak atau tidak. "Disetujui" = tampil di Tourism Guide (tanda "sementara" = data awal yang belum dikonfirmasi PIC); "Ditolak" menyembunyikannya (data tetap tersimpan). Lencana "Terverifikasi" untuk pengunjung tidak berubah oleh persetujuan ini.')),
+        h('div', { class: 'sv-stats' }, h('span', { class: 'sv-stat sv-stat--wait' }, 'Menunggu', h('b', null, String(counts.menunggu))), h('span', { class: 'sv-stat sv-stat--ok', title: provN ? provN + ' di antaranya disetujui sementara (data awal, belum dikonfirmasi PIC)' : '' }, provN ? 'Disetujui (' + provN + ' sementara)' : 'Disetujui', h('b', null, String(counts.disetujui))), h('span', { class: 'sv-stat sv-stat--no' }, 'Ditolak', h('b', null, String(counts.ditolak))))),
+      h('div', { class: 'sv-bar' }, search, catSel, stSel, h('button', { type: 'button', class: 'save', onclick: addPlace }, '＋ Tambah tempat')),
+      h('div', { class: 'sv-bar sv-bar--tools' },
+        h('button', { type: 'button', class: 'translate', title: 'CSV berisi kolom keputusan_pic untuk diisi PIC', disabled: !rows().length || null, onclick: exportCsv }, '⬇ Ekspor untuk PIC (CSV)'),
+        h('button', { type: 'button', class: 'translate', disabled: !rows().length || null, onclick: copyWa }, 'Salin teks WhatsApp'),
+        h('button', { type: 'button', class: 'translate', onclick: () => importInput.click() }, '⬆ Impor keputusan PIC (CSV)'), only),
+      listBox, fileInput, importInput);
+  }
+
   /* ---------------- tampilan: Isi Konten (per lokasi) ---------------- */
   const ST = { loc: '', data: null, sec: '', dirty: false, busy: false };
   window.__shContentDirty = () => ST.dirty;
@@ -333,7 +472,7 @@
       if (sec.names) { panel.replaceChildren(h('p', { class: 'sc-hint' }, sec.hint || ''), namesPanel(d, mark)); return; }
       if (sec.pins) { panel.replaceChildren(h('p', { class: 'sc-hint' }, sec.hint || ''), h('div', { class: 'sh-empty' }, 'Memuat…')); pinsPanel(d, ctx).then((el) => { if (sec.pins) panel.replaceChildren(h('p', { class: 'sc-hint' }, sec.hint || ''), el); }); return; }
       const body = sec.guideCategories
-        ? [guideEditor()]
+        ? [curationPanel(d, ctx, mark, () => paint()), guideEditor()]
         : sec.blocks.map((b) => sec.id === 'Profil' && b.kind === 'object' && b.path === 'REGION'
           ? profileEditor(b, d.content, mark, ctx)
           : h('div', { class: 'card sh-card' }, block(b, d.content, mark, ctx, () => { paint(); })));
