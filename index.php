@@ -568,7 +568,23 @@ try {
             if ($routeKey === '' || isset($keys[$routeKey])) throw new RuntimeException('Route key object #' . ($index + 1) . ' kosong atau duplikat.');
             $keys[$routeKey] = true; $labels = [];
             foreach (cmsLanguages() as $code => $label) $labels[$code] = trim((string) ($record['labelTeks'][$code] ?? ''));
-            $cleanRecords[] = ['route_key' => $routeKey, 'infoID' => trim((string) ($record['infoID'] ?? '')), 'nodeID' => trim((string) ($record['nodeID'] ?? '')), 'targetID' => trim((string) ($record['targetID'] ?? '')), 'category' => trim((string) ($record['category'] ?? 'umum')), 'arah' => trim((string) ($record['arah'] ?? 'luruskanan')), 'versi' => '1', 'ukuran' => trim((string) ($record['ukuran'] ?? '500px')), 'labelTeks' => $labels, 'isActive' => (bool) ($record['isActive'] ?? true), 'title' => trim((string) ($record['title'] ?? ''))];
+            $cleanRecord = ['route_key' => $routeKey, 'infoID' => trim((string) ($record['infoID'] ?? '')), 'nodeID' => trim((string) ($record['nodeID'] ?? '')), 'targetID' => trim((string) ($record['targetID'] ?? '')), 'category' => trim((string) ($record['category'] ?? 'umum')), 'arah' => trim((string) ($record['arah'] ?? 'luruskanan')), 'versi' => '1', 'ukuran' => trim((string) ($record['ukuran'] ?? '500px')), 'labelTeks' => $labels, 'isActive' => (bool) ($record['isActive'] ?? true), 'title' => trim((string) ($record['title'] ?? ''))];
+            // `konten` = isi popup objek dari Smart Hub (per bahasa: title, sub, desc, kv[l,v]); tampil langsung tanpa iframe webview
+            if (is_array($record['konten'] ?? null)) {
+                $konten = [];
+                foreach ($record['konten'] as $langCode => $block) {
+                    if ($langCode === 'meta' && is_array($block)) {
+                        $konten['meta'] = ['pin' => preg_replace('/[^A-Za-z0-9_-]/', '', (string) ($block['pin'] ?? '')), 'scene' => preg_replace('/[^A-Za-z0-9_-]/', '', (string) ($block['scene'] ?? '')), 'ico' => preg_replace('/[^a-z0-9_-]/i', '', (string) ($block['ico'] ?? 'info')), 'color' => preg_match('/^#[0-9a-fA-F]{3,8}$/', (string) ($block['color'] ?? '')) ? (string) $block['color'] : '#1a82d8'];
+                        continue;
+                    }
+                    if (!is_array($block) || !preg_match('/^[a-z]{2,3}(-[A-Za-z]{2,4})?$/', (string) $langCode)) continue;
+                    $kv = [];
+                    foreach (array_slice((array) ($block['kv'] ?? []), 0, 12) as $row) if (is_array($row) && trim((string) ($row['l'] ?? '')) !== '') $kv[] = ['l' => mb_substr(trim((string) $row['l']), 0, 80), 'v' => mb_substr(trim((string) ($row['v'] ?? '')), 0, 160)];
+                    $konten[$langCode] = ['title' => mb_substr(trim((string) ($block['title'] ?? '')), 0, 160), 'sub' => mb_substr(trim((string) ($block['sub'] ?? '')), 0, 240), 'desc' => mb_substr(trim((string) ($block['desc'] ?? '')), 0, 2000), 'kv' => $kv];
+                }
+                if ($konten) $cleanRecord['konten'] = $konten;
+            }
+            $cleanRecords[] = $cleanRecord;
         }
         $webElementCount = null;
         if (array_key_exists('webElements', $payload)) {
