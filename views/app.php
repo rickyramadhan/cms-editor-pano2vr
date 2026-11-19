@@ -28,6 +28,7 @@
             <span class="cms-nav-label">Media &amp; Tools</span>
             <?php if ($cmsRuntimeReady): ?><a class="<?= in_array($activeTab, ['languages', 'translations'], true) ? 'active' : '' ?>" href="?tab=languages"><span aria-hidden="true"><i data-lucide="languages"></i></span>Bahasa &amp; Terjemahan</a><?php endif; ?>
             <?php if ($cmsRuntimeReady): ?><a class="<?= $activeTab === 'video360' ? 'active' : '' ?>" href="?tab=video360"><span aria-hidden="true"><i data-lucide="circle-play"></i></span>Video 360</a><?php endif; ?>
+            <?php if ($cmsRuntimeReady): ?><a class="<?= $activeTab === 'inventaris' ? 'active' : '' ?>" href="?tab=inventaris"><span aria-hidden="true"><i data-lucide="list-checks"></i></span>Inventaris OI & Video 360</a><?php endif; ?>
             <a class="<?= $activeTab === 'loading' ? 'active' : '' ?>" href="?tab=loading"><span aria-hidden="true"><i data-lucide="gauge"></i></span>Optimasi Loading</a>
             <?php if ($cmsRuntimeReady): ?><a class="<?= $activeTab === 'custom' ? 'active' : '' ?>" href="?tab=custom"><span aria-hidden="true"><i data-lucide="code-2"></i></span>Custom CSS</a><?php endif; ?>
         </nav>
@@ -35,7 +36,7 @@
     </aside>
     <div class="cms-navigation-scrim" id="cmsNavigationScrim" hidden></div>
     <main class="shell">
-    <?php $tabLabels = ['dashboard'=>'Dashboard','languages'=>'Manajemen Bahasa','translations'=>'Translation Center','lokasi'=>'Data Lokasi','voice'=>'Voice Over','video'=>'Video','audit'=>'Audit','object'=>'Object Informasi','video360'=>'Video 360','custom'=>'Custom CSS','skin'=>'Template Skin','smart'=>'Smart Hub','aihub'=>'AI Guide Hub','loading'=>'Optimasi Loading']; $pageLabel = $tabLabels[$activeTab] ?? 'Data Lokasi'; ?>
+    <?php $tabLabels = ['dashboard'=>'Dashboard','languages'=>'Manajemen Bahasa','translations'=>'Translation Center','lokasi'=>'Data Lokasi','voice'=>'Voice Over','video'=>'Video','audit'=>'Audit','object'=>'Object Informasi','video360'=>'Video 360','inventaris'=>'Inventaris OI & Video 360','custom'=>'Custom CSS','skin'=>'Template Skin','smart'=>'Smart Hub','aihub'=>'AI Guide Hub','loading'=>'Optimasi Loading']; $pageLabel = $tabLabels[$activeTab] ?? 'Data Lokasi'; ?>
     <header class="topbar">
         <button type="button" class="cms-menu-button" id="openCmsNavigation" aria-controls="cmsNavigation" aria-expanded="false" aria-label="Buka menu"><i data-lucide="menu" aria-hidden="true"></i></button>
         <div class="cms-page-heading"><nav class="cms-breadcrumbs" aria-label="Breadcrumb"><a href="?tab=dashboard">CMS Virtual Tour</a><span>/</span><span aria-current="page"><?= e($pageLabel) ?></span></nav><h1><?= e($pageLabel) ?></h1><small><?= e($activeProject['name']) ?></small></div>
@@ -45,7 +46,7 @@
     <?php if ($message !== ''): ?><div class="alert success"><?= e($message) ?></div><?php endif; ?>
     <?php if ($error !== ''): ?><div class="alert error"><?= e($error) ?></div><?php endif; ?>
 
-    <?php if (!in_array($activeTab, ['dashboard', 'languages', 'translations', 'custom', 'video360', 'smart', 'aihub', 'loading'], true)): ?>
+    <?php if (!in_array($activeTab, ['dashboard', 'languages', 'translations', 'custom', 'video360', 'inventaris', 'smart', 'aihub', 'loading'], true)): ?>
     <div class="layout">
         <aside class="sidebar card">
             <div class="sidebar-title"><div><h2>Lokasi</h2><small><?= count($detectedTours) ?> tur terdeteksi</small></div><a href="?tab=lokasi&lokasi=baru" class="add">＋ Baru</a></div>
@@ -121,14 +122,16 @@
     <?php endif; ?>
 
     <?php if ($activeTab === 'dashboard'): ?>
-        <?php $completeTours = count(array_filter($dashboardTours, static fn(array $tour): bool => $tour['data_complete'])); $builtTours = count(array_filter($dashboardTours, static fn(array $tour): bool => $tour['bundle_built'])); $implementedTours = count(array_filter($dashboardTours, static fn(array $tour): bool => $tour['implemented'])); ?>
+        <?php $completeTours = count(array_filter($dashboardTours, static fn(array $tour): bool => $tour['data_complete'])); $builtTours = count(array_filter($dashboardTours, static fn(array $tour): bool => $tour['bundle_built'])); $implementedTours = count(array_filter($dashboardTours, static fn(array $tour): bool => $tour['implemented'])); $totalPanorama = array_sum(array_map(static fn(array $tour): int => (int) ($tour['panoramas'] ?? 0), $dashboardTours)); $builtPanorama = array_sum(array_map(static fn(array $tour): int => $tour['bundle_built'] ? (int) ($tour['panoramas'] ?? 0) : 0, $dashboardTours)); ?>
         <section class="dashboard" aria-labelledby="dashboardTitle">
             <div class="dashboard-intro"><div><span class="eyebrow">OVERVIEW</span><h2 id="dashboardTitle">Dashboard Produksi</h2><p>Pantau kesiapan konten dan kelola seluruh lokasi virtual tour dari satu tempat.</p></div><a href="?tab=lokasi&lokasi=baru"><span aria-hidden="true">＋</span> Buat Lokasi Baru</a></div>
             <div class="dashboard-summary">
                 <article class="card"><i aria-hidden="true"><span data-lucide="map-pin"></span></i><div><span>Total lokasi</span><strong><?= count($dashboardTours) ?></strong><small>Folder tur terdeteksi</small></div></article>
+                <article class="card"><i aria-hidden="true"><span data-lucide="image"></span></i><div><span>Total panorama</span><strong><?= $totalPanorama ?></strong><small><?= $builtPanorama ?> panorama sudah dibangun</small></div></article>
+                <article class="card"><i aria-hidden="true"><span data-lucide="info"></span></i><div><span>Object Informasi</span><strong><?= count($inventoryObjects ?? []) ?></strong><small><a href="?tab=inventaris">Lihat daftar</a></small></div></article>
+                <article class="card"><i aria-hidden="true"><span data-lucide="circle-play"></span></i><div><span>Video 360</span><strong><?= count($inventoryVideos ?? []) ?></strong><small><a href="?tab=inventaris&jenis=video360">Lihat daftar</a></small></div></article>
+                <article class="card"><i aria-hidden="true"><span data-lucide="package-check"></span></i><div><span>Panorama dibangun</span><strong><?= $builtPanorama ?></strong><small><?= $builtTours ?> lokasi bundle · <?= $implementedTours ?> implementasi</small></div></article>
                 <article class="card"><i aria-hidden="true"><span data-lucide="circle-check"></span></i><div><span>Data lengkap</span><strong><?= $completeTours ?></strong><small>Profil Smart Kit lengkap</small></div></article>
-                <article class="card"><i aria-hidden="true"><span data-lucide="package-check"></span></i><div><span>Bundle dibuat</span><strong><?= $builtTours ?></strong><small>Paket scene tersedia</small></div></article>
-                <article class="card"><i aria-hidden="true"><span data-lucide="rocket"></span></i><div><span>Sudah implementasi</span><strong><?= $implementedTours ?></strong><small>Smart Kit aktif di tur</small></div></article>
             </div>
             <section class="card dashboard-list">
                 <div class="dashboard-heading"><div><h2>Daftar Produksi Virtual Tour</h2><p>Status dan kategori bersumber dari paket Smart Kit setiap lokasi.</p></div><div class="dashboard-controls"><label><span>Cari lokasi</span><input type="search" id="dashboardSearch" placeholder="Nama, ID, atau kategori…"></label><label><span>Status data</span><select id="dashboardFilter"><option value="all">Semua status</option><option value="incomplete">Belum lengkap</option><option value="complete">Data lengkap</option></select></label></div></div>
@@ -142,13 +145,13 @@
                 <div class="bulk-toolbar"><label><input type="checkbox" id="bulkSelectVisible"> Pilih yang tampil</label><strong id="bulkSelectedCount">0 lokasi dipilih</strong><div><button type="button" class="bulk-production-button" id="runBulkProduction">▶ Bulk Production</button><button type="button" id="openBulkEdit">✎ Bulk Edit</button><button type="button" data-bulk-action="translate">✦ Auto Translate</button><button type="button" data-bulk-action="voice">♫ Generate Voice</button><button type="button" data-bulk-action="health">♡ Health Check</button><button type="button" class="audit-all" id="openAuditAll">Audit Semua</button></div></div>
                 <div class="bulk-progress" id="bulkProgress" hidden></div>
                 <div class="bulk-production-results" id="bulkProductionResults" hidden aria-live="polite"></div>
-                <div class="dashboard-table-wrap"><table class="dashboard-table"><thead><tr><th class="select-column"></th><th>Lokasi</th><th>Kategori Smart Kit</th><th>Kelengkapan data</th><th>Bundle</th><th>Implementasi</th><th>URL Local</th><th>URL Deploy</th><th class="dashboard-actions-column">Aksi</th></tr></thead><tbody id="tourStatusList">
-                    <?php foreach ($dashboardTours as $tour): ?><tr class="tour-status-card" data-location-id="<?= e($tour['id']) ?>" data-dashboard-category-row="<?= e($tour['category']) ?>" data-dashboard-name="<?= e($tour['search_text']) ?>" data-dashboard-score="<?= $tour['score'] ?>">
-                        <td class="select-column"><input type="checkbox" class="bulk-location" value="<?= e($tour['id']) ?>" aria-label="Pilih <?= e($tour['name']) ?>"></td><td><strong><?= e($tour['name']) ?></strong><small><?= e($tour['id']) ?></small></td><td><span class="smartkit-category"><?= e($tour['category_label']) ?></span></td><td><span class="table-progress"><i style="--progress:<?= $tour['score'] ?>%"></i><b><?= $tour['score'] ?>%</b></span></td>
+                <div class="dashboard-table-wrap"><table class="dashboard-table"><thead><tr><th class="select-column"></th><th>Lokasi</th><th>Kategori Smart Kit</th><th>Panorama</th><th>OI</th><th>Video 360</th><th>Kelengkapan data</th><th>Bundle</th><th>Implementasi</th><th>URL Local</th><th>URL Deploy</th><th class="dashboard-actions-column">Aksi</th></tr></thead><tbody id="tourStatusList">
+                    <?php foreach ($dashboardTours as $tour): ?><tr class="tour-status-card" data-href="?tab=lokasi&lokasi=<?= e($tour['id']) ?>" title="Buka halaman <?= e($tour['name']) ?>" data-location-id="<?= e($tour['id']) ?>" data-dashboard-category-row="<?= e($tour['category']) ?>" data-dashboard-name="<?= e($tour['search_text']) ?>" data-dashboard-score="<?= $tour['score'] ?>">
+                        <td class="select-column"><input type="checkbox" class="bulk-location" value="<?= e($tour['id']) ?>" aria-label="Pilih <?= e($tour['name']) ?>"></td><td><a class="dashboard-tour-link" href="?tab=lokasi&lokasi=<?= e($tour['id']) ?>"><strong><?= e($tour['name']) ?></strong><small><?= e($tour['id']) ?></small></a></td><td><span class="smartkit-category"><?= e($tour['category_label']) ?></span></td><td><b class="dashboard-count"><?= (int) ($tour['panoramas'] ?? 0) ?></b></td><td><b class="dashboard-count"><?= (int) ($tour['oi_count'] ?? 0) ?></b></td><td><b class="dashboard-count"><?= (int) ($tour['video360_count'] ?? 0) ?></b></td><td><span class="table-progress"><i style="--progress:<?= $tour['score'] ?>%"></i><b><?= $tour['score'] ?>%</b></span></td>
                         <td><span class="readiness-indicator <?= $tour['bundle_built'] ? 'is-ready' : 'is-pending' ?>" title="<?= $tour['bundle_built'] ? 'Bundle Smart Kit sudah dibuat' : 'Bundle Smart Kit belum dibuat' ?>"><i data-lucide="<?= $tour['bundle_built'] ? 'check' : 'minus' ?>" aria-hidden="true"></i></span></td><td><span class="readiness-indicator <?= $tour['implemented'] ? 'is-ready' : 'is-pending' ?>" title="<?= $tour['implemented'] ? 'Smart Kit sudah diterapkan' : 'Smart Kit belum diterapkan' ?>"><i data-lucide="<?= $tour['implemented'] ? 'check' : 'minus' ?>" aria-hidden="true"></i></span></td>
                         <td><div class="dashboard-preview-links"><button type="button" data-tour-preview="<?= e($tour['local_url']) ?>" data-preview-title="<?= e($tour['name']) ?> · Local">Preview</button></div></td><td><div class="dashboard-preview-links"><button type="button" data-tour-preview="<?= e($tour['deploy_url']) ?>" data-preview-title="<?= e($tour['name']) ?> · Deploy">Preview</button></div></td><td class="dashboard-actions-column"><div class="dashboard-row-actions"><button type="button" data-open-location="<?= e($tour['path']) ?>" title="Buka folder di File Explorer"><i data-lucide="folder-open" aria-hidden="true"></i></button><button type="button" data-zip-location="<?= e($tour['id']) ?>" data-zip-path="<?= e($tour['path']) ?>" data-zip-score="<?= e($tour['score']) ?>" title="ZIP semua isi lokasi"><span>ZIP</span></button><a class="dashboard-manage" href="?tab=lokasi&lokasi=<?= e($tour['id']) ?>">Kelola</a></div></td>
                     </tr><?php endforeach; ?>
-                    <tr id="dashboardEmpty" hidden><td colspan="9" class="dashboard-empty">Tidak ada lokasi pada kategori atau filter ini.</td></tr>
+                    <tr id="dashboardEmpty" hidden><td colspan="12" class="dashboard-empty">Tidak ada lokasi pada kategori atau filter ini.</td></tr>
                 </tbody></table></div>
             </section>
             <div class="tour-preview-modal" id="tourPreviewModal" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="tourPreviewTitle">
@@ -225,6 +228,11 @@
                 }));
                 search.addEventListener('input', apply);
                 status.addEventListener('change', apply);
+                // klik baris = buka halaman lokasi; kontrol di dalam baris tetap berfungsi sendiri
+                rows.forEach(row => row.addEventListener('click', (event) => {
+                    if (event.target.closest('input,button,a,select,label')) return;
+                    if (row.dataset.href) window.location.href = row.dataset.href;
+                }));
             })();
             </script>
         </section>
@@ -505,6 +513,27 @@
             <div class="voice-progress" id="videoProgress">Pilih satu atau dua video (WebM atau MP4) untuk diunggah.</div>
             <div class="actions"><button type="button" class="save" id="uploadVideo">Upload & Timpa Video</button></div>
         </section>
+    <?php elseif ($activeTab === 'inventaris'): $jenis = ($_GET['jenis'] ?? '') === 'video360' ? 'video360' : 'oi'; ?>
+        <section class="card section inventaris-editor">
+            <div class="section-heading"><div><span class="step">IV</span><div><h2>Inventaris OI & Video 360</h2><p>Daftar semua Object Informasi dan Video 360 beserta tur dan nomornya. Video 360 dibaca dari panorama tur yang memuat video pada <code>pano.xml</code>.</p></div></div><div class="config-heading-actions"><span><?= count($inventoryObjects) ?> OI · <?= count($inventoryVideos) ?> video</span></div></div>
+            <nav class="language-section-tabs" aria-label="Jenis inventaris">
+                <a class="<?= $jenis === 'oi' ? 'active' : '' ?>" href="?tab=inventaris&jenis=oi">Object Informasi <span><?= count($inventoryObjects) ?></span></a>
+                <a class="<?= $jenis === 'video360' ? 'active' : '' ?>" href="?tab=inventaris&jenis=video360">Video 360 <span><?= count($inventoryVideos) ?></span></a>
+            </nav>
+            <div class="dashboard-table-wrap"><table class="dashboard-table"><thead><tr><th>#</th><th>Tur</th><?php if ($jenis === 'oi'): ?><th>Info ID</th><th>Judul</th><th>Node</th><th>WebElement</th><?php else: ?><th>Panorama</th><th>Berkas video</th><th>Status</th><?php endif; ?></tr></thead><tbody>
+            <?php if ($jenis === 'oi'): ?>
+                <?php foreach ($inventoryObjects as $row): ?>
+                <tr><td><?= (int) $row['no'] ?></td><td><a class="dashboard-tour-link" href="?tab=lokasi&lokasi=<?= e($row['tour']) ?>"><strong><?= e($row['tour_name']) ?></strong><small><?= e($row['tour']) ?></small></a></td><td><code><?= e($row['infoID']) ?></code></td><td><?= e($row['title']) ?></td><td><small><?= e($row['nodeID']) ?></small></td><td><small><?= e($row['targetID']) ?></small></td></tr>
+                <?php endforeach; ?>
+                <?php if ($inventoryObjects === []): ?><tr><td colspan="6" class="dashboard-empty">Belum ada Object Informasi.</td></tr><?php endif; ?>
+            <?php else: ?>
+                <?php foreach ($inventoryVideos as $row): ?>
+                <tr><td><?= (int) $row['no'] ?></td><td><a class="dashboard-tour-link" href="?tab=lokasi&lokasi=<?= e($row['tour']) ?>"><strong><?= e($row['tour_name']) ?></strong><small><?= e($row['tour']) ?></small></a></td><td><code><?= e($row['node']) ?></code></td><td><small><?= e($row['video']) ?></small></td><td><?= !empty($row['exists']) ? 'Berkas ada' : 'Berkas tidak ditemukan' ?></td></tr>
+                <?php endforeach; ?>
+                <?php if ($inventoryVideos === []): ?><tr><td colspan="5" class="dashboard-empty">Belum ada panorama ber-video.</td></tr><?php endif; ?>
+            <?php endif; ?>
+            </tbody></table></div>
+        </section>
     <?php elseif ($activeTab === 'video360'): ?>
         <section class="card section video360-editor">
             <div class="section-heading"><div><span class="step">360</span><div><h2>Folder Video 360</h2><p>Setiap item merupakan folder tersendiri di assets/360/videos.</p></div></div><div class="config-heading-actions"><span><?= count($video360Items) ?> folder</span><button type="button" class="translate" id="launchVideo360Encoder">⚙ Buka Encoder GUI</button></div></div>
@@ -542,7 +571,8 @@
                 <div class="audit-summary"><div><strong><?= e($stats['panoramas']) ?></strong><span>Panorama</span></div><div><strong><?= e($stats['hotspots']) ?></strong><span>Hotspot</span></div><div class="audit-error"><strong><?= e($stats['errors']) ?></strong><span>Link belum diisi</span></div><div class="audit-warning"><strong><?= e($stats['warnings']) ?></strong><span>Terjemahan kosong</span></div></div>
                 <div class="pano-editor-actions"><strong>Editor pano.xml</strong><span>Field yang belum lengkap langsung ditandai. Backup otomatis dibuat setiap kali menyimpan · <kbd>Ctrl</kbd>+<kbd>S</kbd> untuk simpan.</span><button type="button" class="save" id="savePanoEditor" disabled>Simpan pano.xml</button></div>
                 <nav class="pano-editor-tabs"><button type="button" class="active" data-pano-editor-tab="panorama">Panorama <span><?= count($selectedPanoramas) ?></span></button><button type="button" data-pano-editor-tab="hotspot">Hotspot <span><?= count($auditResult['hotspots']) ?></span></button><button type="button" data-pano-editor-tab="translation">Terjemahan <span><?= count($auditResult['translations']) ?></span></button></nav>
-                <?php $missingHotspotCount = count(array_filter($auditResult['hotspots'], static fn(array $hotspot): bool => trim((string) ($hotspot['url'] ?? '')) === '')); ?>
+                <?php $needsTarget = static fn(array $hotspot): bool => trim((string) ($hotspot['url'] ?? '')) === '' && !str_contains(strtolower((string) ($hotspot['skinId'] ?? '')), '360_video_experience'); ?>
+                <?php $missingHotspotCount = count(array_filter($auditResult['hotspots'], $needsTarget)); ?>
                 <?php $hotspotsByNode = []; foreach ($auditResult['hotspots'] as $hotspotItem) $hotspotsByNode[strtolower((string) $hotspotItem['nodeId'])][] = $hotspotItem; ?>
                 <section class="pano-editor-panel" data-pano-editor-panel="hotspot">
                     <div class="pe-toolbar">
@@ -551,7 +581,7 @@
                         <div class="pe-toolbar-end"><button type="button" class="pe-link" data-hotspot-expand="1">Buka semua</button><button type="button" class="pe-link" data-hotspot-expand="0">Tutup semua</button></div>
                     </div>
                     <div class="pano-hotspot-groups" id="panoHotspotEditor">
-                    <?php foreach ($selectedPanoramas as $sourcePanorama): $sourceHotspots = $hotspotsByNode[strtolower((string) $sourcePanorama['nodeId'])] ?? []; $groupMissing = count(array_filter($sourceHotspots, static fn(array $hotspot): bool => trim((string) ($hotspot['url'] ?? '')) === '')); ?>
+                    <?php foreach ($selectedPanoramas as $sourcePanorama): $sourceHotspots = $hotspotsByNode[strtolower((string) $sourcePanorama['nodeId'])] ?? []; $groupMissing = count(array_filter($sourceHotspots, static fn(array $hotspot): bool => trim((string) ($hotspot['url'] ?? '')) === '' && !str_contains(strtolower((string) ($hotspot['skinId'] ?? '')), '360_video_experience'))); ?>
                     <details class="pano-hotspot-group" data-hotspot-group="<?= e($sourcePanorama['nodeId']) ?>" <?= $sourceHotspots !== [] ? '' : 'data-empty' ?>>
                         <summary>
                             <span class="pano-group-thumb" data-preview-node="<?= e($sourcePanorama['nodeId']) ?>" title="Klik untuk preview 360°"><?php if ($sourcePanorama['thumbnail'] !== ''): ?><img src="<?= e($sourcePanorama['thumbnail']) ?>" alt="" loading="lazy"><?php else: ?><i>360°</i><?php endif; ?></span>
@@ -572,9 +602,10 @@
                             $isEst = $hsKind === 'url';
                             $targetNodeId = trim((string) $hotspot['url'], '{}'); $targetPanorama = null; foreach ($selectedPanoramas as $candidatePanorama) if (strcasecmp($candidatePanorama['nodeId'], $targetNodeId) === 0 || ($candidatePanorama['customNodeId'] !== '' && strcasecmp($candidatePanorama['customNodeId'], $targetNodeId) === 0)) { $targetPanorama = $candidatePanorama; break; }
                             $isPanoTarget = $hotspot['url'] === '' || $targetPanorama !== null;
+                            $cardNeedsTarget = $hotspot['url'] === '' && $hsKind !== 'video360';
                             $kindLabel = ['pano' => 'Ke panorama', 'url' => 'Ke URL', 'video360' => 'Video 360'][$hsKind]; ?>
-                            <article class="pano-edit-card <?= $hotspot['url'] === '' ? 'needs-attention' : '' ?> <?= $isEst ? 'est-hotspot' : '' ?>" data-node-id="<?= e($hotspot['nodeId']) ?>" data-hotspot-id="<?= e($hotspot['id']) ?>" data-hs-kind="<?= e($hsKind) ?>">
-                                <header><div><strong data-hs-heading><?= e($hotspot['title'] !== '' ? $hotspot['title'] : $hotspot['id']) ?></strong><small title="Skin: <?= e($hotspot['skinId']) ?>">ID <?= e($hotspot['id']) ?> · <?= e($kindLabel) ?></small></div><span class="pe-status" data-hs-status <?= $hotspot['url'] === '' ? '' : 'hidden' ?>>Belum ada tujuan</span><span class="pe-dirty-badge">Diubah</span><span class="pe-delete-badge">Akan dihapus</span><button type="button" class="pe-hs-delete" data-hs-delete title="Hapus hotspot ini dari pano.xml" aria-label="Hapus hotspot <?= e($hotspot['id']) ?>">Hapus</button><button type="button" class="pe-hs-restore" data-hs-restore>Batal hapus</button></header>
+                            <article class="pano-edit-card <?= $cardNeedsTarget ? 'needs-attention' : '' ?> <?= $isEst ? 'est-hotspot' : '' ?>" data-node-id="<?= e($hotspot['nodeId']) ?>" data-hotspot-id="<?= e($hotspot['id']) ?>" data-hs-kind="<?= e($hsKind) ?>">
+                                <header><div><strong data-hs-heading><?= e($hotspot['title'] !== '' ? $hotspot['title'] : $hotspot['id']) ?></strong><small title="Skin: <?= e($hotspot['skinId']) ?>">ID <?= e($hotspot['id']) ?> · <?= e($kindLabel) ?></small></div><span class="pe-status" data-hs-status <?= $cardNeedsTarget ? '' : 'hidden' ?>>Belum ada tujuan</span><span class="pe-dirty-badge">Diubah</span><span class="pe-delete-badge">Akan dihapus</span><button type="button" class="pe-hs-delete" data-hs-delete title="Hapus hotspot ini dari pano.xml" aria-label="Hapus hotspot <?= e($hotspot['id']) ?>">Hapus</button><button type="button" class="pe-hs-restore" data-hs-restore>Batal hapus</button></header>
                                 <input type="hidden" data-pano-field="deleted" value="">
                                 <label class="pe-field"><span>Judul hotspot</span><input data-pano-field="title" value="<?= e($hotspot['title']) ?>" placeholder="mis. Menuju area parkir"></label>
                                 <?php if ($hsKind === 'url'): $estUrls = array_map(static fn(string $slug): string => 'https://jakarta.govirtual.id/' . $slug, EST_DESTINATIONS); ?>
@@ -593,7 +624,7 @@
                                 </div>
                                 <?php endif; ?>
                                 <?php if ($hsKind === 'pano'): ?>
-                                <label class="pe-field"><span>Arah pandang saat tiba <em>opsional</em></span><input data-pano-field="target" value="<?= e($hotspot['target']) ?>" placeholder="pan/tilt/fov, mis. 35/-1/90" spellcheck="false"><small class="pe-hint">Kosongkan untuk memakai arah bawaan panorama tujuan.</small></label>
+                                <label class="pe-field"><span>Arah pandang saat tiba <em>opsional</em></span><div class="pe-input-action"><input data-pano-field="target" value="<?= e($hotspot['target']) ?>" placeholder="pan/tilt/fov, mis. 35/-1/90" spellcheck="false"><button type="button" data-hs-aim title="Atur arah dengan menggeser panorama tujuan">Atur arah</button></div><small class="pe-hint">Kosongkan untuk memakai arah bawaan panorama tujuan. Klik Atur arah untuk memilih pan/tilt/fov dengan menggeser.</small></label>
                                 <?php else: ?>
                                 <input type="hidden" data-pano-field="target" value="<?= e($hotspot['target']) ?>">
                                 <?php endif; ?>
@@ -674,13 +705,18 @@
                         <footer>
                             <label><span>Judul panorama</span><input id="panoPreviewTitleInput" placeholder="Beri judul agar mudah dikenali" autocomplete="off"></label>
                             <button type="button" class="pe-preview-hotspots" id="panoPreviewHotspots">Lihat hotspot →</button>
+                            <div class="pe-preview-aim" id="panoAimBar" hidden>
+                                <span class="pe-preview-aim-live" id="panoAimLive">Geser panorama untuk menentukan arah.</span>
+                                <button type="button" class="pe-preview-hotspots" id="panoAimSave">Simpan arah</button>
+                                <button type="button" class="pe-preview-hotspots" id="panoAimCancel">Batal</button>
+                            </div>
                         </footer>
                     </div>
                 </div>
             <?php endif; ?>
         </section>
     <?php endif; ?>
-    <?php if (!in_array($activeTab, ['dashboard', 'languages', 'translations', 'custom', 'video360', 'smart', 'aihub', 'loading'], true)): ?>
+    <?php if (!in_array($activeTab, ['dashboard', 'languages', 'translations', 'custom', 'video360', 'inventaris', 'smart', 'aihub', 'loading'], true)): ?>
         </div>
     </div>
     <?php endif; ?>
@@ -1153,7 +1189,8 @@ if (panoSaveButton) {
 
     // --- Hotspot: status tujuan & jumlah per grup
     const refreshHotspotState = card => {
-        const missing = !card.classList.contains('is-deleted') && card.querySelector('[data-pano-field="url"]').value.trim() === '';
+        // Hotspot video 360 memang tanpa URL tujuan → jangan ditandai kurang.
+        const missing = !card.classList.contains('is-deleted') && card.dataset.hsKind !== 'video360' && card.querySelector('[data-pano-field="url"]').value.trim() === '';
         card.classList.toggle('needs-attention', missing);
         const status = card.querySelector('[data-hs-status]'); if (status) status.hidden = !missing;
     };
@@ -1402,10 +1439,12 @@ if (panoSaveButton) {
     const previewPlayer = () => { try { return previewFrame.contentWindow?.pano || null; } catch (_) { return null; } };
     // Sembunyikan skin, layar pembuka, dan suara tur di dalam preview.
     const quietPreviewFrame = () => {
+        // Mode atur arah: hanya lapisan penutup yang dibuang; kontrol mouse Pano2VR (divSkin) tetap hidup.
+        const aiming = preview.dataset.mode === 'aim';
         try {
             const doc = previewFrame.contentDocument, player = previewPlayer();
             doc?.querySelectorAll('[id$="skin-overlay"],[id$="skin-boot-cover"]').forEach(element => element.remove());
-            if (player?.divSkin) { player.divSkin.style.display = 'none'; player.divSkin.style.pointerEvents = 'none'; }
+            if (!aiming && player?.divSkin) { player.divSkin.style.display = 'none'; player.divSkin.style.pointerEvents = 'none'; }
             const skin = previewFrame.contentWindow?.skin; if (skin?.divSkin) skin.divSkin.style.display = 'none';
             player?.mute?.('_all');
             doc?.querySelectorAll('audio').forEach(media => { media.muted = true; });
@@ -1419,6 +1458,8 @@ if (panoSaveButton) {
         const player = previewPlayer(); if (!player) return;
         try { player.openNext('{' + node + '}'); player.setLocked?.(false); } catch (_) {}
         quietPreviewFrame(); showPreviewReady();
+        // Mode atur arah: panorama baru mengganti sudut → terapkan ulang arah tersimpan.
+        if (preview.dataset.mode === 'aim') { aimSeeked = false; aimEnableInteraction(); }
     };
     const loadPreviewNode = node => {
         if (!previewTourUrl) { previewStatus.textContent = 'URL tur tidak ditemukan — menampilkan thumbnail.'; previewStatus.hidden = false; return; }
@@ -1473,6 +1514,7 @@ if (panoSaveButton) {
     };
     const closePreview = () => {
         if (preview.hidden) return;
+        if (preview.dataset.mode === 'aim') stopAimMode();
         preview.hidden = true; document.body.classList.remove('modal-open');
         try { previewPlayer()?.mute?.('_all'); } catch (_) {}
         const card = previewCard; previewCard = null;
@@ -1511,9 +1553,87 @@ if (panoSaveButton) {
         if (preview.hidden) return;
         if (event.key === 'Escape') { closePreview(); return; }
         if (event.target === previewTitleInput) return;
+        if (preview.dataset.mode === 'aim') return; // arah: jangan pindah panorama
         if (event.key === 'ArrowLeft') { event.preventDefault(); stepPreview(-1); }
         if (event.key === 'ArrowRight') { event.preventDefault(); stepPreview(1); }
     });
+
+    // --- Atur arah hotspot (pan/tilt/fov) memakai pemutar 360° yang sama
+    let aimInput = null, aimFrame = 0, aimSeeked = false;
+    const aimBar = document.getElementById('panoAimBar');
+    const aimLive = document.getElementById('panoAimLive');
+    const aimValues = () => { const player = previewPlayer(); return {pan:Number(player?.getPan?.()||0), tilt:Number(player?.getTilt?.()||0), fov:Number(player?.getFov?.()||70)}; };
+    const aimFormat = value => value.pan.toFixed(2) + '/' + value.tilt.toFixed(2) + '/' + value.fov.toFixed(2);
+    function stopAimMode() {
+        cancelAnimationFrame(aimFrame); aimFrame = 0; aimInput = null; aimSeeked = false;
+        delete preview.dataset.mode;
+        if (aimBar) aimBar.hidden = true;
+        try { previewFrame.contentDocument?.getElementById('cms-aim-style')?.remove(); } catch (_) {}
+    }
+    const aimRefresh = () => {
+        if (preview.dataset.mode !== 'aim') return;
+        const player = previewPlayer();
+        if (player && !aimSeeked) {
+            // Terapkan arah tersimpan supaya pengguna mulai dari sudut lama.
+            aimSeeked = true;
+            const parts = String(aimInput?.value || '').split('/').map(Number);
+            if (parts.length === 3 && parts.every(Number.isFinite)) {
+                try { player.setPan?.(parts[0]); player.setTilt?.(parts[1]); player.setFov?.(parts[2]); } catch (_) {}
+            }
+            aimEnableInteraction();
+        }
+        const value = aimValues();
+        if (aimLive) aimLive.textContent = 'Pan ' + value.pan.toFixed(1) + '° · Tilt ' + value.tilt.toFixed(1) + '° · FoV ' + value.fov.toFixed(1) + '°';
+        aimFrame = requestAnimationFrame(aimRefresh);
+    };
+    const aimEnableInteraction = () => {
+        try {
+            const player = previewPlayer(), control = player?.control || player?.divSkin || null;
+            // quietPreviewFrame() menyembunyikan divSkin; di mode arah div itu yang menerima geseran mouse.
+            if (player?.divSkin?.style) { player.divSkin.style.display = ''; player.divSkin.style.pointerEvents = 'auto'; }
+            if (control && !control.id) control.id = 'cms-aim-control';
+            const controlSel = control ? '#' + control.id : '#hotspots';
+            const frameDocument = previewFrame.contentDocument;
+            if (frameDocument && !frameDocument.getElementById('cms-aim-style')) {
+                // Semua lapisan HUD (di dalam maupun di luar #container, termasuk yang ditempel ke body)
+                // disembunyikan lewat CSS; canvas + lapisan kontrol tetap terlihat & bisa digeser.
+                const style = frameDocument.createElement('style'); style.id = 'cms-aim-style';
+                style.textContent = 'html>*:not(body){display:none!important}'
+                    + 'body>*:not(#container){display:none!important}'
+                    + '#container *{visibility:hidden!important}'
+                    + '#container canvas,#container canvas *{visibility:visible!important}'
+                    + controlSel + '{visibility:visible!important;display:block!important;cursor:crosshair}'
+                    + controlSel + '>*{visibility:hidden!important}';
+                (frameDocument.head || frameDocument.documentElement).appendChild(style);
+            }
+            try { player?.stopAutorotate?.(); } catch (_) {}
+        } catch (_) {}
+    };
+    const startAim = card => {
+        const input = card.querySelector('[data-pano-field="target"]'); if (!input) return;
+        if (card.querySelector('[data-hs-pane="pano"]')?.hidden) { alert('Ubah jenis tujuan ke Panorama dulu untuk mengatur arah pandang.'); return; }
+        const target = card.querySelector('[data-hs-target-select]')?.value?.trim() || '';
+        if (!target) { alert('Pilih panorama tujuan dulu sebelum mengatur arah pandang.'); return; }
+        const targetCard = document.querySelector('[data-panorama-node-id="' + CSS.escape(target) + '"]');
+        if (!targetCard) { alert('Panorama tujuan tidak ditemukan di daftar panorama.'); return; }
+        aimInput = input; aimSeeked = false;
+        preview.dataset.mode = 'aim'; // set sebelum openPreview agar iframe tidak ditutup skin-mode
+        preview.querySelectorAll('[data-preview-step]').forEach(button => { button.hidden = true; });
+        aimBar.hidden = false;
+        openPreview(targetCard);
+        cancelAnimationFrame(aimFrame); aimRefresh();
+    };
+    hotspotEditor.addEventListener('click', event => {
+        const button = event.target.closest('[data-hs-aim]'); if (!button) return;
+        startAim(button.closest('.pano-edit-card'));
+    });
+    document.getElementById('panoAimSave')?.addEventListener('click', () => {
+        if (!aimInput) return;
+        aimInput.value = aimFormat(aimValues());
+        aimInput.dispatchEvent(new Event('input', {bubbles:true}));
+        closePreview();
+    });
+    document.getElementById('panoAimCancel')?.addEventListener('click', () => closePreview());
 
     // --- Terjemahan
     let activeTranslationFilter = 'all';
@@ -1876,7 +1996,7 @@ if (objectList) {
         const select=(field,label,values)=>'<label><span>'+label+'</span><select data-object-field="'+field+'">'+values.map(value=>'<option '+(record[field]===value?'selected':'')+'>'+value+'</option>').join('')+'</select></label>';
         const translations=Object.entries(voiceLabels).map(([code,label])=>'<label><span>'+label+'</span><textarea rows="3" data-object-lang="'+code+'">'+escapeObjectHtml(record.labelTeks?.[code]||'')+'</textarea></label>').join('');
         const previewUrl=record.infoID ? oiPreviewBaseUrl+'?info='+encodeURIComponent(record.infoID)+'&lang=id' : '';
-        objectForm.innerHTML='<div class="object-form-head"><label class="object-active-toggle"><span>Object</span><span class="toggle-control"><input type="checkbox" data-object-active aria-label="Aktifkan object" '+(record.isActive?'checked':'')+'><i aria-hidden="true"></i></span></label><div class="object-form-actions"><button type="button" class="translate" data-translate-object>✦ Auto Translate</button><button type="button" class="danger" data-delete-object>Hapus</button></div></div><div class="object-detail-layout"><div><div class="object-fields">'+input('route_key','Route Key','span2')+input('title','Title')+input('nodeID','Node ID')+select('targetID','Target ID',Array.from({length:10},(_,index)=>'Element'+String(index+1).padStart(2,'0')))+input('infoID','Info ID')+select('arah','Arah',['luruskanan','luruskiri','kanan','kiri'])+input('ukuran','Ukuran')+input('category','Kategori')+select('versi','Versi',['1'])+'</div><div class="object-translations">'+translations+'</div></div><aside class="object-preview"><header><strong>Preview Info</strong><a href="'+escapeObjectHtml(previewUrl)+'" target="_blank" rel="noopener">Buka ↗</a></header>'+(previewUrl?'<iframe src="'+escapeObjectHtml(previewUrl)+'" title="Preview Object Informasi"></iframe>':'<div>Isi Info ID untuk melihat preview.</div>')+'</aside></div>';
+        objectForm.innerHTML='<div class="object-form-head"><label class="object-active-toggle"><span>Object</span><span class="toggle-control"><input type="checkbox" data-object-active aria-label="Aktifkan object" '+(record.isActive?'checked':'')+'><i aria-hidden="true"></i></span></label><div class="object-form-actions"><button type="button" class="translate" data-translate-object>✦ Auto Translate</button><button type="button" class="danger" data-delete-object>Hapus</button></div></div><div class="object-detail-layout"><div><div class="object-fields">'+input('route_key','Route Key','span2')+input('title','Title')+input('nodeID','Node ID')+select('targetID','Target ID',Array.from({length:10},(_,index)=>'Element'+String(index+1).padStart(2,'0')))+input('infoID','Info ID')+select('arah','Arah',['luruskanan','luruskiri','kanan','kiri'])+input('ukuran','Ukuran')+'</div><div class="object-translations">'+translations+'</div></div><aside class="object-preview"><header><strong>Preview Info</strong><a href="'+escapeObjectHtml(previewUrl)+'" target="_blank" rel="noopener">Buka ↗</a></header>'+(previewUrl?'<iframe src="'+escapeObjectHtml(previewUrl)+'" title="Preview Object Informasi"></iframe>':'<div>Isi Info ID untuk melihat preview.</div>')+'</aside></div>';
     }
     objectList.addEventListener('click',event=>{const item=event.target.closest('[data-object]');if(item){selectedObject=Number(item.dataset.object);renderObjectList();}});
     objectSearch.addEventListener('input',renderObjectList);

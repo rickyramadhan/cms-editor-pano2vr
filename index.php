@@ -493,7 +493,7 @@ function tourCategory(string $id): string
 /** Dashboard readiness sourced exclusively from the Smart Kit package. */
 function smartKitDashboardTour(array $status, array $tour, array $settings): array
 {
-    global $activeProject;
+    global $activeProject, $projectRoot;
     $id = (string) $status['id'];
     $contentFile = rtrim((string) $settings['path'], '/\\') . '/packs/' . $settings['wilayah'] . '/' . $id . '/content.json';
     $content = is_file($contentFile) ? json_decode((string) file_get_contents($contentFile), true) : [];
@@ -519,9 +519,14 @@ function smartKitDashboardTour(array $status, array $tour, array $settings): arr
     $typeLabels = ['pantai' => 'Pantai', 'pura' => 'Pura & budaya', 'alam' => 'Alam', 'atraksi' => 'Atraksi', 'umum' => 'Umum'];
     $name = trim((string) ($region['name'] ?? '')) ?: humanizeLocationId($id);
     $path = (string) ($tour['path'] ?? $status['path'] ?? $id);
+    // jumlah panorama = node <userdata nodeid> di pano.xml (bukan hasil bundle), agar lokasi belum dibangun tetap terhitung
+    $panoramas = 0;
+    $panoFile = $projectRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, $path) . '/pano.xml';
+    if (is_file($panoFile)) $panoramas = preg_match_all('/<userdata\s+[^>]*\bnodeid="[^"]+"/i', (string) file_get_contents($panoFile));
 
     return [
         'id' => $id, 'name' => $name, 'path' => $path, 'score' => $score,
+        'panoramas' => $panoramas,
         'data_complete' => $score === 100, 'bundle_built' => !empty($status['pack']['exists']),
         'implemented' => !empty($status['applied']), 'category' => $type,
         'category_label' => $typeLabels[$type] ?? humanizeLocationId($type),
@@ -753,7 +758,7 @@ try {
 
 $selectedId = cleanKey((string) ($_GET['lokasi'] ?? array_key_first($detectedTours) ?? array_key_first($database) ?? ''));
 $requestedTab = (string) ($_GET['tab'] ?? 'dashboard');
-$activeTab = in_array($requestedTab, ['dashboard', 'translations', 'lokasi', 'languages', 'custom', 'skin', 'object', 'voice', 'video', 'video360', 'audit', 'smart', 'aihub', 'loading'], true) ? $requestedTab : 'dashboard';
+$activeTab = in_array($requestedTab, ['dashboard', 'inventaris', 'translations', 'lokasi', 'languages', 'custom', 'skin', 'object', 'voice', 'video', 'video360', 'audit', 'smart', 'aihub', 'loading'], true) ? $requestedTab : 'dashboard';
 $smartHubState = null;
 if ($activeTab === 'smart') {
     // Smart Hub: integrasi Smart Kit untuk wilayah project aktif (lihat smart-hub.php)
@@ -813,6 +818,50 @@ if (is_dir($video360Root)) foreach (new DirectoryIterator($video360Root) as $ent
     $video360Items[$videoId] = ['ready' => is_file($manifest), 'bytes' => is_file($manifest) ? filesize($manifest) : 0, 'code' => 'javascript:window.GV360.open("' . $videoId . '");void(0)'];
 }
 uksort($video360Items, 'strnatcasecmp');
+// Inventaris Object Informasi & Video 360: dipakai tab Inventaris dan kartu ringkasan dashboard.
+$inventoryObjects = [];
+$inventoryVideos = [];
+if (in_array($activeTab, ['dashboard', 'inventaris'], true)) {
+  foreach ($detectedTours as $id => $tour) {
+    foreach (array_values($oiDatabase[$id] ?? []) as $index => $record) {
+      if (!is_array($record)) continue;
+      $inventoryObjects[] = [
+        'tour' => $id,
+        'tour_name' => humanizeLocationId($id),
+        'no' => $index + 1,
+        'infoID' => (string) ($record['infoID'] ?? ''),
+        'nodeID' => (string) ($record['nodeID'] ?? ''),
+        'targetID' => (string) ($record['targetID'] ?? ''),
+        'title' => (string) ($record['title'] ?? ''),
+      ];
+    }
+    $tourDir = $projectRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, (string) $tour['path']);
+    $panoFile = $tourDir . '/pano.xml';
+    if (!is_file($panoFile)) continue;
+    // Video 360 = panorama yang punya <video><source url="videos/....webm"/> di pano.xml.
+    $videoDoc = new DOMDocument();
+    libxml_use_internal_errors(true);
+    $videoOk = $videoDoc->load($panoFile);
+    libxml_clear_errors();
+    if (!$videoOk) continue;
+    $videoXp = new DOMXPath($videoDoc);
+    $videoNo = 0;
+    foreach ($videoXp->query('//panorama') as $panoNode) {
+      foreach ($videoXp->query('.//video/source[@url]', $panoNode) as $sourceNode) {
+        $sourceUrl = trim((string) $sourceNode->getAttribute('url'));
+        if ($sourceUrl === '') continue;
+        $inventoryVideos[] = [
+          'tour' => $id,
+          'tour_name' => humanizeLocationId($id),
+          'no' => ++$videoNo,
+          'node' => (string) $panoNode->getAttribute('id'),
+          'video' => (string) preg_replace('/^videos\//i', '', $sourceUrl),
+          'exists' => is_file($tourDir . '/' . str_replace('/', DIRECTORY_SEPARATOR, $sourceUrl)),
+        ];
+      }
+    }
+  }
+}
 if ($activeTab === 'skin') {
     $activeSkinTemplateHash = $activeSkinTemplateId !== '' ? $skinTemplates[$activeSkinTemplateId]['skinHash'] : '';
     $skinHashNames = array_column($skinTemplates, 'name', 'skinHash');
@@ -839,8 +888,16 @@ if ($activeTab === 'dashboard') {
         $id = (string) $status['id'];
         $dashboardTours[] = smartKitDashboardTour($status, $detectedTours[$id] ?? [], $dashboardSettings);
     }
+    // Jumlah Object Informasi & Video 360 per lokasi untuk kolom dashboard.
+    $oiCounts = []; foreach ($inventoryObjects as $row) $oiCounts[$row['tour']] = ($oiCounts[$row['tour']] ?? 0) + 1;
+    $videoCounts = []; foreach ($inventoryVideos as $row) if ($row['tour'] !== '') $videoCounts[$row['tour']] = ($videoCounts[$row['tour']] ?? 0) + 1;
+    foreach ($dashboardTours as &$dashboardTour) {
+        $dashboardTour['oi_count'] = $oiCounts[$dashboardTour['id']] ?? 0;
+        $dashboardTour['video360_count'] = $videoCounts[$dashboardTour['id']] ?? 0;
+    }
+    unset($dashboardTour);
     usort($dashboardTours, static fn(array $a, array $b): int => $a['score'] <=> $b['score'] ?: strnatcasecmp((string) $a['name'], (string) $b['name']));
-} elseif (!in_array($activeTab, ['config', 'languages', 'translations', 'custom', 'skin', 'smart', 'aihub', 'loading', 'video360'], true)) {   // tab tanpa daftar status per lokasi: jangan mengurai pano.xml semua tur
+} elseif (!in_array($activeTab, ['config', 'languages', 'translations', 'custom', 'skin', 'smart', 'aihub', 'loading', 'video360', 'inventaris'], true)) {   // tab tanpa daftar status per lokasi: jangan mengurai pano.xml semua tur
     foreach ($detectedTours as $id => $tour) {
         $sidebarTourStatus[$id] = analyzeTourCompletion($projectRoot, $id, $tour, $database[$id] ?? [], $oiDatabase[$id] ?? [], false);
     }

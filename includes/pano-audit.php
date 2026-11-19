@@ -61,9 +61,11 @@ function auditTour(string $root, array $tour): array
             $location = $nodeId . ' / ' . $hotspotId;
             $title = trim((string) ($hotspot['title'] ?? ''));
             $url = trim((string) ($hotspot['url'] ?? ''));
-            $result['hotspots'][] = ['nodeId' => $nodeId, 'id' => $hotspotId, 'title' => $title, 'url' => $url, 'target' => trim((string) ($hotspot['target'] ?? '')), 'skinId' => trim((string) ($hotspot['skinid'] ?? ''))];
+            $skinId = trim((string) ($hotspot['skinid'] ?? ''));
+            $result['hotspots'][] = ['nodeId' => $nodeId, 'id' => $hotspotId, 'title' => $title, 'url' => $url, 'target' => trim((string) ($hotspot['target'] ?? '')), 'skinId' => $skinId];
             if ($title !== '') $translatedTexts[$title] = true;
-            if ($url === '') {
+            // Hotspot video 360 sengaja tidak punya URL tujuan (membuka player 360 di tempat) → bukan error.
+            if ($url === '' && !str_contains(strtolower($skinId), '360_video_experience')) {
                 $addIssue('error', 'Link kosong', $location, 'Hotspot “' . ($title !== '' ? $title : $hotspotId) . '” belum memiliki URL/link.');
             }
         }
