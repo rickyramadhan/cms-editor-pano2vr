@@ -37,7 +37,7 @@ function shSaveSettings(string $projectId, array $in): array
     $path = rtrim(str_replace('\\', '/', trim((string) ($in['path'] ?? ''))), '/');
     if ($path === '' || !is_file($path . '/boot.js') || !is_file($path . '/hub-catalog.json')) throw new RuntimeException('Folder Smart Kit tidak valid (boot.js / hub-catalog.json tidak ditemukan di ' . $path . ').');
     $url = trim((string) ($in['url'] ?? ''));
-    if (!preg_match('~^(https?://[^\s"\'<>]+|/[^\s"\'<>]*)$~', $url)) throw new RuntimeException('Alamat Smart Kit harus diawali / atau http(s)://');
+    if (!preg_match('~^(https?://[^\s"\'<>]+|/[^\s"\'<>]*|\.{1,2}/[^\s"\'<>]*)$~', $url)) throw new RuntimeException('Alamat Smart Kit harus diawali /, ../ (relatif terhadap folder lokasi, mis. ../smart-kit/) atau http(s)://');
     $python = trim((string) ($in['python'] ?? 'python'));
     if (!preg_match('~^[A-Za-z0-9 _:./\\\\()-]{1,200}$~', $python)) throw new RuntimeException('Jalur Python tidak valid.');
     $registry[$projectId]['smartkit'] = ['wilayah' => $wil, 'path' => $path, 'url' => rtrim($url, '/') . '/', 'python' => $python];
