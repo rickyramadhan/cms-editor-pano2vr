@@ -86,6 +86,7 @@ $skinTemplateId = (string) ($activeProject['template_tour'] ?? '');
 $skinTemplateDirectory = projectTemplateDirectory((string) $activeProject['id']);
 $skinTemplates = skinTemplateList();
 $activeSkinTemplateId = projectSkinTemplateId($activeProject, $skinTemplates);
+$tourSetup = $activeSkinTemplateId !== '' ? skinTemplateSetup($activeSkinTemplateId) : null;   // tombol "Setup" di editor hotspot (skin-templates/<id>/setup.json)
 $message = '';
 $error = $error ?? '';
 

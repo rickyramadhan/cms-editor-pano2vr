@@ -90,7 +90,18 @@ try {
     if (!is_dir($backupDirectory) && !mkdir($backupDirectory, 0775, true) && !is_dir($backupDirectory)) throw new RuntimeException('Folder backup gagal dibuat.');
     if (!copy($panoFile, $backupDirectory . '/pano-before-audit-editor-' . date('Ymd-His') . '.xml')) throw new RuntimeException('Backup pano.xml gagal dibuat.');
     if ($dom->save($panoFile) === false) respond(500, false, 'Gagal menyimpan pano.xml.');
-    respond(200, true, 'Panorama, hotspot, dan terjemahan pano.xml berhasil disimpan.');
+    // Template dengan setup.json (mis. badung): naikkan ?ts= di index.html tiap simpan, supaya browser
+    // pengunjung tidak memakai pano.xml lama dari cache. Gagal di sini tidak membatalkan simpan.
+    $setupNote = '';
+    try {
+        require_once __DIR__ . '/skin-templates.php';
+        $templateId = projectSkinTemplateId(activeProject(), skinTemplateList());
+        $setup = $templateId !== '' ? skinTemplateSetup($templateId) : null;
+        if ($setup !== null) { skinRunSetup($setup, dirname($panoFile)); $setupNote = ' Cache tur diperbarui otomatis.'; }
+    } catch (Throwable $setupError) {
+        $setupNote = ' (Cache tur belum diperbarui: ' . $setupError->getMessage() . ')';
+    }
+    respond(200, true, 'Panorama, hotspot, dan terjemahan pano.xml berhasil disimpan.' . $setupNote);
 } catch (Throwable $error) {
     respond(400, false, $error->getMessage());
 }

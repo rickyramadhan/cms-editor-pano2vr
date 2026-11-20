@@ -1,0 +1,5 @@
+{
+    "label": "Setup",
+    "title": "Terapkan setup template Badung ke lokasi ini",
+    "actions": ["cache_bust"]
+}

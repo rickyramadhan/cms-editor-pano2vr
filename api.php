@@ -24,6 +24,7 @@ $routes = [
     'smart-frontend' => 'smart-frontend.php',
     'optimizer' => 'optimizer.php',
     'translation-center' => 'translation-center.php',
+    'tour-setup' => 'tour-setup.php',
     'upload-video' => 'upload-video.php',
     'upload-video360' => 'upload-video360.php',
     'zip-location' => 'zip-location.php',

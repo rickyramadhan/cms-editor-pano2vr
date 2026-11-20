@@ -543,6 +543,9 @@ input:not([type=checkbox]):not([type=radio]), select, textarea { border-color: #
 .pe-preview[data-mode="aim"] .pe-preview-hint { display:none; }
 #panoAimSave { color:#fff;background:var(--ui-accent);border-color:var(--ui-accent); }
 #panoAimSave:hover { background:var(--ui-accent-strong); }
+#panoAimSetup { color:#fff;background:#db2777;border-color:#db2777; }
+#panoAimSetup:hover { background:#be185d; }
+#panoAimSetup:disabled { opacity:.6;cursor:progress; }
 .pe-preview[data-mode="aim"] .pe-preview-stage::after { content:"";position:absolute;top:50%;left:50%;z-index:3;width:26px;height:26px;border-radius:50%;pointer-events:none;transform:translate(-50%,-50%);background:
   linear-gradient(#fff,#fff) center/2px 26px no-repeat,
   linear-gradient(#fff,#fff) center/26px 2px no-repeat;

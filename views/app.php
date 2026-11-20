@@ -707,7 +707,11 @@
                             <button type="button" class="pe-preview-hotspots" id="panoPreviewHotspots">Lihat hotspot →</button>
                             <div class="pe-preview-aim" id="panoAimBar" hidden>
                                 <span class="pe-preview-aim-live" id="panoAimLive">Geser panorama untuk menentukan arah.</span>
+                                <?php if ($tourSetup !== null): ?>
+                                <button type="button" class="pe-preview-hotspots" id="panoAimSetup" title="Simpan arah langsung ke pano.xml, lalu <?= e(mb_strtolower($tourSetup['title'])) ?>">Simpan arah</button>
+                                <?php else: ?>
                                 <button type="button" class="pe-preview-hotspots" id="panoAimSave">Simpan arah</button>
+                                <?php endif; ?>
                                 <button type="button" class="pe-preview-hotspots" id="panoAimCancel">Batal</button>
                             </div>
                         </footer>
@@ -1626,6 +1630,32 @@ if (panoSaveButton) {
     hotspotEditor.addEventListener('click', event => {
         const button = event.target.closest('[data-hs-aim]'); if (!button) return;
         startAim(button.closest('.pano-edit-card'));
+    });
+    // Tombol "Simpan arah" merah muda (menggantikan yang hijau, hanya untuk template yang punya setup.json): simpan arah + pano.xml, lalu jalankan aksi setup template
+    // (mis. perbarui versi pano.xml di index.html agar browser memuat view baru).
+    const runTourSetup = async verify => {
+        const response = await fetch('api.php?action=tour-setup', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({csrf:<?= json_encode($_SESSION['cms_csrf']) ?>, id_lokasi:<?= json_encode($auditId) ?>, verify})});
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.message || 'Setup gagal.');
+        return result.message;
+    };
+    document.getElementById('panoAimSetup')?.addEventListener('click', async event => {
+        const button = event.currentTarget; if (!aimInput || button.disabled) return;
+        const aimCard = aimInput.closest('.pano-edit-card'), want = aimFormat(aimValues());
+        const verify = {nodeId:aimCard?.dataset.nodeId, id:aimCard?.dataset.hotspotId, target:want};
+        aimInput.value = want;
+        aimInput.dispatchEvent(new Event('input', {bubbles:true}));
+        closePreview();
+        button.disabled = true;
+        try {
+            refreshDirty();   // event input baru dihitung di frame berikutnya; hitung sekarang agar savePano melihat arah baru
+            await savePano();   // menyimpan semua perubahan pano.xml (termasuk arah ini)
+            if (dirtyCount > 0 || saving) throw new Error('arah belum tersimpan ke pano.xml (lihat pesan di atas). Setup dibatalkan.');   // gagal/validasi: pesan sudah ditampilkan savePano, jangan lanjut Setup
+            flash('Menjalankan setup…', 'busy');
+            const message = await runTourSetup(verify);
+            flash('✓ Arah disimpan. ' + message, 'success'); hideTimer = setTimeout(() => { if (!dirtyCount && !saving) saveBar.classList.remove('visible'); }, 6000);
+        } catch (error) { flash('Gagal: ' + error.message, 'error'); }
+        finally { button.disabled = false; }
     });
     document.getElementById('panoAimSave')?.addEventListener('click', () => {
         if (!aimInput) return;

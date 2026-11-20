@@ -211,6 +211,51 @@ function projectSkinTemplateId(array $project, array $templates): string
     return '';
 }
 
+/** Aksi setup yang dikenal. Template memilih aksi lewat skin-templates/<id>/setup.json › actions. */
+const SKIN_SETUP_ACTIONS = ['cache_bust' => 'Perbarui versi pano.xml di index.html agar browser memuat ulang arah pandang/hotspot terbaru'];
+
+/** Setup opsional sebuah template (setup.json); null bila template tidak punya setup. Tombol "Setup" di editor hotspot hanya muncul bila ada. */
+function skinTemplateSetup(string $templateId): ?array
+{
+    if (!preg_match(SKIN_TEMPLATE_ID_PATTERN, $templateId)) return null;
+    $file = skinTemplatesRoot() . '/' . $templateId . '/setup.json';
+    if (!is_file($file)) return null;
+    $data = json_decode((string) file_get_contents($file), true);
+    if (!is_array($data)) return null;
+    $actions = array_values(array_filter((array) ($data['actions'] ?? []), static fn($a): bool => is_string($a) && isset(SKIN_SETUP_ACTIONS[$a])));
+    if ($actions === []) return null;
+    return [
+        'id' => $templateId,
+        'label' => mb_substr(trim(strip_tags((string) ($data['label'] ?? ''))), 0, 20) ?: 'Setup',
+        'title' => mb_substr(trim(strip_tags((string) ($data['title'] ?? ''))), 0, 200),
+        'actions' => $actions,
+    ];
+}
+
+/** Ganti versi pada URL pano.xml di index.html (readConfigUrlAsync) dengan stempel baru; langsung menimpa index.html tanpa cadangan. */
+function skinSetupCacheBust(string $tourDirectory): string
+{
+    $index = $tourDirectory . '/index.html';
+    $html = is_file($index) ? file_get_contents($index) : false;
+    if ($html === false) throw new RuntimeException('index.html lokasi tidak dapat dibaca.');
+    // ts dihitung di browser (Date.now()) tiap tur dibuka: index.html sendiri bisa ikut ter-cache browser,
+    // sehingga ts angka-mati di dalamnya tidak ikut baru dan pano.xml lama terus dipakai.
+    $updated = preg_replace('/(readConfigUrlAsync\s*\(\s*)(["\'])pano\.xml(?:\?[^"\']*)?\2(?:\s*\+\s*Date\.now\(\))?/', '${1}"pano.xml?ts=" + Date.now()', $html, 1, $count);
+    if ($updated === null || $count !== 1) throw new RuntimeException('Pemanggilan readConfigUrlAsync("pano.xml") tidak ditemukan di index.html.');
+    if (file_put_contents($index, $updated, LOCK_EX) === false) throw new RuntimeException('index.html gagal diperbarui.');
+    return 'pano.xml kini selalu dimuat ulang tanpa cache';
+}
+
+/** Jalankan semua aksi setup template pada satu folder tur; kembalikan daftar pesan hasil. */
+function skinRunSetup(array $setup, string $tourDirectory): array
+{
+    $messages = [];
+    foreach ($setup['actions'] as $action) {
+        if ($action === 'cache_bust') $messages[] = skinSetupCacheBust($tourDirectory);
+    }
+    return $messages;
+}
+
 function updateProjectSkinTemplate(string $projectId, string $templateId): void
 {
     skinTemplateGet($templateId);

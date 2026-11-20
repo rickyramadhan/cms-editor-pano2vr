@@ -43,3 +43,13 @@ Status di CMS: lokasi dianggap **Sesuai** bila `skin.js` sama dengan template **
 Video intro tetap milik masing-masing lokasi: unggah lewat tab **Video** (`<lokasi>/video/desktop.*` dan `mobile.*`). Tanpa berkas video, pemuat melewati intro dan langsung membuka tur.
 
 Mengubah template di sini **tidak** otomatis mengubah lokasi — terapkan ulang dari CMS.
+
+## Setup opsional (`setup.json`)
+Bila template punya `setup.json`, tombol **Setup** (merah muda) muncul di samping **Atur arah** pada editor hotspot (Audit) untuk project yang memakai template itu. Template tanpa file ini tidak punya tombolnya.
+```json
+{ "label": "Setup", "title": "Keterangan tooltip", "actions": ["cache_bust"] }
+```
+Aksi yang tersedia:
+- `cache_bust` — mengganti versi `pano.xml?ts=…` di `index.html` lokasi supaya browser memuat `pano.xml` terbaru setelah arah pandang/hotspot diubah.
+
+Menambah aksi baru: daftarkan di `SKIN_SETUP_ACTIONS` dan `skinRunSetup()` di `skin-templates.php`. `setup.json` tidak ikut disalin ke lokasi.
