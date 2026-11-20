@@ -88,33 +88,29 @@ function auditTour(string $root, array $tour): array
             if ($hasZhCn && strtolower($language) === 'zh') continue;
             $result['displayLanguageIndexes'][] = $index;
         }
-        foreach (array_keys($translatedTexts) as $sourceText) {
-            if ($isIgnoredTranslation($sourceText)) continue;
-            $values = $translations[$sourceText] ?? null;
-            foreach ($result['displayLanguageIndexes'] as $index) {
-                $language = $languages[$index];
-                if (!is_array($values) || trim((string) ($values[$index] ?? '')) === '') {
-                    $addIssue('warning', 'Belum diterjemahkan', $sourceText, 'Terjemahan bahasa ' . $language . ' masih kosong.');
-                }
-            }
-        }
     }
     $result['languages'] = $languages;
-    foreach ($translations as $source => $values) {
-        if (!is_string($source) || !is_array($values)) continue;
-        if ($isIgnoredTranslation($source)) continue;
-        $plainSource = trim(strip_tags($source));
-        $isDateOrTime = preg_match('/^(?:\d{1,4}[-\/.]\d{1,2}[-\/.]\d{1,4})(?:\s+\d{1,2}:\d{2}(?::\d{2})?(?:\s*[AP]M)?)?$/i', $plainSource)
-            || preg_match('/^\d{1,2}:\d{2}(?::\d{2})?(?:\s*[AP]M)?$/i', $plainSource)
-            || preg_match('/^\d{1,2}\s+(?:jan|feb|mar|apr|mei|may|jun|jul|agu|aug|sep|okt|oct|nov|des|dec)[a-z]*\s+\d{2,4}$/i', $plainSource);
-        if (!$isDateOrTime) {
-            $translationValues = array_values($values);
-            $missingCount = 0;
-            foreach ($result['displayLanguageIndexes'] as $index) {
-                if (trim((string) ($translationValues[$index] ?? '')) === '') $missingCount++;
-            }
-            $result['translations'][] = ['source' => $source, 'values' => $translationValues, 'missingCount' => $missingCount];
+    $isDateOrTimeSource = static function (string $source): bool {
+        $plain = trim(strip_tags($source));
+        return (bool) (preg_match('/^(?:\d{1,4}[-\/.]\d{1,2}[-\/.]\d{1,4})(?:\s+\d{1,2}:\d{2}(?::\d{2})?(?:\s*[AP]M)?)?$/i', $plain)
+            || preg_match('/^\d{1,2}:\d{2}(?::\d{2})?(?:\s*[AP]M)?$/i', $plain)
+            || preg_match('/^\d{1,2}\s+(?:jan|feb|mar|apr|mei|may|jun|jul|agu|aug|sep|okt|oct|nov|des|dec)[a-z]*\s+\d{2,4}$/i', $plain));
+    };
+    // Sumber teks dari panorama + kunci JSON lama. Semua jadi baris editor, sehingga
+    // jumlah "Terjemahan kosong" selalu sama dengan baris yang benar-benar tampil.
+    $sources = array_fill_keys(array_keys($translatedTexts), true);
+    foreach ($translations as $source => $_values) if (is_string($source)) $sources[$source] = true;
+    foreach (array_keys($sources) as $source) {
+        if ($isIgnoredTranslation((string) $source) || $isDateOrTimeSource((string) $source)) continue;
+        $values = $translations[$source] ?? [];
+        $translationValues = array_values(is_array($values) ? $values : []);
+        $missingCount = 0;
+        foreach ($result['displayLanguageIndexes'] as $index) {
+            if (trim((string) ($translationValues[$index] ?? '')) !== '') continue;
+            $missingCount++;
+            $addIssue('warning', 'Belum diterjemahkan', (string) $source, 'Terjemahan bahasa ' . ($languages[$index] ?? $index) . ' masih kosong.');
         }
+        $result['translations'][] = ['source' => $source, 'values' => $translationValues, 'missingCount' => $missingCount];
     }
     usort($result['hotspots'], static function (array $left, array $right): int {
         $leftMissing = trim((string) $left['url']) === '' ? 0 : 1;
