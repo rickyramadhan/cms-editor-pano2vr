@@ -297,6 +297,7 @@ if (!defined('AI_HUB_INCLUDE_ONLY')) {
             cmsAudit('aihub.jalankan', ['pack' => $sk['wilayah'] . '/' . $id, 'steps' => implode(',', $steps), 'ok' => $ok]);
             $results[] = ['id' => $id, 'ok' => $ok, 'log' => $log];
         }
+        ivMarkStale((string) $project['id'], array_column(array_filter($results, static fn($r) => $r['ok']), 'id'), 'AI Guide Hub: ' . implode(',', $steps));
         $okN = count(array_filter($results, static fn($r) => $r['ok']));
         cmsJsonResponse(['success' => $okN > 0, 'message' => $okN . ' dari ' . count($results) . ' lokasi berhasil.', 'results' => $results, 'state' => ahState($project)]);
     } catch (Throwable $e) {

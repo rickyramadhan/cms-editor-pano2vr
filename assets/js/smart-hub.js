@@ -77,6 +77,15 @@
   }
 
   /* ---------- 1. Lokasi & paket ---------- */
+  /* Lencana skor VT Inspector + gerbang rilis (data dari laporan Inspector; tautan ke tab Inspector). */
+  function inspectorBadge(id) {
+    const b = (S.inspector || {})[id];
+    if (!b) return h('a', { class: 'sh-mini is-muted', href: '?tab=inspector&lokasi=' + encodeURIComponent(id), title: 'Belum ada laporan Inspector. Buka tab Inspector untuk memindai.' }, '—');
+    const label = b.stale ? 'scan ulang' : (b.ready ? 'siap rilis' : 'belum siap');
+    return h('a', { class: 'sh-metrics', style: 'text-decoration:none;color:inherit', href: '?tab=inspector&lokasi=' + encodeURIComponent(id), title: 'Skor Inspector ' + b.score + ' · ' + label + (b.stale ? ' (berubah sejak scan terakhir)' : '') },
+      h('span', { class: 'sh-badge ' + (b.stale ? 'is-muted' : b.score >= 85 ? 'is-ok' : 'is-muted') }, String(b.score)), h('span', { class: 'sh-mini ' + (b.ready && !b.stale ? '' : 'is-muted') }, label));
+  }
+
   function viewLokasi() {
     const chosen = new Set();
     const rows = S.locations.map((l) => {
@@ -88,6 +97,7 @@
         h('td', null, l.pack.exists ? h('span', { class: 'sh-badge is-ok' }, l.pack.scenes + ' scene') : h('span', { class: 'sh-badge' }, 'belum dibangun')),
         h('td', null, l.pack.content ? h('span', { class: 'sh-metrics' }, ...[['layanan', c.layanan], ['fakta', c.fakta], ['acara', c.acara], ['rute', c.rute], ['stempel', c.stempel]].map(([label, value]) => h('span', null, h('b', null, value), label))) : h('span', { class: 'sh-mini is-muted' }, 'Belum ada konten')),
         h('td', null, l.pack.exists ? h('span', { class: 'sh-badge ' + (l.ready.score >= 80 ? 'is-ok' : 'is-muted'), title: l.ready.todo.length ? 'Masih perlu:\n- ' + l.ready.todo.join('\n- ') : 'Lengkap' }, l.ready.score + '%') : h('span', { class: 'sh-mini is-muted' }, '—')),
+        h('td', null, inspectorBadge(l.id)),
         h('td', null, h('span', { class: 'sh-statusline' }, h('small', null, 'Runtime'), l.runtimeReady ? h('span', { class: 'sh-badge is-ok' }, 'Terpasang') : h('span', { class: 'sh-badge is-muted' }, 'Belum dipasang')), h('span', { class: 'sh-statusline' }, h('small', null, 'HUD'), l.applied ? h('span', { class: 'sh-badge is-ok', title: l.appliedSrc }, 'Smart Kit') : h('span', { class: 'sh-badge is-muted' }, 'Skin bawaan'))),
         h('td', { class: 'sh-actions sh-rowactions' }, h('button', { type: 'button', class: 'translate', disabled: !l.applied || null, title: l.applied ? 'Tampilkan di panel pratinjau' : 'Terapkan Smart Kit terlebih dahulu untuk mengaktifkan pratinjau', onclick: () => setPreview(l.id) }, ico('panel-right-open'), 'Pratinjau'), l.url ? h('a', { class: 'translate sh-iconbtn', href: l.url, target: '_blank', rel: 'noopener', title: 'Buka tur di tab baru', 'aria-label': 'Buka ' + l.name + ' di tab baru' }, ico('external-link')) : null));
     });
@@ -101,7 +111,7 @@
     main.append(h('div', { class: 'card sh-card' },
       h('div', { class: 'sh-card__h' }, h('div', null, h('h3', null, 'Lokasi di project ini'), h('p', null, `${S.locations.length} tur terdeteksi di ${S.project.path}. Paket konten dibuat dari pano.xml (tur tidak diubah); "Terapkan" memasang HUD Smart Kit ke index.html.`)),
         h('label', { class: 'sh-selall' }, h('input', { type: 'checkbox', onchange: (e) => { main.querySelectorAll('tbody input[type=checkbox]').forEach((x) => { x.checked = e.target.checked; x.dispatchEvent(new Event('change')); }); } }), 'Pilih semua')),
-      S.locations.length ? h('div', { class: 'sh-tablewrap' }, h('table', { class: 'sh-table' }, h('thead', null, h('tr', null, h('th', null, ''), h('th', null, 'Lokasi'), h('th', null, 'Paket'), h('th', null, 'Konten'), h('th', null, 'Kesiapan'), h('th', null, 'Tampilan'), h('th', null, ''))), h('tbody', null, rows)))
+      S.locations.length ? h('div', { class: 'sh-tablewrap' }, h('table', { class: 'sh-table' }, h('thead', null, h('tr', null, h('th', null, ''), h('th', null, 'Lokasi'), h('th', null, 'Paket'), h('th', null, 'Konten'), h('th', null, 'Kesiapan'), h('th', null, 'Inspector'), h('th', null, 'Tampilan'), h('th', null, ''))), h('tbody', null, rows)))
         : h('div', { class: 'sh-empty' }, 'Belum ada folder tur (berisi pano.xml) di project ini.'),
       h('div', { class: 'sh-bar' },
         h('button', { type: 'button', class: 'save', onclick: () => run('activate', 'Aktifkan Smart Kit (bangun paket + terapkan)') }, ico('zap'), 'Aktifkan Smart Kit (satu klik)'),

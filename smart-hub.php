@@ -13,6 +13,7 @@ declare(strict_types=1);
  */
 require_once __DIR__ . '/includes/bootstrap.php';
 require_once __DIR__ . '/project-manager.php';
+require_once __DIR__ . '/includes/inspector-lib.php';
 
 const SH_ID_RE = '~^[a-z0-9][a-z0-9_-]{0,40}$~';
 
@@ -497,7 +498,8 @@ function shTag(array $st, string $slug): string
 
 function shBackup(string $dir, string $file): void
 {
-    $b = $dir . '/.skin-backups';
+    require_once __DIR__ . '/includes/backup-store.php';
+    $b = cmsBackupEnsure($dir, 'skin');   // cadangan di folder pusat CMS, bukan di folder tur
     if (!is_dir($b) && !mkdir($b, 0775, true) && !is_dir($b)) throw new RuntimeException('Folder cadangan gagal dibuat di ' . $dir);
     if (!copy($dir . '/' . $file, $b . '/' . date('Ymd-His') . '-' . $file)) throw new RuntimeException('Cadangan ' . $file . ' gagal.');
 }
@@ -580,7 +582,7 @@ function shState(array $project): array
         'settings' => $st, 'kitOk' => $kitOk, 'isAdmin' => cmsIsAdmin(),
         'catalog' => $kitOk ? shCatalog($st) : null, 'icons' => $kitOk ? shIcons($st) : [],
         'hub' => $kitOk ? shReadHub($st) : null, 'hubFile' => shHubFile($st), 'hubExists' => is_file(shHubFile($st)),
-        'locations' => $kitOk ? shStatus($st, $tours) : [], 'videos' => shVideos($project),
+        'locations' => $kitOk ? shStatus($st, $tours) : [], 'inspector' => ivBadges((string) $project['id'], array_keys($tours)), 'videos' => shVideos($project),
         'cmsOrigin' => ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http') . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost'),
     ];
 }
@@ -642,7 +644,8 @@ function shSyncJakartaRuntime(array $project, string $location, array $runtime):
     $database[$location]['drone_pan'] = round((float) ($runtime['drone_pan'] ?? 0), 2);
     $database[$location]['drone_tilt'] = round((float) ($runtime['drone_tilt'] ?? 0), 2);
     $database[$location]['drone_fov'] = max(1, min(179, round((float) ($runtime['drone_fov'] ?? 70), 2)));
-    $backup = dirname($file) . '/.history'; if (!is_dir($backup)) @mkdir($backup, 0775, true);
+    require_once __DIR__ . '/includes/backup-store.php';
+    $backup = cmsBackupEnsure(dirname($file), 'history');   // riwayat database global di folder pusat CMS
     @copy($file, $backup . '/global-database-' . date('Ymd-His') . '.js');
     cmsReplaceJsObject($file, 'GLOBAL_DATABASE', $database);
 }
@@ -802,6 +805,7 @@ if (!defined('SMART_HUB_INCLUDE_ONLY')) {
                 else unset($clean['REGION']['aerial']);
                 shWriteJson($file, $clean);
                 if ($runtime) shSyncJakartaRuntime($project, $id, $runtime);
+                ivMarkStale((string) $project['id'], [$id], 'konten diubah');
                 cmsAudit('konten.simpan', ['pack' => $st['wilayah'] . '/' . $id]);
                 cmsJsonResponse(['success' => true, 'message' => 'Konten ' . $id . ' disimpan.', 'content' => $clean, 'warnings' => shContentWarnings($clean, array_column(shScenes($st, $id), 'id'))]);
             case 'region_get':
@@ -837,6 +841,7 @@ if (!defined('SMART_HUB_INCLUDE_ONLY')) {
                 $results = shSyncRun($st, $tours, $pilot, $keys, $mode, $targets, !empty($payload['refresh']));
                 shWriteJson(shSyncFile($st), ['pilot' => $pilot, 'keys' => array_values(array_intersect(array_keys(SH_SYNC_KEYS), $keys)), 'last' => ['at' => date(DATE_ATOM), 'mode' => $mode, 'refresh' => !empty($payload['refresh'])]]);
                 cmsAudit('smartkit.sinkron', ['pilot' => $pilot, 'kunci' => $keys, 'mode' => $mode]);
+                ivMarkStale((string) $project['id'], array_column(array_filter($results, static fn($r) => $r['ok']), 'id'), 'sinkron dari pilot');
                 $okN = count(array_filter($results, static fn($r) => $r['ok']));
                 cmsJsonResponse(['success' => $okN > 0 || !$results, 'message' => 'Sinkron dari ' . $pilot . ': ' . $okN . ' dari ' . count($results) . ' lokasi.', 'results' => $results, 'state' => shState($project), 'sync' => shSyncGet($st)]);
             case 'creator_fetch':
@@ -865,6 +870,7 @@ if (!defined('SMART_HUB_INCLUDE_ONLY')) {
                 }
                 shWriteJson(shPinsFile($st, $id), $out);
                 $msg = shBuildPack($st, $tours[$id]);
+                ivMarkStale((string) $project['id'], [$id], 'pin diubah');
                 cmsAudit('pin.simpan', ['pack' => $st['wilayah'] . '/' . $id, 'jumlah' => count($out)]);
                 cmsJsonResponse(['success' => true, 'message' => count($out) . ' pin disimpan dan dibangun ke pins.js.', 'log' => $msg, 'pins' => $out]);
             case 'activate':
@@ -878,6 +884,7 @@ if (!defined('SMART_HUB_INCLUDE_ONLY')) {
                     } catch (Throwable $e) { $results[] = ['id' => $id, 'ok' => false, 'message' => $e->getMessage()]; }
                 }
                 cmsAudit('smartkit.aktifkan', ['lokasi' => array_column($results, 'id')]);
+                ivMarkStale((string) $project['id'], array_column(array_filter($results, static fn($r) => $r['ok']), 'id'), 'Smart Kit diaktifkan');
                 $okN = count(array_filter($results, static fn($r) => $r['ok']));
                 cmsJsonResponse(['success' => $okN > 0, 'message' => $okN . ' dari ' . count($results) . ' lokasi diaktifkan.', 'results' => $results, 'state' => shState($project)]);
             case 'build':
@@ -896,6 +903,7 @@ if (!defined('SMART_HUB_INCLUDE_ONLY')) {
                         $results[] = ['id' => $id, 'ok' => true, 'message' => $msg];
                     } catch (Throwable $e) { $results[] = ['id' => $id, 'ok' => false, 'message' => $e->getMessage()]; }
                 }
+                ivMarkStale((string) $project['id'], array_column(array_filter($results, static fn($r) => $r['ok']), 'id'), 'Smart Kit ' . $op);
                 $okN = count(array_filter($results, static fn($r) => $r['ok']));
                 cmsJsonResponse(['success' => $okN > 0, 'message' => $okN . ' dari ' . count($results) . ' lokasi berhasil.', 'results' => $results, 'state' => shState($project)]);
             default:

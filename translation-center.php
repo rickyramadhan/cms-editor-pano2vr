@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/includes/bootstrap.php';   // sesi aman + login
+require_once __DIR__ . '/includes/backup-store.php';   // cadangan di folder pusat CMS (data/backups), bukan di folder tur/wilayah
 require_once __DIR__ . '/language-manager.php';
 require_once __DIR__ . '/project-manager.php';
 header('Content-Type: application/json; charset=utf-8');
@@ -59,7 +60,7 @@ function tcLanguageIndex(array $data, string $panoCode): int|false
 
 function tcBackupAndWrite(string $file, string $content): void
 {
-    $backupDirectory = dirname($file) . '/.language-backups';
+    $backupDirectory = cmsBackupEnsure(dirname($file), 'language');
     if (!is_dir($backupDirectory) && !mkdir($backupDirectory, 0775, true) && !is_dir($backupDirectory)) throw new RuntimeException('Folder backup gagal dibuat.');
     $backup = $backupDirectory . '/' . date('Ymd-His') . '-translation-center-' . basename($file);
     if (!copy($file, $backup)) throw new RuntimeException('Backup gagal dibuat untuk ' . basename($file));
@@ -102,8 +103,8 @@ try {
             // Only the requested language slot is changed; Pano2VR's reserved trailing value is untouched.
             $entry['data']['translations'][$key][$index] = $value; $saved++;
         }
-        if ($databaseChanged) { $backup = $assetsRoot . '/.language-backups'; if (!is_dir($backup)) mkdir($backup, 0775, true); copy($databaseFile, $backup . '/' . date('Ymd-His') . '-translation-center-global-database.js'); languageWriteJs($databaseFile, 'GLOBAL_DATABASE', $database); }
-        if ($skinChanged) { $backup = $assetsRoot . '/.language-backups'; if (!is_dir($backup)) mkdir($backup, 0775, true); copy($skinTranslationFile, $backup . '/' . date('Ymd-His') . '-translation-center-skin-translations.js'); languageWriteJs($skinTranslationFile, 'JAKARTA_SKIN_TRANSLATIONS', $skinTranslations); }
+        if ($databaseChanged) { $backup = cmsBackupEnsure($assetsRoot, 'language'); if (!is_dir($backup)) mkdir($backup, 0775, true); copy($databaseFile, $backup . '/' . date('Ymd-His') . '-translation-center-global-database.js'); languageWriteJs($databaseFile, 'GLOBAL_DATABASE', $database); }
+        if ($skinChanged) { $backup = cmsBackupEnsure($assetsRoot, 'language'); if (!is_dir($backup)) mkdir($backup, 0775, true); copy($skinTranslationFile, $backup . '/' . date('Ymd-His') . '-translation-center-skin-translations.js'); languageWriteJs($skinTranslationFile, 'JAKARTA_SKIN_TRANSLATIONS', $skinTranslations); }
         // Write only after every submitted source has been parsed and validated.
         foreach ($fileChanges as $cacheKey => $entry) {
             if ($entry === null) continue;

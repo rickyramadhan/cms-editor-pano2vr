@@ -1,6 +1,7 @@
 <?php
 declare(strict_types=1);
 require_once __DIR__ . '/includes/bootstrap.php';   // sesi aman + login
+require_once __DIR__ . '/includes/backup-store.php';   // cadangan di folder pusat CMS (data/backups), bukan di folder tur/wilayah
 header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/project-manager.php';
 
@@ -86,7 +87,7 @@ try {
         $jsonNode->nodeValue = '';
         $jsonNode->appendChild($dom->createTextNode((string) json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)));
     }
-    $backupDirectory = dirname($panoFile) . '/.media-backups';
+    $backupDirectory = cmsBackupEnsure(dirname($panoFile), 'media');
     if (!is_dir($backupDirectory) && !mkdir($backupDirectory, 0775, true) && !is_dir($backupDirectory)) throw new RuntimeException('Folder backup gagal dibuat.');
     if (!copy($panoFile, $backupDirectory . '/pano-before-audit-editor-' . date('Ymd-His') . '.xml')) throw new RuntimeException('Backup pano.xml gagal dibuat.');
     if ($dom->save($panoFile) === false) respond(500, false, 'Gagal menyimpan pano.xml.');

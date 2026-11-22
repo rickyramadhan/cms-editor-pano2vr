@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/includes/bootstrap.php';   // sesi aman + login
+require_once __DIR__ . '/includes/backup-store.php';   // cadangan di folder pusat CMS (data/backups), bukan di folder tur/wilayah
 header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/project-manager.php';
 require_once __DIR__ . '/skin-templates.php';
@@ -56,7 +57,7 @@ function bulkEditDatabase(string $file, array $ids, array $changes): array
         $json=json_encode($database, JSON_PRETTY_PRINT|JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
         $updated=preg_replace('/window\.GLOBAL_DATABASE\s*=\s*\{.*?\};/s', 'window.GLOBAL_DATABASE = '.$json.';', $content, 1, $count);
         if ($updated === null || $count !== 1) throw new RuntimeException('Database lokasi gagal disiapkan.');
-        $backupDirectory=dirname($file).'/.database-backups';
+        $backupDirectory=cmsBackupEnsure(dirname($file),'database');
         if (!is_dir($backupDirectory) && !mkdir($backupDirectory,0775,true) && !is_dir($backupDirectory)) throw new RuntimeException('Folder backup database gagal dibuat.');
         $backupFile=$backupDirectory.'/'.date('Ymd-His').'-'.bin2hex(random_bytes(3)).'-global-database.js';
         if (!copy($file,$backupFile)) throw new RuntimeException('Backup global-database.js gagal dibuat; perubahan dibatalkan.');

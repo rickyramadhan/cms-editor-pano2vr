@@ -1,6 +1,8 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/includes/backup-store.php';   // cadangan di folder pusat CMS (data/backups), bukan di folder tur/wilayah
+
 function languageRegistry(string $root): array
 {
     $file = assetsRootForProjectPath($root) . '/languages.json';
@@ -82,7 +84,7 @@ function migrateTranslationFile(string $file, string $panoCode, bool $xml): bool
         $payload = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
         $updated = substr_replace($content, $payload, $object['offset'], $object['length']);
     }
-    $backup = dirname($file) . '/.language-backups'; if (!is_dir($backup)) mkdir($backup, 0775, true);
+    $backup = cmsBackupEnsure(dirname($file), 'language'); if (!is_dir($backup)) mkdir($backup, 0775, true);
     copy($file, $backup . '/' . date('Ymd-His') . '-' . basename($file));
     if (file_put_contents($file, $updated, LOCK_EX) === false) throw new RuntimeException('Gagal memperbarui ' . $file);
     return true;
@@ -129,7 +131,7 @@ function removeTranslationLanguage(string $file, string $panoCode, bool $xml): b
         $payload = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
         $updated = substr_replace($content, $payload, $object['offset'], $object['length']);
     }
-    $backup = dirname($file) . '/.language-backups'; if (!is_dir($backup)) mkdir($backup, 0775, true);
+    $backup = cmsBackupEnsure(dirname($file), 'language'); if (!is_dir($backup)) mkdir($backup, 0775, true);
     copy($file, $backup . '/' . date('Ymd-His') . '-before-remove-' . basename($file));
     if (file_put_contents($file, $updated, LOCK_EX) === false) throw new RuntimeException('Gagal memperbarui ' . $file);
     return true;
@@ -181,7 +183,7 @@ function replaceTranslationLanguageCode(string $file, string $oldPanoCode, strin
         $updated = substr_replace($content, $payload, $object['offset'], $object['length']);
     }
 
-    $backup = dirname($file) . '/.language-backups';
+    $backup = cmsBackupEnsure(dirname($file), 'language');
     if (!is_dir($backup)) mkdir($backup, 0775, true);
     copy($file, $backup . '/' . date('Ymd-His') . '-before-language-edit-' . basename($file));
     if (file_put_contents($file, $updated, LOCK_EX) === false) throw new RuntimeException('Gagal memperbarui ' . $file);
@@ -274,7 +276,7 @@ function synchronizeTranslationFile(string $file, array $registry, bool $xml): b
     }
 
     if ($updated === $content) return false;
-    $backup = dirname($file) . '/.language-backups';
+    $backup = cmsBackupEnsure(dirname($file), 'language');
     if (!is_dir($backup)) mkdir($backup, 0775, true);
     copy($file, $backup . '/' . date('Ymd-His') . '-before-language-sync-' . basename($file));
     if (file_put_contents($file, $updated, LOCK_EX) === false) throw new RuntimeException('Gagal menyinkronkan ' . $file);
@@ -376,7 +378,7 @@ function autoTranslateTranslationFile(string $file, string $panoCode, string $tr
     } else {
         $updated = substr_replace($content, $payload, $object['offset'], $object['length']);
     }
-    $backup = dirname($file) . '/.language-backups';
+    $backup = cmsBackupEnsure(dirname($file), 'language');
     if (!is_dir($backup)) mkdir($backup, 0775, true);
     copy($file, $backup . '/' . date('Ymd-His') . '-before-auto-translate-' . basename($file));
     if (file_put_contents($file, $updated, LOCK_EX) === false) throw new RuntimeException('Gagal menyimpan auto translate ' . $file);

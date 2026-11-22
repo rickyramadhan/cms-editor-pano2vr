@@ -9,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="assets/css/cms-components.css?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/css/cms-components.css')) ?>">
     <link rel="stylesheet" href="assets/css/smart-hub.css?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/css/smart-hub.css')) ?>">
+    <link rel="stylesheet" href="assets/css/inspector.css?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/css/inspector.css')) ?>">
     <link rel="stylesheet" href="assets/css/ai-hub.css?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/css/ai-hub.css')) ?>">
     <link rel="stylesheet" href="assets/css/cms-redesign.css?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/css/cms-redesign.css')) ?>">
     <link rel="stylesheet" href="assets/css/cms-refine.css?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/css/cms-refine.css')) ?>">
@@ -24,6 +25,7 @@
             <span class="cms-nav-label">Workspace</span>
             <a class="<?= $activeTab === 'smart' ? 'active' : '' ?>" href="?tab=smart"><span aria-hidden="true"><i data-lucide="blocks"></i></span>Smart Hub</a>
             <a class="<?= $activeTab === 'aihub' ? 'active' : '' ?>" href="?tab=aihub"><span aria-hidden="true"><i data-lucide="bot"></i></span>AI Guide Hub</a>
+            <a class="<?= $activeTab === 'inspector' ? 'active' : '' ?>" href="?tab=inspector"><span aria-hidden="true"><i data-lucide="scan-search"></i></span>Inspector</a>
             <?php if ($cmsRuntimeReady): ?><a class="<?= in_array($activeTab, ['lokasi', 'voice', 'video', 'audit', 'object', 'skin'], true) ? 'active' : '' ?>" href="?tab=lokasi&lokasi=<?= e($selectedId) ?>"><span aria-hidden="true"><i data-lucide="settings-2"></i></span>Configuration</a><?php endif; ?>
             <span class="cms-nav-label">Media &amp; Tools</span>
             <?php if ($cmsRuntimeReady): ?><a class="<?= in_array($activeTab, ['languages', 'translations'], true) ? 'active' : '' ?>" href="?tab=languages"><span aria-hidden="true"><i data-lucide="languages"></i></span>Bahasa &amp; Terjemahan</a><?php endif; ?>
@@ -36,7 +38,7 @@
     </aside>
     <div class="cms-navigation-scrim" id="cmsNavigationScrim" hidden></div>
     <main class="shell">
-    <?php $tabLabels = ['dashboard'=>'Dashboard','languages'=>'Manajemen Bahasa','translations'=>'Translation Center','lokasi'=>'Data Lokasi','voice'=>'Voice Over','video'=>'Video','audit'=>'Audit','object'=>'Object Informasi','video360'=>'Video 360','inventaris'=>'Inventaris OI & Video 360','custom'=>'Custom CSS','skin'=>'Template Skin','smart'=>'Smart Hub','aihub'=>'AI Guide Hub','loading'=>'Optimasi Loading']; $pageLabel = $tabLabels[$activeTab] ?? 'Data Lokasi'; ?>
+    <?php $tabLabels = ['dashboard'=>'Dashboard','languages'=>'Manajemen Bahasa','translations'=>'Translation Center','lokasi'=>'Data Lokasi','voice'=>'Voice Over','video'=>'Video','audit'=>'Audit','object'=>'Object Informasi','video360'=>'Video 360','inventaris'=>'Inventaris OI & Video 360','custom'=>'Custom CSS','skin'=>'Template Skin','smart'=>'Smart Hub','aihub'=>'AI Guide Hub','inspector'=>'Inspector','loading'=>'Optimasi Loading']; $pageLabel = $tabLabels[$activeTab] ?? 'Data Lokasi'; ?>
     <header class="topbar">
         <button type="button" class="cms-menu-button" id="openCmsNavigation" aria-controls="cmsNavigation" aria-expanded="false" aria-label="Buka menu"><i data-lucide="menu" aria-hidden="true"></i></button>
         <div class="cms-page-heading"><nav class="cms-breadcrumbs" aria-label="Breadcrumb"><a href="?tab=dashboard">CMS Virtual Tour</a><span>/</span><span aria-current="page"><?= e($pageLabel) ?></span></nav><h1><?= e($pageLabel) ?></h1><small><?= e($activeProject['name']) ?></small></div>
@@ -46,7 +48,7 @@
     <?php if ($message !== ''): ?><div class="alert success"><?= e($message) ?></div><?php endif; ?>
     <?php if ($error !== ''): ?><div class="alert error"><?= e($error) ?></div><?php endif; ?>
 
-    <?php if (!in_array($activeTab, ['dashboard', 'languages', 'translations', 'custom', 'video360', 'inventaris', 'smart', 'aihub', 'loading'], true)): ?>
+    <?php if (!in_array($activeTab, ['dashboard', 'languages', 'translations', 'custom', 'video360', 'inventaris', 'smart', 'aihub', 'inspector', 'loading'], true)): ?>
     <div class="layout">
         <aside class="sidebar card">
             <div class="sidebar-title"><div><h2>Lokasi</h2><small><?= count($detectedTours) ?> tur terdeteksi</small></div><a href="?tab=lokasi&lokasi=baru" class="add">＋ Baru</a></div>
@@ -392,6 +394,8 @@
         <?php if ($smartHubState !== null) require __DIR__ . '/smart.php'; ?>
     <?php elseif ($activeTab === 'aihub'): ?>
         <?php if ($aiHubState !== null) require __DIR__ . '/aihub.php'; ?>
+    <?php elseif ($activeTab === 'inspector'): ?>
+        <?php if ($inspectorState !== null) require __DIR__ . '/inspector.php'; ?>
     <?php elseif ($activeTab === 'custom'): ?>
         <form method="post" class="editor custom-css-editor">
             <input type="hidden" name="csrf" value="<?= e($_SESSION['cms_csrf']) ?>">
@@ -566,7 +570,7 @@
         </section>
     <?php else: ?>
         <section class="card section audit-editor">
-            <div class="section-heading"><div><span class="step">AU</span><h2>Audit pano.xml</h2></div><p>Memeriksa link kosong dan teks yang belum diterjemahkan.</p></div>
+            <div class="section-heading"><div><span class="step">AU</span><h2>Audit pano.xml</h2></div><p>Memeriksa link kosong dan teks yang belum diterjemahkan. <a href="?tab=inspector&amp;lokasi=<?= e($selectedId) ?>">Inspeksi lengkap di tab Inspector</a></p></div>
             <?php if ($auditResult !== null): $stats = $auditResult['stats']; ?>
                 <div class="audit-summary"><div><strong><?= e($stats['panoramas']) ?></strong><span>Panorama</span></div><div><strong><?= e($stats['hotspots']) ?></strong><span>Hotspot</span></div><div class="audit-error"><strong><?= e($stats['errors']) ?></strong><span>Link belum diisi</span></div><div class="audit-warning"><strong><?= e($stats['warnings']) ?></strong><span>Terjemahan kosong</span></div></div>
                 <div class="pano-editor-actions"><strong>Editor pano.xml</strong><span>Field yang belum lengkap langsung ditandai. Backup otomatis dibuat setiap kali menyimpan · <kbd>Ctrl</kbd>+<kbd>S</kbd> untuk simpan.</span><button type="button" class="save" id="savePanoEditor" disabled>Simpan pano.xml</button></div>
@@ -720,7 +724,7 @@
             <?php endif; ?>
         </section>
     <?php endif; ?>
-    <?php if (!in_array($activeTab, ['dashboard', 'languages', 'translations', 'custom', 'video360', 'inventaris', 'smart', 'aihub', 'loading'], true)): ?>
+    <?php if (!in_array($activeTab, ['dashboard', 'languages', 'translations', 'custom', 'video360', 'inventaris', 'smart', 'aihub', 'inspector', 'loading'], true)): ?>
         </div>
     </div>
     <?php endif; ?>

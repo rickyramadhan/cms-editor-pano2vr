@@ -278,7 +278,8 @@ function applySkinTemplate(array $template, string $projectRoot, string $targetD
     }
     if (!is_file($target . '/skin.js') || !is_file($target . '/pano.xml')) throw new RuntimeException('Folder ' . $locationId . ' bukan folder tur Pano2VR (skin.js/pano.xml tidak ada).');
 
-    $backupRoot = $target . '/.skin-backups';
+    require_once __DIR__ . '/includes/backup-store.php';
+    $backupRoot = cmsBackupEnsure($target, 'skin');   // cadangan di folder pusat CMS, bukan di folder tur
     if (!is_dir($backupRoot) && !mkdir($backupRoot, 0775, true) && !is_dir($backupRoot)) throw new RuntimeException('Folder backup gagal dibuat untuk ' . $locationId . '.');
     $lock = fopen($backupRoot . '/.lock', 'c');
     if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) throw new RuntimeException('Lokasi ' . $locationId . ' sedang diproses. Coba lagi sebentar.');

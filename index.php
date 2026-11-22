@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/includes/bootstrap.php';
+require_once __DIR__ . '/includes/backup-store.php';   // cadangan di folder pusat CMS (data/backups), bukan di folder tur/wilayah
 
 require_once __DIR__ . '/language-manager.php';
 require_once __DIR__ . '/project-manager.php';
@@ -346,7 +347,7 @@ function saveTourWebElements(string $root, array $tour, array $elements, array $
             foreach($attrs as $name=>$value)$web->setAttribute($name,$value);$media->appendChild($web);$saved++;
         }
     }
-    $backupDirectory=dirname($panoFile).'/.media-backups';
+    $backupDirectory=cmsBackupEnsure(dirname($panoFile),'media');
     if(!is_dir($backupDirectory)&&!mkdir($backupDirectory,0775,true)&&!is_dir($backupDirectory))throw new RuntimeException('Folder backup pano.xml gagal dibuat.');
     if(!copy($panoFile,$backupDirectory.'/pano-before-object-editor-'.date('Ymd-His').'.xml'))throw new RuntimeException('Backup pano.xml gagal dibuat.');
     $xml=$dom->saveXML();if($xml===false||file_put_contents($panoFile,$xml,LOCK_EX)===false)throw new RuntimeException('WebElement gagal disimpan ke pano.xml.');
@@ -540,8 +541,8 @@ function smartKitDashboardTour(array $status, array $tour, array $settings): arr
 // Smart Hub dan Optimasi Loading tidak memerlukan database CMS: project tanpa assets CMS (mis. Semarang) tetap dapat membukanya tanpa galat.
 $cmsRuntimeReady = projectAssetsValid($assetsBaseRoot);
 // Project tanpa runtime CMS (assets/global-database.js) hanya dapat memakai tab yang tidak membutuhkannya; sisanya dialihkan ke AI Guide Hub.
-if (!$cmsRuntimeReady && !in_array((string) ($_GET['tab'] ?? ''), ['smart', 'loading', 'aihub'], true)) $_GET['tab'] = 'aihub';
-$lightTab = in_array((string) ($_GET['tab'] ?? ''), ['smart', 'loading', 'aihub'], true) && !$cmsRuntimeReady;
+if (!$cmsRuntimeReady && !in_array((string) ($_GET['tab'] ?? ''), ['smart', 'loading', 'aihub', 'inspector'], true)) $_GET['tab'] = 'aihub';
+$lightTab = in_array((string) ($_GET['tab'] ?? ''), ['smart', 'loading', 'aihub', 'inspector'], true) && !$cmsRuntimeReady;
 try {
     if ($lightTab) {
         $database = []; $languageRegistry = []; $config = ['base_url' => '', 'links' => []]; $oiDatabase = []; $customCss = '';
@@ -775,7 +776,7 @@ try {
 
 $selectedId = cleanKey((string) ($_GET['lokasi'] ?? array_key_first($detectedTours) ?? array_key_first($database) ?? ''));
 $requestedTab = (string) ($_GET['tab'] ?? 'dashboard');
-$activeTab = in_array($requestedTab, ['dashboard', 'inventaris', 'translations', 'lokasi', 'languages', 'custom', 'skin', 'object', 'voice', 'video', 'video360', 'audit', 'smart', 'aihub', 'loading'], true) ? $requestedTab : 'dashboard';
+$activeTab = in_array($requestedTab, ['dashboard', 'inventaris', 'translations', 'lokasi', 'languages', 'custom', 'skin', 'object', 'voice', 'video', 'video360', 'audit', 'smart', 'aihub', 'inspector', 'loading'], true) ? $requestedTab : 'dashboard';
 $smartHubState = null;
 if ($activeTab === 'smart') {
     // Smart Hub: integrasi Smart Kit untuk wilayah project aktif (lihat smart-hub.php)
@@ -789,6 +790,13 @@ if ($activeTab === 'aihub') {
     if (!defined('AI_HUB_INCLUDE_ONLY')) define('AI_HUB_INCLUDE_ONLY', true);
     require_once __DIR__ . '/ai-hub.php';
     try { $aiHubState = ahState($activeProject); } catch (Throwable $aiHubError) { $error = $aiHubError->getMessage(); }
+}
+$inspectorState = null;
+if ($activeTab === 'inspector') {
+    // VT Inspector: skor, temuan, dan scan statis per tur untuk project aktif (lihat inspector-hub.php)
+    if (!defined('INSPECTOR_HUB_INCLUDE_ONLY')) define('INSPECTOR_HUB_INCLUDE_ONLY', true);
+    require_once __DIR__ . '/inspector-hub.php';
+    try { $inspectorState = ivState($activeProject); } catch (Throwable $inspectorError) { $error = $inspectorError->getMessage(); }
 }
 $selected = $database[$selectedId] ?? [
     'id_lokasi' => $selectedId === 'baru' ? '' : $selectedId,
@@ -914,7 +922,7 @@ if ($activeTab === 'dashboard') {
     }
     unset($dashboardTour);
     usort($dashboardTours, static fn(array $a, array $b): int => $a['score'] <=> $b['score'] ?: strnatcasecmp((string) $a['name'], (string) $b['name']));
-} elseif (!in_array($activeTab, ['config', 'languages', 'translations', 'custom', 'skin', 'smart', 'aihub', 'loading', 'video360', 'inventaris'], true)) {   // tab tanpa daftar status per lokasi: jangan mengurai pano.xml semua tur
+} elseif (!in_array($activeTab, ['config', 'languages', 'translations', 'custom', 'skin', 'smart', 'aihub', 'inspector', 'loading', 'video360', 'inventaris'], true)) {   // tab tanpa daftar status per lokasi: jangan mengurai pano.xml semua tur
     foreach ($detectedTours as $id => $tour) {
         $sidebarTourStatus[$id] = analyzeTourCompletion($projectRoot, $id, $tour, $database[$id] ?? [], $oiDatabase[$id] ?? [], false);
     }

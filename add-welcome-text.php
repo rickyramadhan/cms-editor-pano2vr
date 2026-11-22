@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/includes/bootstrap.php';   // sesi aman + login
+require_once __DIR__ . '/includes/backup-store.php';   // cadangan di folder pusat CMS (data/backups), bukan di folder tur/wilayah
 header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/language-manager.php';
 require_once __DIR__ . '/project-manager.php';
@@ -36,7 +37,7 @@ try {
     if ($translation === '') welcomeRespond(502, false, 'Layanan terjemahan tidak menghasilkan teks. Coba lagi.');
     if (!isset($database[$locationId]['bahasa'][$languageCode]) || !is_array($database[$locationId]['bahasa'][$languageCode])) $database[$locationId]['bahasa'][$languageCode] = ['lokasi' => '', 'welcomeText' => ''];
     $database[$locationId]['bahasa'][$languageCode]['welcomeText'] = $translation;
-    $backupDirectory = $assetsRoot . '/.database-backups';
+    $backupDirectory = cmsBackupEnsure($assetsRoot, 'database');
     if (!is_dir($backupDirectory) && !mkdir($backupDirectory, 0775, true) && !is_dir($backupDirectory)) welcomeRespond(500, false, 'Folder backup database gagal dibuat.');
     $backupFile = $backupDirectory . '/' . date('Ymd-His') . '-' . bin2hex(random_bytes(3)) . '-before-welcome-text.js';
     if (!copy($databaseFile, $backupFile)) welcomeRespond(500, false, 'Backup database gagal dibuat; data tidak diubah.');

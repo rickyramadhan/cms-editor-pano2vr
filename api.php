@@ -15,6 +15,7 @@ $routes = [
     'generate-voice' => 'generate-voice.php',
     'health-check' => 'health-check.php',
     'image-optimizer' => 'image-optimizer.php',
+    'inspector' => 'inspector-hub.php',
     'launch-video360-encoder' => 'launch-video360-encoder.php',
     'open-location' => 'open-location.php',
     'project-category' => 'project-category.php',

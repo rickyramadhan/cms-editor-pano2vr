@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/includes/bootstrap.php';   // sesi aman + login
+require_once __DIR__ . '/includes/backup-store.php';   // cadangan di folder pusat CMS (data/backups), bukan di folder tur/wilayah
 header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/project-manager.php';
 
@@ -116,7 +117,7 @@ try {
     if ($files === []) respond(422, false, 'Pilih minimal satu gambar.');
     $maxWidth = max(320, min(4096, (int) ($payload['max_width'] ?? 1920)));
     $quality = max(40, min(95, (int) ($payload['quality'] ?? 82)));
-    $backupRoot = $directory . '/.media-backups/' . date('Ymd-His');
+    $backupRoot = cmsBackupEnsure($directory, 'media') . '/' . date('Ymd-His');
     $results = []; $errors = [];
     foreach ($files as $relative) {
         try { $results[] = optimizeImage($directory, $relative, $maxWidth, $quality, $backupRoot); }
