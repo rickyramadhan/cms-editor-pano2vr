@@ -5,6 +5,7 @@ require_once __DIR__ . '/includes/bootstrap.php';
 require_once __DIR__ . '/includes/backup-store.php';   // cadangan di folder pusat CMS (data/backups), bukan di folder tur/wilayah
 
 require_once __DIR__ . '/language-manager.php';
+require_once __DIR__ . '/includes/pano-memory.php';   // memori perubahan pano.xml (penamaan + terjemahan)
 require_once __DIR__ . '/project-manager.php';
 require_once __DIR__ . '/skin-templates.php';
 
@@ -312,7 +313,7 @@ function readTourHotspotPositions(string $root, array $tour): array
 {
     $file=$root.'/'.str_replace('/',DIRECTORY_SEPARATOR,$tour['path']).'/pano.xml';$xml=file_get_contents($file);if($xml===false)return [];
     preg_match_all('/<panorama\b[^>]*\bid="([^"]+)"[^>]*>(.*?)<\/panorama>/is',$xml,$panoramas,PREG_SET_ORDER);$out=[];
-    foreach($panoramas as $panorama){preg_match_all('/<hotspot\s+([^>]*)\/>/i',$panorama[2],$matches);foreach($matches[1]??[] as $text){$a=parseXmlAttributes($text);$id=trim((string)($a['id']??''));if($id==='')continue;$out[]=['panoNodeId'=>$panorama[1],'id'=>$id,'title'=>trim((string)($a['title']??$id)),'pan'=>(float)($a['pan']??0),'tilt'=>(float)($a['tilt']??0)];}}
+    foreach($panoramas as $panorama){preg_match_all('/<hotspot\s+([^>]*)\/>/i',$panorama[2],$matches);foreach($matches[1]??[] as $text){$a=parseXmlAttributes($text);$id=trim((string)($a['id']??''));if($id==='')continue;$out[]=['panoNodeId'=>$panorama[1],'id'=>$id,'title'=>trim((string)($a['title']??$id)),'pan'=>(float)($a['pan']??0),'tilt'=>(float)($a['tilt']??0),'skin'=>trim((string)($a['skinid']??'')),'url'=>trim((string)($a['url']??''))];}}
     return $out;
 }
 
@@ -354,6 +355,112 @@ function saveTourWebElements(string $root, array $tour, array $elements, array $
     return $saved;
 }
 
+/**
+ * Status kelengkapan per topik (sesuai tab lokasi) untuk indikator berwarna di daftar Lokasi dan di bar tab.
+ * state: ok = lengkap, miss = ada yang belum, na = tidak berlaku. tip = teks tooltip.
+ */
+function locationTopicStatus(?array $status): array
+{
+    if ($status === null) return [];
+    $topics = [
+        'data' => ['Data', ['welcome'], '/welcome/i'],
+        'voice' => ['Voice Over', ['audio'], '/audio/i'],
+        'video' => ['Video', ['video'], '/video/i'],
+        'audit' => ['Audit', ['links', 'translations'], '/terjemahan|link hotspot|panorama/i'],
+        'object' => ['Object Informasi', ['objects'], '/Object Informasi/i'],
+    ];
+    $out = [];
+    foreach ($topics as $key => [$label, $parts, $pattern]) {
+        $scores = [];
+        foreach ($parts as $part) { $value = $status['scores'][$part] ?? null; if ($value !== null) $scores[] = (int) $value; }
+        if ($scores === []) {
+            // Object Informasi tanpa WebElement/pin di tur: ditandai "belum ada" (bukan disembunyikan) supaya jelas ada yang perlu dibuat.
+            if ($key === 'object') { $out[$key] = ['label' => $label, 'state' => 'miss', 'level' => 'empty', 'percent' => 0, 'tip' => $label . ' belum ada — belum ada Objek Info aktif di tur ini']; continue; }
+            $out[$key] = ['label' => $label, 'state' => 'na', 'tip' => $label . ' — tidak berlaku'];
+            continue;
+        }
+        if (min($scores) >= 100) { $hint = (string) ($status['hints'][$key] ?? ''); $out[$key] = ['label' => $label, 'state' => 'ok', 'hint' => $hint, 'tip' => $label . ' — lengkap ✓' . ($hint !== '' ? ' · ⚠ ' . $hint : '')]; continue; }
+        $messages = array_values(array_filter((array) ($status['missing'] ?? []), static fn(string $message): bool => (bool) preg_match($pattern, $message)));
+        $percent = (int) round(array_sum($scores) / count($scores));
+        // level 'empty' = belum ada yang dikerjakan sama sekali (semua komponen topik 0%), 'partial' = sebagian sudah.
+        $empty = max($scores) <= 0;
+        $out[$key] = ['label' => $label, 'state' => 'miss', 'level' => $empty ? 'empty' : 'partial', 'percent' => $percent,
+            'tip' => $empty
+                ? $label . ' belum dikerjakan sama sekali' . ($messages !== [] ? ': ' . implode('; ', $messages) : '')
+                : $label . ' belum lengkap (' . $percent . '%): ' . ($messages !== [] ? implode('; ', $messages) : 'masih ada yang kosong')];
+    }
+    return $out;
+}
+
+/**
+ * Arah pandang drone (Data lokasi) hanya tersimpan di global-database.js, padahal di tur (skin Pano2VR / Smart Kit badung-ui)
+ * masuk ke panorama drone lewat hotspot ikon drone, yang membaca atribut target="pan/tilt/fov" di pano.xml.
+ * Fungsi ini menerapkan arah yang dipilih ke semua hotspot drone yang menuju panorama drone itu, supaya perubahan benar-benar terlihat di tur.
+ * Mengembalikan jumlah hotspot yang diubah.
+ */
+function syncDroneHotspots(string $root, ?array $tour, array $record): int
+{
+    $droneRef = trim((string) ($record['drone'] ?? ''));
+    if ($tour === null || ($record['has_drone'] ?? false) !== true || $droneRef === '') return 0;
+    $tourDir = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, (string) $tour['path']);
+    $panoFile = $tourDir . '/pano.xml';
+    if (!is_file($panoFile)) return 0;
+    $dom = new DOMDocument('1.0', 'UTF-8');
+    $dom->preserveWhiteSpace = true;
+    $dom->formatOutput = false;
+    if (!@$dom->load($panoFile)) return 0;
+    $xpath = new DOMXPath($dom);
+    // "drone" bisa berupa Custom Node ID (diprioritaskan) atau Node ID asli
+    $nodeId = '';
+    foreach ($xpath->query('//panorama') ?: [] as $panorama) {
+        if (!$panorama instanceof DOMElement) continue;
+        $userdata = $xpath->query('./userdata', $panorama)?->item(0);
+        $custom = $userdata instanceof DOMElement ? trim($userdata->getAttribute('customnodeid')) : '';
+        if ($panorama->getAttribute('id') === $droneRef || ($custom !== '' && $custom === $droneRef)) { $nodeId = $panorama->getAttribute('id'); break; }
+    }
+    if ($nodeId === '') return 0;
+    $target = sprintf('%.2f/%.2f/%.2f', (float) ($record['drone_pan'] ?? 0), (float) ($record['drone_tilt'] ?? 0), max(1, min(179, (float) ($record['drone_fov'] ?? 70))));
+    $changed = 0; $edits = ['hotspots' => []];
+    foreach ($xpath->query('//hotspot[@url="{' . $nodeId . '}"]') ?: [] as $hotspot) {
+        if (!$hotspot instanceof DOMElement || stripos($hotspot->getAttribute('skinid'), 'drone') === false) continue;
+        if ($hotspot->getAttribute('target') === $target) continue;
+        $hotspot->setAttribute('target', $target);
+        $parent = $hotspot->parentNode;
+        while ($parent instanceof DOMElement && $parent->nodeName !== 'panorama') $parent = $parent->parentNode;
+        if ($parent instanceof DOMElement) $edits['hotspots'][$parent->getAttribute('id') . '|' . $hotspot->getAttribute('id')]['target'] = $target;
+        $changed++;
+    }
+    if ($changed === 0) return 0;
+    $backupDirectory = cmsBackupEnsure($tourDir, 'media');
+    if (!is_dir($backupDirectory) && !mkdir($backupDirectory, 0775, true) && !is_dir($backupDirectory)) throw new RuntimeException('Folder backup pano.xml gagal dibuat.');
+    if (!copy($panoFile, $backupDirectory . '/pano-before-drone-view-' . date('Ymd-His') . '.xml')) throw new RuntimeException('Backup pano.xml gagal dibuat.');
+    if ($dom->save($panoFile) === false) throw new RuntimeException('Gagal menyimpan pano.xml.');
+    try { panoMemoryRecord($tourDir, $edits); } catch (Throwable) { /* mencatat memori tidak boleh membatalkan simpan */ }
+    try {   // template dengan setup.json (mis. badung): pastikan tur memuat pano.xml terbaru
+        $templateId = projectSkinTemplateId(activeProject(), skinTemplateList());
+        $setup = $templateId !== '' ? skinTemplateSetup($templateId) : null;
+        if ($setup !== null) skinRunSetup($setup, $tourDir);
+    } catch (Throwable) { /* tidak fatal */ }
+    return $changed;
+}
+
+/**
+ * Data CMS (global-database.js, oi-database.js, dsb.) dimuat main-loader dengan ?v=<revisi>. Bila tag pemuat di index.html tur
+ * memakai ?v= tetap, browser pengunjung tetap membaca data lama dari cache setelah data disimpan di CMS (versi "bentrok").
+ * Fungsi ini menaikkan ?v= itu ke waktu sekarang. Tag tanpa ?v= (mis. Badung: revisi dibuat otomatis oleh pemuat) tidak diubah.
+ * Mengembalikan true bila index.html diperbarui.
+ */
+function bumpMainLoaderVersion(string $root, ?array $tour): bool
+{
+    if ($tour === null) return false;
+    $index = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, (string) $tour['path']) . '/index.html';
+    $html = is_file($index) ? file_get_contents($index) : false;
+    if ($html === false) return false;
+    $updated = preg_replace('/(main-loader\.js\?v=)([^"\'&\s>]+)/', '${1}' . date('YmdHis') . '-cms', $html, -1, $count);
+    if ($updated === null || $count === 0 || $updated === $html) return false;
+    return file_put_contents($index, $updated, LOCK_EX) !== false;
+}
+
 function analyzeTourCompletion(string $root, string $id, array $tour, array $location, array $objects, bool $includeAssetAnalysis = true): array
 {
     global $activeProject, $assetsRoot, $assetsBaseRoot;
@@ -388,12 +495,16 @@ function analyzeTourCompletion(string $root, string $id, array $tour, array $loc
         if (trim((string) ($location['bahasa'][$code]['lokasi'] ?? '')) !== '') $translationDone++;
         if (trim((string) ($location['bahasa'][$code]['welcomeText'] ?? '')) !== '') $welcomeDone++;
     }
+    // Hitung hanya kolom bahasa yang tampil di editor (tanpa kolom cadangan Pano2VR di ujung baris, dan tanpa duplikat zh/zh-CN),
+    // sama seperti hitungan "Terjemahan kosong" di tab Audit.
     foreach ($audit['translations'] as $translation) {
-        foreach ($translation['values'] as $value) {
+        foreach ($audit['displayLanguageIndexes'] as $languageIndex) {
             $translationTotal++;
-            if (trim((string) $value) !== '') $translationDone++;
+            if (trim((string) ($translation['values'][$languageIndex] ?? '')) !== '') $translationDone++;
         }
     }
+    // Tur tanpa blok terjemahan Pano2VR: semua nama (panorama/hotspot) × bahasa tujuan masih belum diterjemahkan.
+    if (($audit['translationUsed'] ?? true) === false) $translationTotal += count($audit['translations']) * max(0, count(cmsLanguages()) - 1);
     $welcomeScore = $welcomeTotal > 0 ? (int) round(($welcomeDone / $welcomeTotal) * 100) : 100;
     if ($welcomeScore < 100) $missing[] = ($welcomeTotal - $welcomeDone) . ' welcome text belum diisi';
     $translationScore = $translationTotal > 0 ? (int) round(($translationDone / $translationTotal) * 100) : 100;
@@ -413,6 +524,10 @@ function analyzeTourCompletion(string $root, string $id, array $tour, array $loc
     $videoScore = $hasDesktopVideo ? 100 : ($hasMobileVideo ? 50 : 0);
     if (!$hasDesktopVideo) $missing[] = 'video desktop belum tersedia';
 
+    // Petunjuk (bukan kekurangan): video desktop ada tapi versi mobile belum -> opsional, tur memotong video desktop otomatis.
+    $hints = [];
+    if ($hasDesktopVideo && !$hasMobileVideo) $hints['video'] = 'Video mobile belum ada (opsional): tur memakai video desktop yang dipotong otomatis';
+
     $hotspotTotal = count($audit['hotspots']);
     $linkDone = max(0, $hotspotTotal - (int) $audit['stats']['errors']);
     $linkScore = $hotspotTotal > 0 ? (int) round(($linkDone / $hotspotTotal) * 100) : 100;
@@ -421,20 +536,26 @@ function analyzeTourCompletion(string $root, string $id, array $tour, array $loc
     $webElements = readTourWebElements($root, $tour);
     $objectScore = null;
     if ($webElements !== []) {
+        // Hanya object AKTIF yang dinilai (nonaktif = tidak dipakai). Info ID bersifat opsional, jadi tidak dihitung kurang.
         $objectDone = 0;
-        $objectTotal = count($webElements) * (4 + count(cmsLanguages()));
+        $objectTotal = 0;
+        $requiredObjectFields = ['route_key', 'nodeID', 'targetID'];
         foreach ($webElements as $element) {
             $matchingObject = null;
             foreach ($objects as $object) {
                 $objectNode = trim((string) ($object['nodeID'] ?? ''), '{} ');
                 if (strcasecmp($objectNode, $element['nodeID']) === 0 && strcasecmp((string) ($object['targetID'] ?? ''), $element['targetID']) === 0) { $matchingObject = $object; break; }
             }
+            if ($matchingObject !== null && array_key_exists('isActive', $matchingObject) && !$matchingObject['isActive']) continue;   // nonaktif: dilewati
+            $objectTotal += count($requiredObjectFields) + count(cmsLanguages());
             if ($matchingObject === null) continue;
-            foreach (['route_key', 'infoID', 'nodeID', 'targetID'] as $field) if (trim((string) ($matchingObject[$field] ?? '')) !== '') $objectDone++;
+            foreach ($requiredObjectFields as $field) if (trim((string) ($matchingObject[$field] ?? '')) !== '') $objectDone++;
             foreach (array_keys(cmsLanguages()) as $language) if (trim((string) ($matchingObject['labelTeks'][$language] ?? '')) !== '') $objectDone++;
         }
-        $objectScore = (int) round(($objectDone / $objectTotal) * 100);
-        if ($objectScore < 100) $missing[] = ($objectTotal - $objectDone) . ' field Object Informasi belum lengkap';
+        if ($objectTotal > 0) {
+            $objectScore = (int) round(($objectDone / $objectTotal) * 100);
+            if ($objectScore < 100) $missing[] = ($objectTotal - $objectDone) . ' field Object Informasi belum lengkap';
+        }
     }
 
     $scores = ['welcome' => $welcomeScore, 'translations' => $translationScore, 'audio' => $audioScore, 'video' => $videoScore, 'links' => $linkScore, 'objects' => $objectScore];
@@ -449,6 +570,7 @@ function analyzeTourCompletion(string $root, string $id, array $tour, array $loc
         'score' => (int) round(array_sum(array_filter($scores, static fn(mixed $score): bool => $score !== null)) / count(array_filter($scores, static fn(mixed $score): bool => $score !== null))),
         'scores' => $scores,
         'missing' => $missing,
+        'hints' => $hints,
         'panoramas' => count($panoramas),
         'objects' => count($webElements),
         'category' => $category,
@@ -596,6 +718,7 @@ try {
         }
         $oiDatabase[$locationId] = $cleanRecords;
         replaceJsObject($oiDatabaseFile, 'TourDatabase', $oiDatabase);
+        try { bumpMainLoaderVersion($projectRoot, $detectedTours[$locationId] ?? null); } catch (Throwable) { /* tidak fatal */ }
         $message = count($cleanRecords) . ' object berhasil disimpan.' . ($webElementCount !== null ? ' ' . $webElementCount . ' WebElement dan ' . count($hotspots ?? []) . ' hotspot diperbarui di pano.xml.' : '');
         echo json_encode(['success' => true, 'message' => $message]); exit;
     }
@@ -720,7 +843,10 @@ try {
                 'bahasa' => $languageData,
             ];
             replaceJsObject($databaseFile, 'GLOBAL_DATABASE', $database);
-            $_SESSION['cms_flash'] = 'Data lokasi berhasil disimpan.';
+            try { bumpMainLoaderVersion($projectRoot, $detectedTours[$id] ?? null); } catch (Throwable) { /* tidak fatal */ }
+            $droneHotspots = 0;
+            try { $droneHotspots = syncDroneHotspots($projectRoot, $detectedTours[$id] ?? null, $database[$id]); } catch (Throwable $droneError) { $_SESSION['cms_flash'] = 'Data lokasi disimpan, tetapi arah drone belum diterapkan ke pano.xml: ' . $droneError->getMessage(); }
+            if (!isset($droneError)) $_SESSION['cms_flash'] = 'Data lokasi berhasil disimpan.' . ($droneHotspots > 0 ? ' Arah pandang drone juga diterapkan ke ' . $droneHotspots . ' hotspot drone di pano.xml.' : '');
             header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?') . '?tab=lokasi&lokasi=' . rawurlencode($id));
             exit;
         } elseif ($action === 'save_config') {

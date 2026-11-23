@@ -22,7 +22,7 @@ function auditTour(string $root, array $tour): array
 {
     $tourPath = $root . '/' . $tour['path'];
     $xml = file_get_contents($tourPath . '/pano.xml');
-    $result = ['stats' => ['panoramas' => 0, 'hotspots' => 0, 'errors' => 0, 'warnings' => 0], 'issues' => [], 'hotspots' => [], 'languages' => [], 'displayLanguageIndexes' => [], 'translations' => []];
+    $result = ['stats' => ['panoramas' => 0, 'hotspots' => 0, 'errors' => 0, 'warnings' => 0], 'issues' => [], 'hotspots' => [], 'languages' => [], 'displayLanguageIndexes' => [], 'translations' => [], 'translationUsed' => true];
     if ($xml === false) {
         $result['issues'][] = ['level' => 'error', 'type' => 'File', 'location' => $tour['path'], 'message' => 'pano.xml tidak dapat dibaca.'];
         $result['stats']['errors'] = 1;
@@ -73,6 +73,8 @@ function auditTour(string $root, array $tour): array
 
     $translations = [];
     $languages = [];
+    // Tur yang tidak memakai Language Manager Pano2VR (tanpa blok <json> di masternode) = terjemahan diurus CMS, bukan error.
+    $result['translationUsed'] = (bool) preg_match('/<json>(.*?)<\/json>/is', $xml);
     if (preg_match('/<json>(.*?)<\/json>/is', $xml, $jsonMatch)) {
         $translationData = json_decode(html_entity_decode(trim($jsonMatch[1]), ENT_QUOTES | ENT_XML1, 'UTF-8'), true);
         if (is_array($translationData)) {
@@ -81,7 +83,7 @@ function auditTour(string $root, array $tour): array
         }
     }
     if ($languages === []) {
-        $addIssue('error', 'Terjemahan', 'masternode', 'Data bahasa terjemahan tidak ditemukan atau tidak valid.');
+        if ($result['translationUsed']) $addIssue('error', 'Terjemahan', 'masternode', 'Data bahasa terjemahan tidak ditemukan atau tidak valid.');
     } else {
         $hasZhCn = in_array('zh-CN', $languages, true);
         foreach ($languages as $index => $language) {
