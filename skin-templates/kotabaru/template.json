@@ -1,0 +1,15 @@
+{
+    "name": "Kota Baru",
+    "description": "Skin Kota Baru (snapshot skin.js dari pantai-gedambaan, hasil ekspor Pano2VR). Hotspot darat dan drone memakai skinid hotspot_darat_project dan drone_icon_project.",
+    "preview": "/kotabaru/pantai-gedambaan/",
+    "loader": [
+        "../assets/template-skin/template-skin-loader.js?v=6",
+        "../assets/main-loader/main-loader.js"
+    ],
+    "remove": [
+        "../assets/main-loader.js"
+    ],
+    "replace": {
+        "../assets/custom.css": "../assets/main-loader/custom.css"
+    }
+}

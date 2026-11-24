@@ -1,0 +1,5 @@
+{
+    "label": "Setup",
+    "title": "Terapkan setup template Kota Baru ke lokasi ini",
+    "actions": ["cache_bust"]
+}
