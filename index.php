@@ -368,11 +368,17 @@ function locationTopicStatus(?array $status): array
         'video' => ['Video', ['video'], '/video/i'],
         'audit' => ['Audit', ['links', 'translations'], '/terjemahan|link hotspot|panorama/i'],
         'object' => ['Object Informasi', ['objects'], '/Object Informasi/i'],
+        'drone' => ['Drone', ['drone'], '/drone/i'],
     ];
     $out = [];
     foreach ($topics as $key => [$label, $parts, $pattern]) {
         $scores = [];
         foreach ($parts as $part) { $value = $status['scores'][$part] ?? null; if ($value !== null) $scores[] = (int) $value; }
+        if ($scores === [] && $key === 'drone' && ($status['drone']['state'] ?? '') === 'idle') {
+            // Drone nonaktif: bukan kekurangan yang dinilai, tetapi tetap diberi penanda netral agar terlihat belum diatur
+            $out[$key] = ['label' => $label, 'state' => 'idle', 'level' => 'idle', 'percent' => 0, 'tip' => (string) $status['drone']['message']];
+            continue;
+        }
         if ($scores === []) {
             // Object Informasi tanpa WebElement/pin di tur: ditandai "belum ada" (bukan disembunyikan) supaya jelas ada yang perlu dibuat.
             if ($key === 'object') { $out[$key] = ['label' => $label, 'state' => 'miss', 'level' => 'empty', 'percent' => 0, 'tip' => $label . ' belum ada — belum ada Objek Info aktif di tur ini']; continue; }
@@ -380,7 +386,8 @@ function locationTopicStatus(?array $status): array
             continue;
         }
         if (min($scores) >= 100) { $hint = (string) ($status['hints'][$key] ?? ''); $out[$key] = ['label' => $label, 'state' => 'ok', 'hint' => $hint, 'tip' => $label . ' — lengkap ✓' . ($hint !== '' ? ' · ⚠ ' . $hint : '')]; continue; }
-        $messages = array_values(array_filter((array) ($status['missing'] ?? []), static fn(string $message): bool => (bool) preg_match($pattern, $message)));
+        // pesan drone hanya untuk topik Drone (kata "panorama" di pesannya tidak boleh nyasar ke tooltip Audit)
+        $messages = array_values(array_filter((array) ($status['missing'] ?? []), static fn(string $message): bool => (bool) preg_match($pattern, $message) && ($key === 'drone' || !preg_match('/drone/i', $message))));
         $percent = (int) round(array_sum($scores) / count($scores));
         // level 'empty' = belum ada yang dikerjakan sama sekali (semua komponen topik 0%), 'partial' = sebagian sudah.
         $empty = max($scores) <= 0;
@@ -459,6 +466,43 @@ function bumpMainLoaderVersion(string $root, ?array $tour): bool
     $updated = preg_replace('/(main-loader\.js\?v=)([^"\'&\s>]+)/', '${1}' . date('YmdHis') . '-cms', $html, -1, $count);
     if ($updated === null || $count === 0 || $updated === $html) return false;
     return file_put_contents($index, $updated, LOCK_EX) !== false;
+}
+
+/** Jumlah hotspot ikon drone (skinid memuat "drone") di pano.xml tur; penanda bahwa lokasi ini memang punya panorama udara. */
+function tourDroneHotspotCount(string $root, array $tour): int
+{
+    static $cache = [];
+    $file = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, (string) $tour['path']) . '/pano.xml';
+    if (!is_file($file)) return 0;
+    $key = $file . '|' . filemtime($file);
+    if (!isset($cache[$key])) $cache[$key] = (int) preg_match_all('/<hotspot\b[^>]*\bskinid="[^"]*drone[^"]*"/i', (string) file_get_contents($file));
+    return $cache[$key];
+}
+
+/**
+ * Status pengaturan drone suatu lokasi.
+ * state: ok | partial | empty (score 100/50/0, ikut penilaian kelengkapan) atau idle (drone nonaktif dan tur tanpa hotspot drone:
+ * score null = tidak dinilai, hanya penanda "belum diatur" di sidebar). message = apa yang belum beres.
+ */
+function locationDroneStatus(array $location, array $panoramas, int $droneHotspots): ?array
+{
+    $ref = trim((string) ($location['drone'] ?? ''));
+    $on = ($location['has_drone'] ?? false) === true;
+    if ($droneHotspots === 0 && !$on) return ['state' => 'idle', 'score' => null, 'message' => 'Drone belum diatur: fitur drone nonaktif. Aktifkan di tab Data bila lokasi ini punya panorama udara'];
+    $pan = (float) ($location['drone_pan'] ?? 0); $tilt = (float) ($location['drone_tilt'] ?? 0); $fov = (float) ($location['drone_fov'] ?? 70);
+    if ($ref === '') {
+        $message = $on ? 'Drone aktif tetapi panorama drone belum dipilih' : 'Drone belum diatur: tur ini punya ' . $droneHotspots . ' hotspot drone, tetapi panorama drone belum dipilih dan fitur belum diaktifkan';
+        return ['state' => 'empty', 'score' => 0, 'message' => $message];
+    }
+    $found = false;
+    foreach ($panoramas as $panorama) {
+        if (in_array($ref, [(string) ($panorama['nodeId'] ?? ''), (string) ($panorama['customNodeId'] ?? ''), (string) ($panorama['value'] ?? '')], true)) { $found = true; break; }
+    }
+    if (!$found) return ['state' => 'empty', 'score' => 0, 'message' => 'Panorama drone "' . $ref . '" tidak ditemukan di tur ini'];
+    if (!$on) return ['state' => 'partial', 'score' => 50, 'message' => 'Drone belum diaktifkan: panorama drone sudah dipilih, tetapi tombol Aktif masih mati'];
+    // 0/0 dengan FoV bawaan (70 atau 100) = arah pandang belum pernah diatur lewat "Atur arah pandang"
+    if (abs($pan) < 0.005 && abs($tilt) < 0.005 && in_array((int) round($fov), [70, 100], true)) return ['state' => 'partial', 'score' => 50, 'message' => 'Arah pandang drone belum diatur (masih bawaan)'];
+    return ['state' => 'ok', 'score' => 100, 'message' => ''];
 }
 
 function analyzeTourCompletion(string $root, string $id, array $tour, array $location, array $objects, bool $includeAssetAnalysis = true): array
@@ -558,7 +602,12 @@ function analyzeTourCompletion(string $root, string $id, array $tour, array $loc
         }
     }
 
-    $scores = ['welcome' => $welcomeScore, 'translations' => $translationScore, 'audio' => $audioScore, 'video' => $videoScore, 'links' => $linkScore, 'objects' => $objectScore];
+    // Drone: hanya dinilai bila lokasi memang memakainya (ada hotspot drone di tur, atau fitur drone dinyalakan)
+    $droneStatus = locationDroneStatus($location, $panoramas, tourDroneHotspotCount($root, $tour));
+    $droneScore = $droneStatus['score'] ?? null;
+    if ($droneScore !== null && $droneScore < 100) $missing[] = $droneStatus['message'];
+
+    $scores = ['welcome' => $welcomeScore, 'translations' => $translationScore, 'audio' => $audioScore, 'video' => $videoScore, 'links' => $linkScore, 'objects' => $objectScore, 'drone' => $droneScore];
     $category = locationCategory($id, $location);
     $searchParts = [$id, (string) ($location['bahasa']['id']['lokasi'] ?? ''), json_encode($location, JSON_UNESCAPED_UNICODE), json_encode($objects, JSON_UNESCAPED_UNICODE)];
     foreach ($panoramas as $panorama) $searchParts[] = implode(' ', array_map('strval', $panorama));
@@ -571,6 +620,7 @@ function analyzeTourCompletion(string $root, string $id, array $tour, array $loc
         'scores' => $scores,
         'missing' => $missing,
         'hints' => $hints,
+        'drone' => $droneStatus,
         'panoramas' => count($panoramas),
         'objects' => count($webElements),
         'category' => $category,

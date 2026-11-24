@@ -110,10 +110,10 @@
                         $statusAttrs .= ' data-issues="' . e(implode("\n", $issues)) . '"';
                     }
                     if ($isUnsaved) $statusAttrs .= ' data-unsaved="1"';
-                    $topicStatus = array_filter(locationTopicStatus($tourStatus), static fn(array $topic): bool => $topic['state'] === 'miss'); // hanya topik yang belum lengkap yang ditampilkan ?>
+                    $topicStatus = array_filter(locationTopicStatus($tourStatus), static fn(array $topic): bool => in_array($topic['state'], ['miss', 'idle'], true)); // topik yang belum lengkap (+ penanda netral "Drone nonaktif") ?>
                     <a class="location <?= $id === $selectedId ? 'active' : '' ?> <?= $isUnsaved ? 'unsaved' : '' ?> <?= $isComplete ? 'complete' : '' ?>" data-location-category="<?= e(tourCategory($id)) ?>" data-location-search="<?= e(strtolower($locationName . ' ' . $id)) ?>"<?= $statusAttrs ?> href="?tab=<?= e($activeTab) ?>&lokasi=<?= e($id) ?>">
                         <span class="location-title"><strong><?= e($locationName) ?></strong><?php foreach (($tourStatus['hints'] ?? []) as $hintText): ?><i class="hint-info" data-tip="<?= e((string) $hintText) ?>" data-state="hint">i</i><?php endforeach; ?><?php if ($isUnsaved): ?><i>Belum disimpan</i><?php elseif ($isComplete): ?><i class="complete-badge" title="Semua komponen lengkap">✓ Lengkap</i><?php elseif ($tourStatus !== null): ?><i class="progress-badge" title="<?= e(implode("\n", $issues ?? [])) ?>"><?= e($tourStatus['score']) ?>%</i><?php endif; ?></span>
-                        <?php if ($topicStatus !== []): $topicShort = ['data' => 'Data', 'voice' => 'Voice Over', 'video' => 'Video', 'audit' => 'Audit', 'object' => 'Object Info']; ?><span class="loc-meta" aria-label="Topik yang belum lengkap"><?php $chipTabs = ['data' => 'lokasi', 'voice' => 'voice', 'video' => 'video', 'audit' => 'audit', 'object' => 'object']; foreach ($topicStatus as $topicKey => $topic):
+                        <?php if ($topicStatus !== []): $topicShort = ['data' => 'Data', 'voice' => 'Voice Over', 'video' => 'Video', 'audit' => 'Audit', 'object' => 'Object Info', 'drone' => 'Drone']; ?><span class="loc-meta" aria-label="Topik yang belum lengkap"><?php $chipTabs = ['data' => 'lokasi', 'voice' => 'voice', 'video' => 'video', 'audit' => 'audit', 'object' => 'object', 'drone' => 'lokasi']; foreach ($topicStatus as $topicKey => $topic):
                             // klik label = langsung ke tab topik itu (Voice Over & Object Informasi hanya bila data lokasinya sudah ada)
                             $chipHref = (!in_array($topicKey, ['voice', 'object'], true) || isset($database[$id])) ? '?tab=' . $chipTabs[$topicKey] . '&lokasi=' . $id : ''; ?><span class="loc-chip seg-<?= e($topicKey) ?> lv-<?= e($topic['level'] ?? 'partial') ?>" data-tip="<?= e($topic['tip']) ?>" data-state="<?= e($topic['state']) ?>"<?= $chipHref !== '' ? ' data-href="' . e($chipHref) . '" role="link" tabindex="0"' : '' ?>><i></i><?= e($topicShort[$topicKey] ?? $topic['label']) ?></span><?php endforeach; ?></span><?php endif; ?>
                     </a>
@@ -125,6 +125,7 @@
         <?php $selectedTopics = locationTopicStatus($sidebarTourStatus[$selectedId] ?? null); $tabTopic = static function (string $key) use ($selectedTopics): string { $topic = $selectedTopics[$key] ?? null; return $topic === null ? '' : ' data-topic="' . e($key) . '" data-state="' . e($topic['state']) . '" data-level="' . e((string) ($topic['level'] ?? '')) . '" data-tip="' . e($topic['tip']) . '" data-tip-pos="bottom"'; };
         $tabFlag = static function (string $key) use ($selectedTopics): string {
             if (($selectedTopics[$key]['level'] ?? '') === 'empty') return '<b class="tab-flag" aria-hidden="true">!</b>';
+            if ($key === 'data' && ($selectedTopics['drone']['state'] ?? '') === 'miss') return '<b class="tab-flag" aria-hidden="true" title="' . e((string) ($selectedTopics['drone']['tip'] ?? 'Drone belum diatur')) . '">!</b>';
             if (($selectedTopics[$key]['hint'] ?? '') !== '') return '<b class="tab-flag is-info" aria-hidden="true">i</b>';
             return '';
         }; ?>
@@ -294,12 +295,15 @@
                         $dronePanoramaMap = [];
                         foreach ($selectedPanoramas as $dronePanorama) $dronePanoramaMap[(string) $dronePanorama['value']] = ['title' => (string) ($dronePanorama['title'] !== '' ? $dronePanorama['title'] : $dronePanorama['nodeId']), 'node' => (string) $dronePanorama['nodeId'], 'thumb' => (string) $dronePanorama['thumbnail']];
                         $droneOn = !empty($selected['has_drone']);
+                        $droneHotspotTotal = isset($detectedTours[$selectedId]) ? tourDroneHotspotCount($projectRoot, $detectedTours[$selectedId]) : 0;
                     ?>
-                    <div class="loc-sub drone-block<?= $droneOn ? '' : ' is-off' ?>" id="droneBlock" data-panoramas="<?= e(json_encode($dronePanoramaMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>">
+                    <div class="loc-sub drone-block<?= $droneOn ? '' : ' is-off' ?>" id="droneBlock" data-hotspots="<?= (int) $droneHotspotTotal ?>" data-panoramas="<?= e(json_encode($dronePanoramaMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>">
                         <div class="drone-head loc-sub-head">
                             <div><strong>Drone</strong><small>Panorama udara yang dibuka saat ikon drone ditekan di tur, beserta arah pandang awalnya. Saat Anda menyimpan, arah ini ikut diterapkan ke hotspot drone di tur.</small></div>
-                            <label class="drone-switch"><span class="drone-switch-text" id="droneSwitchText"><?= $droneOn ? 'Aktif' : 'Nonaktif' ?></span><span class="toggle-control"><input type="checkbox" name="has_drone" value="1" aria-label="Aktifkan fitur drone" <?= $droneOn ? 'checked' : '' ?>><i aria-hidden="true"></i></span></label>
+                            <div class="drone-head-side"><span class="drone-status" id="droneStatus" role="status" hidden></span>
+                            <label class="drone-switch"><span class="drone-switch-text" id="droneSwitchText"><?= $droneOn ? 'Aktif' : 'Nonaktif' ?></span><span class="toggle-control"><input type="checkbox" name="has_drone" value="1" aria-label="Aktifkan fitur drone" <?= $droneOn ? 'checked' : '' ?>><i aria-hidden="true"></i></span></label></div>
                         </div>
+                        <p class="drone-notice" id="droneNotice" hidden></p>
                         <div class="drone-body">
                             <button type="button" class="drone-thumb" id="droneThumb" aria-label="Lihat pratinjau panorama drone" title="Klik untuk pratinjau" disabled><img alt="" hidden><span class="drone-thumb-zoom" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></span><span class="drone-thumb-empty"><svg viewBox="0 0 24 24"><path d="M8 8l8 8M16 8l-8 8"/><circle cx="6" cy="6" r="2.6"/><circle cx="18" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><circle cx="18" cy="18" r="2.6"/><rect x="9.5" y="9.5" width="5" height="5" rx="1.4"/></svg></span></button>
                             <div class="drone-info">
@@ -318,6 +322,7 @@
                         (() => {
                             const block = document.getElementById('droneBlock'); if (!block) return;
                             const map = JSON.parse(block.dataset.panoramas || '{}'), input = document.getElementById('droneInput'), toggle = block.querySelector('input[name="has_drone"]');
+                            const statusPill = document.getElementById('droneStatus'), notice = document.getElementById('droneNotice'), hotspotTotal = Number(block.dataset.hotspots || 0);
                             const title = document.getElementById('droneTitle'), image = block.querySelector('.drone-thumb img'), chips = document.getElementById('droneChips'), switchText = document.getElementById('droneSwitchText'), setView = document.getElementById('droneSetView');
                             const thumbButton = document.getElementById('droneThumb'), num = id => Number(document.getElementById(id)?.value || 0);
                             // klik gambar = pratinjau besar (hanya melihat, tidak mengubah apa pun)
@@ -349,6 +354,17 @@
                                 chips.innerHTML = value === '' ? '' : '<span><i>Pan</i>' + num('dronePan').toFixed(1) + '\u00b0</span><span><i>Tilt</i>' + num('droneTilt').toFixed(1) + '\u00b0</span><span><i>FoV</i>' + num('droneFov').toFixed(1) + '\u00b0</span>';
                                 setView.disabled = value === '' || !map[value];
                                 thumbButton.disabled = !(panorama && panorama.thumb);
+                                // Status pengaturan drone (sama dengan penilaian di daftar Lokasi): beri tahu bila belum beres
+                                const viewIsDefault = Math.abs(num('dronePan')) < .005 && Math.abs(num('droneTilt')) < .005 && [70, 100].includes(Math.round(num('droneFov')));
+                                let state = 'ok', label = 'Siap dipakai', message = '';
+                                if (!toggle.checked && hotspotTotal === 0) { state = 'idle'; label = 'Belum diatur'; message = 'Lokasi ini belum memakai drone. Nyalakan toggle Aktif bila tur punya panorama udara, lalu pilih panorama dan arah pandangnya.'; }
+                                else if (value === '') { state = 'empty'; label = 'Belum diatur'; message = (hotspotTotal ? 'Tur ini punya ' + hotspotTotal + ' hotspot drone, tetapi panorama drone belum dipilih. ' : '') + 'Klik \u201cGanti panorama\u201d lalu \u201cAtur arah pandang\u201d.'; }
+                                else if (!panorama) { state = 'empty'; label = 'Panorama tidak ditemukan'; message = 'Node \u201c' + value + '\u201d tidak ada di tur ini. Pilih ulang lewat \u201cGanti panorama\u201d.'; }
+                                else if (!toggle.checked) { state = 'warn'; label = 'Belum diaktifkan'; message = 'Panorama drone sudah dipilih, tetapi tombol Aktif masih mati sehingga tur belum memakainya.'; }
+                                else if (viewIsDefault) { state = 'warn'; label = 'Arah pandang belum diatur'; message = 'Klik \u201cAtur arah pandang\u201d agar drone terbuka menghadap area yang tepat.'; }
+                                block.dataset.status = state;
+                                statusPill.hidden = false; statusPill.className = 'drone-status is-' + state; statusPill.textContent = label;
+                                notice.hidden = message === ''; notice.textContent = message; notice.className = 'drone-notice is-' + state;
                             };
                             input.addEventListener('input', sync); toggle.addEventListener('change', sync);
                             // "Atur arah pandang": buka pemilih lalu langsung masuk ke mode atur arah untuk panorama yang sudah dipilih
@@ -607,6 +623,7 @@
                     <div class="oi-history" role="group" aria-label="Riwayat perubahan"><button type="button" class="translate" id="oiUndo" disabled title="Tidak ada yang bisa diurungkan"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg><span>Urungkan</span></button><button type="button" class="translate" id="oiRedo" disabled title="Tidak ada yang bisa diulang"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg><span>Ulangi</span></button></div>
                     <button type="button" class="translate" id="addWebElement" title="Tambah pin Objek Info di tengah pandangan panorama"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg><span>Objek Info</span></button>
                     <button type="button" class="danger" id="removeWebElement" disabled title="Hapus Objek Info terpilih beserta pin dan card-nya (bisa diurungkan dengan Ctrl+Z)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg><span>Hapus Objek Info</span></button>
+                    <button type="button" class="oi-preview-btn" id="previewInTour" title="Buka tur sungguhan langsung di panorama ini, lengkap dengan skin dan Object Info, menghadap objek yang dipilih"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span>Pratinjau di tur</span></button>
                 </div>
                 <div class="oi-stage-wrap<?= empty($oiDatabase[$selectedId] ?? []) ? ' oi-empty' : '' ?>" id="oiStageWrap">
                     <div class="object-panorama-stage" id="objectPanoramaStage"><div id="objectPanoramaHost"></div><div class="object-panorama-loading" id="objectPanoramaLoading">Memuat panorama editor…</div></div>
@@ -2672,6 +2689,53 @@ if (objectList) {
         window.addEventListener('resize', fit); window.addEventListener('load', fit); fit(); setTimeout(fit, 400); setTimeout(fit, 1500); if (document.fonts?.ready) document.fonts.ready.then(fit);
         const toast = document.getElementById('objectProgress'); let timer = 0;
         if (toast) new MutationObserver(() => { toast.classList.add('show'); clearTimeout(timer); timer = setTimeout(() => toast.classList.remove('show'), 4500); }).observe(toast, {childList:true, characterData:true, subtree:true});
+    })();
+    // ---- Pratinjau di tur: tur sungguhan (skin, Smart Kit, Object Info) langsung di panorama yang sedang dibuka editor.
+    (() => {
+        const button = document.getElementById('previewInTour'); if (!button || !objectTourBaseUrl) { button?.remove(); return; }
+        let modal = null, frame = null, titleBox = null, noteBox = null, openUrl = '';
+        // objek yang jadi sasaran pandangan: pin terpilih, atau objek terpilih di daftar, atau pin pertama di panorama ini
+        const targetElement = () => {
+            const node = panoramaSelect.value.toLowerCase(), inPano = item => item && String(item.panoNodeId).toLowerCase() === node;
+            let element = editableWebElements[selectedWebElement];
+            if (!inPano(element)) { const record = objectRecords[selectedObject]; element = record ? editableWebElements.find(item => inPano(item) && recordMatchesElement(record, item)) : undefined; }
+            return inPano(element) ? element : (editableWebElements.find(inPano) || null);
+        };
+        const buildUrl = () => {
+            const element = targetElement(), url = new URL(objectTourBaseUrl, document.baseURI);
+            url.search = '?cms_preview=' + Date.now();   // lewati cache index.html; pano.xml & data CMS sudah selalu diambil baru oleh tur
+            url.hash = '#' + [currentPublicNode() || panoramaSelect.value].concat(element ? [Number(element.pan).toFixed(2), Number(element.tilt).toFixed(2), '60'] : []).join(',');
+            return { href: url.href, element };
+        };
+        const close = () => { if (!modal) return; modal.classList.remove('open'); modal.setAttribute('aria-hidden', 'true'); document.body.classList.remove('oi-preview-open'); frame.src = 'about:blank'; };
+        const ensureModal = () => {
+            if (modal) return modal;
+            modal = document.createElement('div'); modal.className = 'oi-preview-modal'; modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true'); modal.setAttribute('aria-hidden', 'true');
+            modal.innerHTML = '<div class="oi-preview-card"><header><div class="oi-preview-title"><strong></strong><small></small></div><div class="oi-preview-actions"><button type="button" data-oi-reload><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg>Muat ulang</button><a href="#" target="_blank" rel="noopener" data-oi-newtab><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>Buka di tab baru</a><button type="button" class="oi-preview-close" data-oi-close aria-label="Tutup pratinjau">\u00d7</button></div></header><iframe title="Pratinjau tur" allow="autoplay; fullscreen; gyroscope; accelerometer; magnetometer" allowfullscreen></iframe></div>';
+            document.body.append(modal);
+            frame = modal.querySelector('iframe'); titleBox = modal.querySelector('.oi-preview-title strong'); noteBox = modal.querySelector('.oi-preview-title small');
+            modal.addEventListener('click', event => { if (event.target === modal || event.target.closest('[data-oi-close]')) close(); });
+            modal.querySelector('[data-oi-reload]').addEventListener('click', () => { const next = buildUrl(); openUrl = next.href; frame.src = next.href; modal.querySelector('[data-oi-newtab]').href = next.href; });
+            document.addEventListener('keydown', event => { if (event.key === 'Escape' && modal.classList.contains('open')) close(); });
+            return modal;
+        };
+        button.addEventListener('click', async () => {
+            if (!objectPanoReady) return setPanoramaStatus('Tunggu panorama selesai dimuat.');
+            // tur hanya membaca data tersimpan: simpan dulu perubahan yang belum tersimpan supaya pratinjau sesuai dengan editor
+            button.disabled = true; button.classList.add('is-busy');
+            try {
+                for (let wait = 0; savingObjects && wait < 50; wait++) await new Promise(resolve => setTimeout(resolve, 100));
+                if (objectsDirty()) await saveObjectData(true);
+            } finally { button.disabled = false; button.classList.remove('is-busy'); }
+            const target = buildUrl(), unsaved = objectsDirty();
+            ensureModal(); openUrl = target.href; frame.src = target.href;
+            const option = panoramaSelect.selectedOptions[0];
+            titleBox.textContent = 'Pratinjau tur \u00b7 ' + (option ? option.textContent : panoramaSelect.value);
+            noteBox.textContent = unsaved ? 'Ada perubahan yang gagal tersimpan: pratinjau menampilkan versi tersimpan terakhir.' : (target.element ? 'Langsung menghadap ' + target.element.targetID + ' \u00b7 data yang tampil sudah tersimpan.' : 'Data yang tampil sudah tersimpan.');
+            noteBox.classList.toggle('is-warn', unsaved);
+            modal.querySelector('[data-oi-newtab]').href = target.href;
+            modal.classList.add('open'); modal.setAttribute('aria-hidden', 'false'); document.body.classList.add('oi-preview-open');
+        });
     })();
     renderObjectList();
     ensureObjectPanoPlayer().catch(error=>{document.getElementById('objectPanoramaLoading')?.setAttribute('hidden','');setPanoramaStatus('Gagal memuat editor panorama: '+error.message);});
