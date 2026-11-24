@@ -1,0 +1,20 @@
+/* cms-toast.css — notifikasi toast CMS (lihat assets/js/cms-toast.js). Atas-tengah layar, bar durasi di dasar kartu. */
+.cms-toasts { position:fixed;top:max(14px,env(safe-area-inset-top));left:50%;z-index:2147483000;display:grid;gap:10px;width:min(560px,calc(100vw - 24px));transform:translateX(-50%);pointer-events:none; }
+.cms-toast { --tone:#16a34a;--tone-soft:#e6f6ec;position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px;padding:13px 10px 16px 14px;overflow:hidden;border:1px solid #e3e8ef;border-radius:16px;color:#1b2430;background:#fff;box-shadow:0 22px 48px rgba(15,23,42,.2),0 2px 8px rgba(15,23,42,.08);font:500 13.5px/1.45 "Plus Jakarta Sans",Inter,system-ui,sans-serif;pointer-events:auto; }
+.cms-toast.is-delete,.cms-toast.is-error { --tone:#dc2626;--tone-soft:#fdecec; }
+.cms-toast.is-warn { --tone:#d97706;--tone-soft:#fff3dc; }
+.cms-toast.is-info { --tone:#2563eb;--tone-soft:#e8f0fe; }
+.cms-toast-icon { display:grid;place-items:center;width:36px;height:36px;border-radius:50%;color:var(--tone);background:var(--tone-soft); }
+.cms-toast-icon svg { width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:2.3;stroke-linecap:round;stroke-linejoin:round; }
+.cms-toast-body { display:grid;gap:1px;min-width:0; }
+.cms-toast-body strong { color:#101828;font-size:13.5px;font-weight:750;letter-spacing:-.005em; }
+.cms-toast-body span { color:#475467;font-size:13px;overflow-wrap:anywhere; }
+.cms-toast-close { display:grid;place-items:center;align-self:start;width:28px;height:28px;padding:0;border:0;border-radius:9px;color:#98a2b3;background:transparent;cursor:pointer;transition:background-color .15s ease,color .15s ease; }
+.cms-toast-close:hover,.cms-toast-close:focus-visible { color:#344054;background:#f2f4f7;outline:0; }
+.cms-toast-close svg { width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round; }
+/* bar durasi: lintasan pucat + bar berwarna yang menyusut dari kanan ke kiri */
+.cms-toast::before { content:"";position:absolute;right:0;bottom:0;left:0;height:4px;background:var(--tone-soft); }
+.cms-toast-bar { position:absolute;right:0;bottom:0;left:0;height:4px;background:var(--tone);transform-origin:left center;border-radius:0 3px 3px 0; }
+/* banner flash dari server & teks status asli yang digantikan toast */
+[data-cms-flash],.cms-toast-source { display:none!important; }
+@media (max-width:520px) { .cms-toast { padding:12px 8px 15px 12px;gap:10px; } .cms-toast-icon { width:32px;height:32px; } }

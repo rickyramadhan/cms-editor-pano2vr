@@ -511,6 +511,9 @@ function shApply(array $st, array $tour, bool $on): string
     $html = (string) file_get_contents($index);
     $re = '~[ \t]*<script\b[^>]*smart-kit/boot\.js[^>]*>\s*</script>\s*\n?~i';
     $clean = (string) preg_replace($re, '', $html);
+    // Tag yang sudah terpasang menentukan ke mana tur memuat Smart Kit (mis. ../smart-kit/ = salinan deploy di folder proyek).
+    // Menerapkan ulang tidak boleh memindahkannya ke alamat bawaan CMS (/smart-kit/); untuk mengganti alamat, Lepas dulu lalu Terapkan.
+    if (preg_match('~<script\b[^>]*\bsrc=["\']([^"\']*smart-kit/)boot\.js~i', $html, $existingTag)) $st['url'] = $existingTag[1];
     if ($on) {
         if (!is_file($st['path'] . '/packs/' . $st['wilayah'] . '/' . $tour['id'] . '/scenes.js')) throw new RuntimeException('Paket belum dibangun; jalankan "Bangun paket" dulu.');
         $pos = strripos($clean, '</body>');
@@ -676,12 +679,19 @@ function shPublishPackFiles(array $project, array $st, string $slug, array $name
     if ($dest === null) return 0;
     $from = $st['path'] . '/packs/' . $st['wilayah'] . '/' . $slug; $to = $dest . '/packs/' . $st['wilayah'] . '/' . $slug;
     if (!is_dir($to)) return 0;   // lokasi ini belum ada di salinan deploy: jangan membuat paket setengah jadi
-    $copied = 0;
+    $copied = 0; $files = [];
     foreach ($names as $name) {
-        $name = basename((string) $name); $src = $from . '/' . $name;
-        if (!is_file($src)) continue;
-        if (is_file($to . '/' . $name) && hash_file('sha1', $src) === hash_file('sha1', $to . '/' . $name)) continue;
-        if (!@copy($src, $to . '/' . $name)) throw new RuntimeException('Gagal menyalin ' . $name . ' ke ' . $to . ' (izin folder?).');
+        $name = trim(str_replace('\\', '/', (string) $name), '/');
+        if ($name === '' || !preg_match('~^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$~', $name) || str_contains($name, '..')) continue;
+        $src = $from . '/' . $name;
+        if (is_dir($src)) { foreach (scandir($src) ?: [] as $entry) if ($entry !== '.' && $entry !== '..' && is_file($src . '/' . $entry)) $files[] = $name . '/' . $entry; }
+        elseif (is_file($src)) $files[] = $name;
+    }
+    foreach ($files as $name) {
+        $src = $from . '/' . $name; $dst = $to . '/' . $name;
+        if (is_file($dst) && hash_file('sha1', $src) === hash_file('sha1', $dst)) continue;
+        if (!is_dir(dirname($dst)) && !@mkdir(dirname($dst), 0775, true) && !is_dir(dirname($dst))) throw new RuntimeException('Folder ' . dirname($name) . ' gagal dibuat di salinan tur.');
+        if (!@copy($src, $dst)) throw new RuntimeException('Gagal menyalin ' . $name . ' ke ' . $to . ' (izin folder?).');
         $copied++;
     }
     return $copied;
@@ -780,6 +790,45 @@ function shMoveWebElements(array $tour, array $moves): int
     if (!copy($file, $backup . '/pano-before-smart-pin-' . date('Ymd-His') . '.xml')) throw new RuntimeException('Backup pano.xml gagal dibuat.');
     if ($dom->save($file) === false) throw new RuntimeException('Gagal menyimpan pano.xml.');
     return $moved;
+}
+
+/**
+ * Satu klik untuk satu lokasi: ① terapkan template skin project (skin.js + merapikan index.html + setup), ② bangun paket Smart Kit dan
+ * terapkan, ③ salin berkas hasil bangun (scenes, pin, thumbnail) ke salinan smart-kit di folder proyek bila ada.
+ * Tiap langkah berdiri sendiri: gagal di satu langkah tidak membatalkan yang lain, dan semuanya dilaporkan.
+ * content.json (konten sunting tim) tidak pernah disalin ke salinan tur.
+ */
+function shUpdateSkinAndKit(array $project, array $st, string $id, array $tour): array
+{
+    require_once __DIR__ . '/skin-templates.php';
+    $lines = []; $ok = true; $steps = ['skin' => 'skip', 'kit' => 'fail', 'copy' => 0];
+    try {   // ① skin
+        $templateId = projectSkinTemplateId($project, skinTemplateList());
+        if ($templateId === '') {
+            $lines[] = '① Skin: dilewati. Template skin belum dipilih untuk project ini (pilih di tab Template Skin).';
+        } else {
+            $template = skinTemplateGet($templateId);
+            $applied = applySkinTemplate($template, (string) $project['path'], (string) $tour['dir'], $id);
+            $setup = skinTemplateSetup($templateId); $setupMessages = $setup !== null ? skinRunSetup($setup, (string) $tour['dir']) : [];
+            $lines[] = '① Skin ' . $template['name'] . ': skin.js diterapkan' . ($applied['index'] ? ', index.html dirapikan' : '') . ($setupMessages ? ' · ' . implode('; ', $setupMessages) : '') . '.';
+            $steps['skin'] = 'ok';
+        }
+    } catch (Throwable $e) { $ok = false; $steps['skin'] = 'fail'; $lines[] = '① Skin GAGAL: ' . $e->getMessage(); }
+    try {   // ② Smart Kit (sama dengan "Aktifkan Smart Kit")
+        shBuildPack($st, $tour); $appliedKit = shApply($st, $tour, true);
+        $packDir = $st['path'] . '/packs/' . $st['wilayah'] . '/' . $id;
+        $content = is_file($packDir . '/content.json') ? json_decode((string) file_get_contents($packDir . '/content.json'), true) : null;
+        $pinsFile = shPinsFile($st, $id);
+        $readiness = shReadiness(is_array($content) ? $content : null, 0, is_file($pinsFile) ? count((array) json_decode((string) file_get_contents($pinsFile), true)) : 0);
+        $lines[] = '② Smart Kit: ' . $appliedKit . '. Kesiapan konten ' . $readiness['score'] . '%' . ($readiness['todo'] ? ' (masih perlu: ' . implode('; ', array_slice($readiness['todo'], 0, 3)) . ')' : '') . '.';
+        $steps['kit'] = 'ok';
+        try {   // ③ salinan tur
+            $hasCopy = shDeployedKitDir($project, $st) !== null;
+            $steps['copy'] = shPublishPackFiles($project, $st, $id, ['scenes.js', 'pins.js', 'pins.json', 'img/scenes']);
+            if ($hasCopy) $lines[] = '③ Salinan tur (smart-kit di folder proyek): ' . ($steps['copy'] > 0 ? $steps['copy'] . ' berkas diperbarui' : 'sudah sama') . '.';
+        } catch (Throwable $e) { $ok = false; $lines[] = '③ Salinan tur GAGAL: ' . $e->getMessage(); }
+    } catch (Throwable $e) { $ok = false; $lines[] = '② Smart Kit GAGAL: ' . $e->getMessage(); }
+    return ['id' => $id, 'ok' => $ok, 'message' => implode("\n", $lines), 'steps' => $steps];
 }
 
 /** Bersihkan data dari GUI: tanpa tag HTML, tanpa skema berbahaya, batas ukuran & kedalaman. */
@@ -884,7 +933,7 @@ if (!defined('SMART_HUB_INCLUDE_ONLY')) {
         $project = activeProject();
         $op = (string) ($payload['op'] ?? 'state');
         if ($op === 'state') cmsJsonResponse(['success' => true, 'state' => shState($project)]);
-        if (in_array($op, ['save_settings', 'apply', 'unapply', 'upload_logo', 'activate'], true)) cmsRequireAdmin('Pengaturan Smart Kit, logo, Terapkan, dan Lepas');
+        if (in_array($op, ['save_settings', 'apply', 'unapply', 'upload_logo', 'activate', 'update_skin_kit'], true)) cmsRequireAdmin('Pengaturan Smart Kit, logo, Terapkan, dan Lepas');
         if ($op === 'save_settings') { shSaveSettings((string) $project['id'], (array) ($payload['settings'] ?? [])); cmsJsonResponse(['success' => true, 'message' => 'Pengaturan Smart Kit project disimpan.', 'state' => shState(activeProject())]); }
         $st = shSettings($project);
         if (!is_file($st['path'] . '/hub-catalog.json')) throw new RuntimeException('Smart Kit belum terhubung: atur folder Smart Kit di Pengaturan.');
@@ -1049,6 +1098,13 @@ if (!defined('SMART_HUB_INCLUDE_ONLY')) {
                 ivMarkStale((string) $project['id'], array_column(array_filter($results, static fn($r) => $r['ok']), 'id'), 'Smart Kit diaktifkan');
                 $okN = count(array_filter($results, static fn($r) => $r['ok']));
                 cmsJsonResponse(['success' => $okN > 0, 'message' => $okN . ' dari ' . count($results) . ' lokasi diaktifkan.', 'results' => $results, 'state' => shState($project)]);
+            case 'update_skin_kit':
+                $results = [];
+                foreach ($pick((array) ($payload['locations'] ?? [])) as $id => $t) $results[] = shUpdateSkinAndKit($project, $st, (string) $id, $t);
+                cmsAudit('smartkit.update_skin_kit', ['lokasi' => array_column($results, 'id'), 'gagal' => array_column(array_filter($results, static fn($r) => !$r['ok']), 'id')]);
+                ivMarkStale((string) $project['id'], array_column(array_filter($results, static fn($r) => $r['ok']), 'id'), 'skin + Smart Kit diperbarui');
+                $okN = count(array_filter($results, static fn($r) => $r['ok']));
+                cmsJsonResponse(['success' => $okN > 0, 'message' => $okN . ' dari ' . count($results) . ' lokasi diperbarui (skin + Smart Kit).', 'results' => $results, 'state' => shState($project)]);
             case 'build':
             case 'apply':
             case 'unapply':

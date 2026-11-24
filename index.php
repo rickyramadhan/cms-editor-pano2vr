@@ -451,6 +451,52 @@ function syncDroneHotspots(string $root, ?array $tour, array $record): int
     return $changed;
 }
 
+/** Panorama awal tur yang terdeteksi dari pano.xml (lihat panoStartRead), atau null bila pano.xml tidak terbaca. */
+function readTourStart(string $root, array $tour): ?array
+{
+    $panoFile = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, (string) $tour['path']) . '/pano.xml';
+    if (!is_file($panoFile)) return null;
+    $dom = new DOMDocument('1.0', 'UTF-8');
+    if (!@$dom->load($panoFile)) return null;
+    return panoStartRead(new DOMXPath($dom));
+}
+
+/**
+ * Terapkan panorama awal pilihan ke pano.xml tur: <tour start="nodeX"> + arah pandang awal panorama itu (<view><start pan tilt fov>).
+ * Hanya menulis bila ada yang berubah (backup pano.xml dibuat dulu, dan perubahan dicatat di memori agar bisa diterapkan ulang
+ * setelah tur di-export ulang dari Pano2VR). Mengembalikan true bila pano.xml diubah.
+ *
+ * @param array{node:string,pan:float,tilt:float,fov:float} $start
+ */
+function applyTourStart(string $root, ?array $tour, array $start): bool
+{
+    $node = trim((string) ($start['node'] ?? ''));
+    if ($tour === null || $node === '') return false;
+    $tourDir = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, (string) $tour['path']);
+    $panoFile = $tourDir . '/pano.xml';
+    if (!is_file($panoFile)) return false;
+    $dom = new DOMDocument('1.0', 'UTF-8');
+    $dom->preserveWhiteSpace = true;
+    $dom->formatOutput = false;
+    if (!@$dom->load($panoFile)) throw new RuntimeException('pano.xml tidak valid.');
+    $xpath = new DOMXPath($dom);
+    if (!panoStartApply($dom, $xpath, $node, (float) ($start['pan'] ?? 0), (float) ($start['tilt'] ?? 0), (float) ($start['fov'] ?? 70))) return false;
+    $backupDirectory = cmsBackupEnsure($tourDir, 'media');
+    if (!is_dir($backupDirectory) && !mkdir($backupDirectory, 0775, true) && !is_dir($backupDirectory)) throw new RuntimeException('Folder backup pano.xml gagal dibuat.');
+    if (!copy($panoFile, $backupDirectory . '/pano-before-start-view-' . date('Ymd-His') . '.xml')) throw new RuntimeException('Backup pano.xml gagal dibuat.');
+    if ($dom->save($panoFile) === false) throw new RuntimeException('Gagal menyimpan pano.xml.');
+    $now = panoStartRead(new DOMXPath($dom));
+    if ($now !== null) {
+        try { panoMemoryRecord($tourDir, ['start' => ['tour' => ['node' => $now['node'], 'pan' => panoNumber($now['pan']), 'tilt' => panoNumber($now['tilt']), 'fov' => panoNumber($now['fov'])]]]); } catch (Throwable) { /* mencatat memori tidak boleh membatalkan simpan */ }
+    }
+    try {   // template dengan setup.json (mis. badung): pastikan tur memuat pano.xml terbaru
+        $templateId = projectSkinTemplateId(activeProject(), skinTemplateList());
+        $setup = $templateId !== '' ? skinTemplateSetup($templateId) : null;
+        if ($setup !== null) skinRunSetup($setup, $tourDir);
+    } catch (Throwable) { /* tidak fatal */ }
+    return true;
+}
+
 /**
  * Data CMS (global-database.js, oi-database.js, dsb.) dimuat main-loader dengan ?v=<revisi>. Bila tag pemuat di index.html tur
  * memakai ?v= tetap, browser pengunjung tetap membaca data lama dari cache setelah data disimpan di CMS (versi "bentrok").
@@ -466,6 +512,24 @@ function bumpMainLoaderVersion(string $root, ?array $tour): bool
     $updated = preg_replace('/(main-loader\.js\?v=)([^"\'&\s>]+)/', '${1}' . date('YmdHis') . '-cms', $html, -1, $count);
     if ($updated === null || $count === 0 || $updated === $html) return false;
     return file_put_contents($index, $updated, LOCK_EX) !== false;
+}
+
+/**
+ * Pilih record Object Info untuk satu WebElement. Meniru tur (oi-config.js › findObjectInfo): yang dipakai adalah record AKTIF pertama
+ * dengan node + target yang sama; record nonaktif dengan pin yang sama (mis. sisa duplikat) tidak menghalangi.
+ * Mengembalikan [record aktif|null, adaKecocokanNonaktif, jumlahRecordCocok].
+ */
+function matchObjectForElement(array $objects, array $element): array
+{
+    $active = null; $inactive = false; $matches = 0;
+    foreach ($objects as $object) {
+        $objectNode = trim((string) ($object['nodeID'] ?? ''), '{} ');
+        if (strcasecmp($objectNode, (string) $element['nodeID']) !== 0 || strcasecmp((string) ($object['targetID'] ?? ''), (string) $element['targetID']) !== 0) continue;
+        $matches++;
+        if (array_key_exists('isActive', $object) && !$object['isActive']) { $inactive = true; continue; }
+        if ($active === null) $active = $object;
+    }
+    return [$active, $inactive, $matches];
 }
 
 /** Jumlah hotspot ikon drone (skinid memuat "drone") di pano.xml tur; penanda bahwa lokasi ini memang punya panorama udara. */
@@ -584,18 +648,17 @@ function analyzeTourCompletion(string $root, string $id, array $tour, array $loc
         $objectDone = 0;
         $objectTotal = 0;
         $requiredObjectFields = ['route_key', 'nodeID', 'targetID'];
+        $duplicatePins = 0;
         foreach ($webElements as $element) {
-            $matchingObject = null;
-            foreach ($objects as $object) {
-                $objectNode = trim((string) ($object['nodeID'] ?? ''), '{} ');
-                if (strcasecmp($objectNode, $element['nodeID']) === 0 && strcasecmp((string) ($object['targetID'] ?? ''), $element['targetID']) === 0) { $matchingObject = $object; break; }
-            }
-            if ($matchingObject !== null && array_key_exists('isActive', $matchingObject) && !$matchingObject['isActive']) continue;   // nonaktif: dilewati
+            [$matchingObject, $hasInactiveMatch, $matchCount] = matchObjectForElement($objects, $element);
+            if ($matchCount > 1) $duplicatePins++;
+            if ($matchingObject === null && $hasInactiveMatch) continue;   // semua record pin ini nonaktif: dilewati
             $objectTotal += count($requiredObjectFields) + count(cmsLanguages());
             if ($matchingObject === null) continue;
             foreach ($requiredObjectFields as $field) if (trim((string) ($matchingObject[$field] ?? '')) !== '') $objectDone++;
             foreach (array_keys(cmsLanguages()) as $language) if (trim((string) ($matchingObject['labelTeks'][$language] ?? '')) !== '') $objectDone++;
         }
+        if ($duplicatePins > 0) $hints['object'] = $duplicatePins . ' pin punya lebih dari satu data Object Info (duplikat): tur memakai yang aktif pertama, hapus sisanya agar rapi';
         if ($objectTotal > 0) {
             $objectScore = (int) round(($objectDone / $objectTotal) * 100);
             if ($objectScore < 100) $missing[] = ($objectTotal - $objectDone) . ' field Object Informasi belum lengkap';
@@ -770,7 +833,27 @@ try {
         replaceJsObject($oiDatabaseFile, 'TourDatabase', $oiDatabase);
         try { bumpMainLoaderVersion($projectRoot, $detectedTours[$locationId] ?? null); } catch (Throwable) { /* tidak fatal */ }
         $message = count($cleanRecords) . ' object berhasil disimpan.' . ($webElementCount !== null ? ' ' . $webElementCount . ' WebElement dan ' . count($hotspots ?? []) . ' hotspot diperbarui di pano.xml.' : '');
-        echo json_encode(['success' => true, 'message' => $message]); exit;
+        // status kelengkapan terbaru lokasi ini (indikator di sidebar & tab ikut diperbarui tanpa memuat ulang halaman)
+        $freshStatus = null;
+        try {
+            if (isset($detectedTours[$locationId])) {
+                $fresh = analyzeTourCompletion($projectRoot, $locationId, $detectedTours[$locationId], (array) ($database[$locationId] ?? []), $cleanRecords, false);
+                $topics = locationTopicStatus($fresh);
+                $short = ['data' => 'Data', 'voice' => 'Voice Over', 'video' => 'Video', 'audit' => 'Audit', 'object' => 'Object Info', 'drone' => 'Drone'];
+                $tabsFor = ['data' => 'lokasi', 'voice' => 'voice', 'video' => 'video', 'audit' => 'audit', 'object' => 'object', 'drone' => 'lokasi'];
+                $chips = [];
+                foreach ($topics as $key => $topic) {
+                    if (!in_array($topic['state'], ['miss', 'idle'], true)) continue;
+                    $chips[] = ['key' => $key, 'label' => $short[$key] ?? $topic['label'], 'state' => $topic['state'], 'level' => $topic['level'] ?? 'partial', 'tip' => $topic['tip'], 'href' => '?tab=' . $tabsFor[$key] . '&lokasi=' . $locationId];
+                }
+                $freshStatus = [
+                    'score' => (int) $fresh['score'], 'complete' => $fresh['score'] === 100, 'hints' => array_values((array) ($fresh['hints'] ?? [])),
+                    'issues' => implode("\n", array_merge($fresh['missing'], translationSuspects((array) ($database[$locationId] ?? [])))),
+                    'chips' => $chips, 'object' => $topics['object'] ?? null,
+                ];
+            }
+        } catch (Throwable) { /* indikator tetap diperbarui saat halaman dimuat ulang */ }
+        echo json_encode(['success' => true, 'message' => $message, 'status' => $freshStatus], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE); exit;
     }
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -894,9 +977,17 @@ try {
             ];
             replaceJsObject($databaseFile, 'GLOBAL_DATABASE', $database);
             try { bumpMainLoaderVersion($projectRoot, $detectedTours[$id] ?? null); } catch (Throwable) { /* tidak fatal */ }
-            $droneHotspots = 0;
-            try { $droneHotspots = syncDroneHotspots($projectRoot, $detectedTours[$id] ?? null, $database[$id]); } catch (Throwable $droneError) { $_SESSION['cms_flash'] = 'Data lokasi disimpan, tetapi arah drone belum diterapkan ke pano.xml: ' . $droneError->getMessage(); }
-            if (!isset($droneError)) $_SESSION['cms_flash'] = 'Data lokasi berhasil disimpan.' . ($droneHotspots > 0 ? ' Arah pandang drone juga diterapkan ke ' . $droneHotspots . ' hotspot drone di pano.xml.' : '');
+            $droneHotspots = 0; $startChanged = false; $applyErrors = [];
+            try { $droneHotspots = syncDroneHotspots($projectRoot, $detectedTours[$id] ?? null, $database[$id]); } catch (Throwable $droneError) { $applyErrors[] = 'arah drone belum diterapkan ke pano.xml: ' . $droneError->getMessage(); }
+            // Panorama awal ditulis ke pano.xml hanya bila pengguna memang mengubahnya lewat pemilih (start_dirty), supaya menyimpan data lain tidak menimpa pano.xml yang berubah di tempat lain.
+            if (($_POST['start_dirty'] ?? '') === '1' && trim((string) ($_POST['start_node'] ?? '')) !== '') {
+                try {
+                    $startChanged = applyTourStart($projectRoot, $detectedTours[$id] ?? null, ['node' => trim((string) $_POST['start_node']), 'pan' => (float) ($_POST['start_pan'] ?? 0), 'tilt' => (float) ($_POST['start_tilt'] ?? 0), 'fov' => (float) ($_POST['start_fov'] ?? 70)]);
+                } catch (Throwable $startError) { $applyErrors[] = 'panorama awal belum diterapkan ke pano.xml: ' . $startError->getMessage(); }
+            }
+            $_SESSION['cms_flash'] = $applyErrors === []
+                ? 'Data lokasi berhasil disimpan.' . ($droneHotspots > 0 ? ' Arah pandang drone juga diterapkan ke ' . $droneHotspots . ' hotspot drone di pano.xml.' : '') . ($startChanged ? ' Panorama awal tur juga diperbarui di pano.xml.' : '')
+                : 'Data lokasi disimpan, tetapi ' . implode('; ', $applyErrors);
             header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?') . '?tab=lokasi&lokasi=' . rawurlencode($id));
             exit;
         } elseif ($action === 'save_config') {

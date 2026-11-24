@@ -24,7 +24,7 @@
   };
   const ico = (name) => h('i', { class: 'sh-icon', 'data-lucide': name, 'aria-hidden': 'true' });
   const clone = (o) => JSON.parse(JSON.stringify(o));
-  const toast = (msg, bad) => { const t = document.getElementById('shToast'); t.textContent = msg; t.className = 'sh-toast' + (bad ? ' is-bad' : ''); t.hidden = false; clearTimeout(t._t); t._t = setTimeout(() => (t.hidden = true), bad ? 7000 : 3600); };
+  const toast = (msg, bad) => { if (window.cmsToast) return window.cmsToast(msg, bad ? 'error' : undefined); const t = document.getElementById('shToast'); t.textContent = msg; t.className = 'sh-toast' + (bad ? ' is-bad' : ''); t.hidden = false; clearTimeout(t._t); t._t = setTimeout(() => (t.hidden = true), bad ? 7000 : 3600); };
   const copy = (text) => { navigator.clipboard?.writeText(text).then(() => toast('Disalin ke clipboard')).catch(() => prompt('Salin:', text)); };
   async function post(op, data = {}) {
     const r = await fetch('api.php?action=smart-hub', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csrf: CSRF, op, ...data }) });
@@ -114,6 +114,7 @@
       S.locations.length ? h('div', { class: 'sh-tablewrap' }, h('table', { class: 'sh-table' }, h('thead', null, h('tr', null, h('th', null, ''), h('th', null, 'Lokasi'), h('th', null, 'Paket'), h('th', null, 'Konten'), h('th', null, 'Kesiapan'), h('th', null, 'Inspector'), h('th', null, 'Tampilan'), h('th', null, ''))), h('tbody', null, rows)))
         : h('div', { class: 'sh-empty' }, 'Belum ada folder tur (berisi pano.xml) di project ini.'),
       h('div', { class: 'sh-bar' },
+        h('button', { type: 'button', class: 'save', title: 'Terapkan template skin project (skin.js), bangun paket Smart Kit, terapkan, dan salin hasilnya ke smart-kit di folder proyek, sekaligus', onclick: () => run('update_skin_kit', 'Update Skin + Smart Kit (template skin, bangun paket, terapkan)') }, ico('refresh-cw'), 'Update Skin + Smart Kit (satu klik)'),
         h('button', { type: 'button', class: 'save', onclick: () => run('activate', 'Aktifkan Smart Kit (bangun paket + terapkan)') }, ico('zap'), 'Aktifkan Smart Kit (satu klik)'),
         h('button', { type: 'button', class: 'translate', onclick: () => run('build', 'Bangun paket') }, ico('package-cog'), 'Bangun / perbarui paket'),
         h('button', { type: 'button', class: 'save', onclick: () => run('apply', 'Terapkan Smart Kit') }, ico('check'), 'Terapkan Smart Kit'),

@@ -29,7 +29,7 @@ function panoMemoryFile(string $tourDir): string
 
 function panoMemoryEmpty(): array
 {
-    return ['version' => 1, 'updated' => '', 'translations' => [], 'panoramas' => [], 'hotspots' => [], 'ignored' => ''];
+    return ['version' => 1, 'updated' => '', 'translations' => [], 'panoramas' => [], 'hotspots' => [], 'start' => [], 'ignored' => ''];
 }
 
 function panoMemoryLoad(string $tourDir): ?array
@@ -51,12 +51,12 @@ function panoMemoryWrite(string $tourDir, array $data): void
     if (file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX) === false) throw new RuntimeException('Memori pano.xml gagal disimpan.');
 }
 
-/** Catat perubahan yang dibuat di CMS: ['translations'=>[sumber=>[kode=>nilai]], 'panoramas'=>[node=>[atribut=>nilai]], 'hotspots'=>['node|id'=>[field=>nilai]]]. Nilai '' menghapus catatan. */
+/** Catat perubahan yang dibuat di CMS: ['translations'=>[sumber=>[kode=>nilai]], 'panoramas'=>[node=>[atribut=>nilai]], 'hotspots'=>['node|id'=>[field=>nilai]], 'start'=>['tour'=>[node|pan|tilt|fov=>nilai]]]. Nilai '' menghapus catatan. */
 function panoMemoryRecord(string $tourDir, array $edits): void
 {
     $data = panoMemoryLoad($tourDir) ?? panoMemoryEmpty();
     $touched = false;
-    foreach (['translations', 'panoramas', 'hotspots'] as $section) {
+    foreach (['translations', 'panoramas', 'hotspots', 'start'] as $section) {
         foreach ((array) ($edits[$section] ?? []) as $key => $fields) {
             if (!is_array($fields)) continue;
             foreach ($fields as $field => $value) {
@@ -116,7 +116,7 @@ function panoMemoryUsedSources(DOMXPath $xpath): array
 function panoMemoryPlan(DOMDocument $dom, array $data): array
 {
     $xpath = new DOMXPath($dom);
-    $plan = ['translations' => [], 'panoramas' => [], 'hotspots' => []];
+    $plan = ['translations' => [], 'panoramas' => [], 'hotspots' => [], 'start' => []];
     $used = panoMemoryUsedSources($xpath);
     $state = panoMemoryTranslationState($xpath);
     foreach ((array) $data['translations'] as $source => $codes) {
@@ -143,8 +143,17 @@ function panoMemoryPlan(DOMDocument $dom, array $data): array
             if ($element->getAttribute($field) !== (string) $value) $plan['hotspots'][] = ['node' => $nodeId, 'hotspot' => $hotspotId, 'field' => (string) $field, 'from' => $element->getAttribute($field), 'value' => (string) $value];
         }
     }
-    $plan['count'] = count($plan['translations']) + count($plan['panoramas']) + count($plan['hotspots']);
-    $plan['hash'] = sha1(json_encode([$plan['translations'], $plan['panoramas'], $plan['hotspots']], JSON_UNESCAPED_UNICODE));
+    // panorama awal tur (tour@start + arah pandang awalnya): export ulang dari Pano2VR mengembalikannya ke pengaturan Pano2VR
+    $saved = (array) (((array) ($data['start'] ?? []))['tour'] ?? []);
+    $savedNode = trim((string) ($saved['node'] ?? ''));
+    if ($savedNode !== '' && ($xpath->query('//panorama[@id=' . panoMemoryLiteral($savedNode) . ']')?->length ?? 0) > 0) {
+        $want = ['node' => $savedNode, 'pan' => (float) ($saved['pan'] ?? 0), 'tilt' => (float) ($saved['tilt'] ?? 0), 'fov' => (float) ($saved['fov'] ?? 70)];
+        $now = panoStartRead($xpath);
+        $same = $now !== null && $now['node'] === $want['node'] && $now['explicit'] && abs($now['pan'] - $want['pan']) <= 0.005 && abs($now['tilt'] - $want['tilt']) <= 0.005 && abs($now['fov'] - $want['fov']) <= 0.005;
+        if (!$same) $plan['start'][] = $want + ['from' => $now !== null ? panoStartLabel($now) : '', 'value' => panoStartLabel($want)];
+    }
+    $plan['count'] = count($plan['translations']) + count($plan['panoramas']) + count($plan['hotspots']) + count($plan['start']);
+    $plan['hash'] = sha1(json_encode([$plan['translations'], $plan['panoramas'], $plan['hotspots'], $plan['start']], JSON_UNESCAPED_UNICODE));
     return $plan;
 }
 
@@ -183,6 +192,9 @@ function panoMemoryApply(DOMDocument $dom, array $plan, string $root): int
         $element = $xpath->query('//panorama[@id=' . panoMemoryLiteral($item['node']) . ']//hotspot[@id=' . panoMemoryLiteral($item['hotspot']) . ']')?->item(0);
         if ($element instanceof DOMElement) { $element->setAttribute($item['field'], $item['value']); $applied++; }
     }
+    foreach ((array) ($plan['start'] ?? []) as $item) {
+        if (panoStartApply($dom, $xpath, (string) $item['node'], (float) $item['pan'], (float) $item['tilt'], (float) $item['fov'])) $applied++;
+    }
     return $applied;
 }
 
@@ -191,6 +203,61 @@ function panoMemoryLiteral(string $value): string
     if (!str_contains($value, "'")) return "'" . $value . "'";
     if (!str_contains($value, '"')) return '"' . $value . '"';
     return "concat('" . str_replace("'", "',\"'\",'", $value) . "')";
+}
+
+/** Angka untuk pano.xml: maksimal dua desimal tanpa nol di belakang (mis. 120, 45.5, -12.25). */
+function panoNumber(float $value): string
+{
+    $text = rtrim(rtrim(number_format($value, 2, '.', ''), '0'), '.');
+    return ($text === '' || $text === '-0') ? '0' : $text;
+}
+
+function panoStartLabel(array $start): string
+{
+    return $start['node'] . ' · pan ' . panoNumber((float) $start['pan']) . '° · tilt ' . panoNumber((float) $start['tilt']) . '° · fov ' . panoNumber((float) $start['fov']) . '°';
+}
+
+/**
+ * Panorama awal tur = atribut start pada <tour>; arah pandang awalnya = <view><start pan tilt fov> milik panorama itu.
+ * explicit=false: <tour> tidak punya start, jadi panorama pertama yang dipakai (bawaan Pano2VR). found=false: node-nya tidak ada di pano.xml.
+ */
+function panoStartRead(DOMXPath $xpath): ?array
+{
+    $tour = $xpath->query('/tour')?->item(0);
+    $first = $xpath->query('//panorama[@id]')?->item(0);
+    if (!$tour instanceof DOMElement || !$first instanceof DOMElement) return null;
+    $node = trim($tour->getAttribute('start'));
+    $explicit = $node !== '';
+    if (!$explicit) $node = $first->getAttribute('id');
+    $panorama = $xpath->query('//panorama[@id=' . panoMemoryLiteral($node) . ']')?->item(0);
+    $start = $panorama instanceof DOMElement ? $xpath->query('./view/start', $panorama)?->item(0) : null;
+    $read = static fn(string $name, float $fallback): float => $start instanceof DOMElement && $start->hasAttribute($name) ? (float) $start->getAttribute($name) : $fallback;
+    return ['node' => $node, 'found' => $panorama instanceof DOMElement, 'explicit' => $explicit, 'pan' => $read('pan', 0.0), 'tilt' => $read('tilt', 0.0), 'fov' => $read('fov', 70.0)];
+}
+
+/** Tulis panorama awal ke DOM: <tour start> dan <view><start pan tilt fov>. Mengembalikan true bila ada yang berubah; melempar bila panorama tidak ada. */
+function panoStartApply(DOMDocument $dom, DOMXPath $xpath, string $node, float $pan, float $tilt, float $fov): bool
+{
+    $tour = $xpath->query('/tour')?->item(0);
+    $panorama = $xpath->query('//panorama[@id=' . panoMemoryLiteral($node) . ']')?->item(0);
+    if (!$tour instanceof DOMElement || !$panorama instanceof DOMElement) throw new RuntimeException('Panorama "' . $node . '" tidak ditemukan di pano.xml.');
+    $view = $xpath->query('./view', $panorama)?->item(0);
+    if (!$view instanceof DOMElement) throw new RuntimeException('Panorama "' . $node . '" tidak punya elemen <view> di pano.xml.');
+    $pan = fmod($pan, 360.0);
+    if ($pan > 180) $pan -= 360;
+    if ($pan <= -180) $pan += 360;
+    $tilt = max(-90.0, min(90.0, $tilt));
+    $fov = max(1.0, min(179.0, $fov));
+    $changed = false;
+    if ($tour->getAttribute('start') !== $node) { $tour->setAttribute('start', $node); $changed = true; }
+    $start = $xpath->query('./start', $view)?->item(0);
+    if (!$start instanceof DOMElement) { $start = $dom->createElement('start'); $view->insertBefore($start, $view->firstChild); $changed = true; }
+    foreach (['pan' => $pan, 'tilt' => $tilt, 'fov' => $fov] as $name => $value) {
+        if ($start->hasAttribute($name) && abs((float) $start->getAttribute($name) - $value) <= 0.005) continue;
+        $start->setAttribute($name, panoNumber($value));
+        $changed = true;
+    }
+    return $changed;
 }
 
 function translationPayloadHasValues(array $translations): bool

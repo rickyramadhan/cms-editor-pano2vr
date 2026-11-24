@@ -55,11 +55,13 @@ $roleSelect = static function (string $cur) use ($e): string { $o = ''; foreach 
 <html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex">
 <title><?= $isAdmin ? 'Pengguna' : 'Akun saya' ?> — CMS Virtual Tour</title>
 <link rel="stylesheet" href="assets/css/auth.css?v=<?= $e((string) @filemtime(__DIR__ . '/assets/css/auth.css')) ?>">
+<link rel="stylesheet" href="assets/css/cms-toast.css?v=<?= $e((string) @filemtime(__DIR__ . '/assets/css/cms-toast.css')) ?>">
+<script src="assets/js/cms-toast.js?v=<?= $e((string) @filemtime(__DIR__ . '/assets/js/cms-toast.js')) ?>"></script>
 </head><body class="users-page"><main class="users-shell">
 <header><div><h1><?= $isAdmin ? 'Pengguna CMS' : 'Akun saya' ?></h1><small>Masuk sebagai <b><?= $e($me['name'] ?? $me['username']) ?></b> (<?= $e(CMS_ROLES[$me['role']] ?? $me['role']) ?>)</small></div>
 <nav><a href="projects.php">← Project</a><a href="index.php?tab=dashboard">Dashboard</a><a href="logout.php">Keluar</a></nav></header>
-<?php if ($msg !== ''): ?><div class="auth-ok" role="status"><?= $e($msg) ?></div><?php endif; ?>
-<?php if ($err !== ''): ?><div class="auth-alert" role="alert"><?= $e($err) ?></div><?php endif; ?>
+<?php if ($msg !== ''): ?><div class="auth-ok" role="status" data-cms-flash="success"><?= $e($msg) ?></div><?php endif; ?>
+<?php if ($err !== ''): ?><div class="auth-alert" role="alert" data-cms-flash="error"><?= $e($err) ?></div><?php endif; ?>
 
 <?php if ($isAdmin): ?>
 <section class="u-card">

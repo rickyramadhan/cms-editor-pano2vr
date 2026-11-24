@@ -9,7 +9,7 @@
     for (const c of kids.flat(Infinity)) if (c != null && c !== false) e.append(c.nodeType ? c : document.createTextNode(String(c)));
     return e;
   };
-  const toast = (m, bad) => { const t = $('opToast'); t.textContent = m; t.className = 'sh-toast' + (bad ? ' is-bad' : ''); t.hidden = false; clearTimeout(t._t); t._t = setTimeout(() => (t.hidden = true), bad ? 8000 : 3600); };
+  const toast = (m, bad) => { if (window.cmsToast) return window.cmsToast(m, bad ? 'error' : undefined); const t = $('opToast'); t.textContent = m; t.className = 'sh-toast' + (bad ? ' is-bad' : ''); t.hidden = false; clearTimeout(t._t); t._t = setTimeout(() => (t.hidden = true), bad ? 8000 : 3600); };
   async function call(op, data = {}) {
     const r = await fetch('api.php?action=optimizer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ csrf: CSRF, op, ...data }) });
     let j; try { j = await r.json(); } catch { throw new Error('Respons server tidak valid (' + r.status + ')'); }
