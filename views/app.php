@@ -561,7 +561,7 @@
             <section class="card section">
                 <div class="section-heading"><div><span class="step">SK</span><div><h2>Template Skin</h2><p>Pilih template dari folder <code>skin-templates/</code> di CMS, lalu terapkan ke lokasi project ini.</p></div></div><span class="skin-template-badge"><?= $activeSkinTemplate ? 'Aktif: ' . e($activeSkinTemplate['name']) : 'Belum ada template dipilih' ?></span></div>
                 <?php if ($skinTemplates === []): ?>
-                    <div class="skin-notice"><strong>Belum ada template</strong><span>Buat folder di <code>cms-editor-pano2vr/skin-templates/&lt;nama&gt;/</code> berisi <code>skin.js</code> (dan <code>pano2vr_player.js</code>). Panduan: <code>skin-templates/README.md</code>.</span></div>
+                    <div class="skin-notice"><strong>Belum ada template</strong><span>Buat folder di <code>cms-virtual-tour/skin-templates/&lt;nama&gt;/</code> berisi <code>skin.js</code> (dan <code>pano2vr_player.js</code>). Panduan: <code>skin-templates/README.md</code>.</span></div>
                 <?php else: ?>
                     <div class="skin-sync-list">
                         <?php foreach ($skinTemplates as $template): ?>
