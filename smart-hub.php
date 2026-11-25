@@ -592,7 +592,7 @@ function shState(array $project): array
 
 /* ------------------------------ konten lokasi & data wilayah (GUI "Isi Konten") ------------------------------ */
 const SH_CONTENT_KEYS = ['OBJECTS', 'SCENE_NAMES', 'CREATORS', 'REGION', 'ZONES', 'CATS', 'SERVICES', 'GUIDE', 'FACT_CATS', 'FACTS', 'ETIQUETTE', 'QUIZ', 'SAFETY', 'ROUTES', 'STAMPS', 'REWARDS', 'COLLECTIONS', 'THEMED', 'EVENTS', 'DULU', 'SEATS', 'WIZARD', 'DESTINATIONS', 'MENU', 'REELS', 'LANDMARK', 'ZONEOF'];
-const SH_REGION_KEEP = ['brandLogo', 'menuArt', 'skin', 'brand', 'destImg', 'walk', 'aiGuide'];   // dikelola alat lain; tidak diterima dari GUI
+const SH_REGION_KEEP = ['brandLogo', 'menuArt', 'skin', 'brand', 'destImg', 'walk', 'aiGuide', 'features'];   // dikelola alat lain; tidak diterima dari GUI
 
 /** Normalisasi preferensi Tourism Guide per lokasi. Array kosong = konfigurasi default (semua aktif). */
 function shNormalizeGuide(array &$content): void

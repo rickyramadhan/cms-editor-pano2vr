@@ -33,6 +33,8 @@
     <link rel="stylesheet" href="assets/css/cms-toast.css?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/css/cms-toast.css')) ?>">
     <script src="assets/js/cms-toast.js?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/js/cms-toast.js')) ?>"></script>
     <script src="assets/js/pano-thumb-select.js?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/js/pano-thumb-select.js')) ?>" defer></script>
+    <script src="assets/js/oi-load.js?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/js/oi-load.js')) ?>"></script>
+    <script src="assets/js/oi-konten.js?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/js/oi-konten.js')) ?>" defer></script>
     <script>document.addEventListener('click', (event) => { const b = event.target.closest?.('[data-oi-note]'); if (!b) return; event.preventDefault(); window.cmsToast?.(b.dataset.oiNote, 'info'); });</script>
     <script src="assets/vendor/lucide.min.js" defer></script>
     <script defer>document.addEventListener('DOMContentLoaded',()=>window.lucide?.createIcons());</script>
@@ -720,7 +722,17 @@
     <?php elseif ($activeTab === 'object'): ?>
         <?php $oiStudio = isset($detectedTours[$selectedId]) && $selectedPanoramas !== []; ?>
         <section class="card section object-editor<?= $oiStudio ? ' oi-studio' : '' ?>">
-            <div class="section-heading"><div><span class="step">OI</span><h2>Object Informasi</h2><?php if ($oiStudio): ?><div class="oi-stats" id="objectCount" aria-live="polite"></div><?php endif; ?></div><div class="object-head-actions"><button type="button" class="save object-save" id="saveObjects" title="Simpan semua perubahan (Ctrl+S). Perubahan juga disimpan otomatis saat berpindah object."><span class="oi-save-label">Simpan</span><kbd>Ctrl+S</kbd></button></div></div>
+            <div class="section-heading"><div><span class="step">OI</span><h2>Object Informasi</h2><?php if ($oiStudio): ?><div class="oi-stats" id="objectCount" aria-live="polite"></div><?php endif; ?></div><div class="object-head-actions"><?php if ($oiStudio): ?><button type="button" class="oi-load-btn" id="oiLoadBtn" title="Muat pin Objek Info yang hilang dari pano.xml (mis. setelah tur di-export ulang dari Pano2VR). Posisinya diambil dari memori CMS, cadangan pano.xml, atau pin Smart Kit."><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v10"/><path d="m7.5 10 4.5 4.5 4.5-4.5"/><path d="M5 19h14"/></svg><span class="oi-load-label">Load Objek Info</span><b class="oi-load-count" hidden></b></button><?php endif; ?><button type="button" class="save object-save" id="saveObjects" title="Simpan semua perubahan (Ctrl+S). Perubahan juga disimpan otomatis saat berpindah object."><span class="oi-save-label">Simpan</span><kbd>Ctrl+S</kbd></button></div></div>
+            <?php
+            require_once __DIR__ . '/../includes/oi-konten.php';
+            $oiLangs = cmsLanguages();
+            $oiKonten = oiKontenReport(is_array($oiDatabase[$selectedId] ?? null) ? $oiDatabase[$selectedId] : [], $selectedPanoramas, $oiLangs, $projectRoot . '/webview');
+            ?>
+            <div class="oi-subtabs" role="tablist" aria-label="Bagian Object Informasi">
+                <button type="button" role="tab" id="oiTabEditor" class="is-on" aria-selected="true" aria-controls="oiPaneEditor" data-oi-pane="editor">Editor</button>
+                <button type="button" role="tab" id="oiTabKonten" aria-selected="false" aria-controls="oiPaneKonten" data-oi-pane="konten">Daftar Konten<b><?= (int) $oiKonten['summary']['total'] ?></b></button>
+            </div>
+            <div id="oiPaneEditor" role="tabpanel" aria-labelledby="oiTabEditor">
             <?php if ($oiStudio): ?>
             <div class="object-panorama-editor">
                 <div class="object-panorama-toolbar">
@@ -748,6 +760,8 @@
             <div class="object-layout"><aside class="object-list-panel"><input id="objectSearch" type="search" placeholder="Cari object…"><div id="objectCount"></div><button type="button" class="oi-dupe-toggle" id="objectDupeToggle" aria-pressed="false" hidden title="Tampilkan hanya Object Info yang memakai hotspot (pin) yang sama, dikelompokkan per pin, untuk divalidasi"><span class="sw" aria-hidden="true"></span><span>Hotspot sama</span><b>0</b></button><div id="objectList"></div></aside><div id="objectForm" class="object-form"><div class="object-empty">Pilih atau tambahkan object informasi.</div></div></div>
             <div class="voice-progress" id="objectProgress" data-cms-toast="only">Data tersimpan ke assets/oi-database.js.</div>
             <?php endif; ?>
+            </div>
+            <?php require __DIR__ . '/oi-konten-pane.php'; ?>
         </section>
     <?php elseif ($activeTab === 'voice'): ?>
         <section class="card section voice-editor">
@@ -2660,7 +2674,7 @@ if (objectList) {
         const input=(field,label,cls='')=>'<label class="'+cls+'"><span>'+label+'</span><input data-object-field="'+field+'" value="'+escapeObjectHtml(record[field])+'"></label>';
         const select=(field,label,values)=>'<label><span>'+label+'</span><select data-object-field="'+field+'">'+values.map(value=>'<option '+(record[field]===value?'selected':'')+'>'+value+'</option>').join('')+'</select></label>';
         const translations=Object.entries(voiceLabels).map(([code,label])=>'<label><span>'+label+'</span><textarea rows="3" data-object-lang="'+code+'">'+escapeObjectHtml(record.labelTeks?.[code]||'')+'</textarea></label>').join('');
-        const previewUrl=record.infoID ? oiPreviewBaseUrl+'?info='+encodeURIComponent(record.infoID)+'&lang=id' : '';
+        const previewUrl=record.infoID ? oiPreviewBaseUrl+encodeURIComponent(record.infoID)+'?lang=id&tutup=0' : '';
         objectForm.innerHTML='<div class="object-form-head"><label class="object-active-toggle"><span>Object</span><span class="toggle-control"><input type="checkbox" data-object-active aria-label="Aktifkan object" '+(record.isActive?'checked':'')+'><i aria-hidden="true"></i></span></label><div class="object-form-actions"><button type="button" class="translate" data-translate-object>✦ Auto Translate</button></div></div><div class="oi-dup-note" id="oiDupNote" hidden></div><div class="object-detail-layout"><div><div class="object-fields">'+input('route_key','Route Key','span2')+input('title','Title')+input('nodeID','Node ID')+select('targetID','Target ID',Array.from({length:10},(_,index)=>'Element'+String(index+1).padStart(2,'0')))+input('infoID','Info ID')+select('arah','Arah',['luruskanan','luruskiri','kanan','kiri'])+input('ukuran','Ukuran')+'</div><div class="object-translations">'+translations+'</div></div><aside class="object-preview"><header><strong>Preview Info</strong><a href="'+escapeObjectHtml(previewUrl)+'" target="_blank" rel="noopener">Buka ↗</a></header>'+(previewUrl?'<iframe src="'+escapeObjectHtml(previewUrl)+'" title="Preview Object Informasi"></iframe>':'<div>Isi Info ID untuk melihat preview.</div>')+'</aside></div>';
         renderDupNote();
     }
@@ -2807,9 +2821,19 @@ if (objectList) {
         });
         scheduleLiveTranslate(record);
     }
-    // Info ID otomatis dari Title: huruf kecil, tanpa aksen, pemisah underscore ("Patung Gajah Mina" → patung_gajah_mina).
+    // Info ID = bagian alamat webview/objinfo/<info-id>: huruf kecil, angka, dan strip. Dari Title: tanpa aksen, pemisah strip ("Patung Gajah Mina" → patung-gajah-mina).
     // Hanya diisi bila kolomnya kosong atau masih hasil otomatis dari judul sebelumnya; Info ID yang diubah manual tidak ditimpa.
-    const infoIdFromTitle = title => String(title || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    const infoIdFromTitle = title => String(title || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    // Saat mengetik di kolom Info ID: underscore, spasi, dan karakter lain otomatis jadi strip (huruf kecil; strip di ujung dibuang saat selesai mengetik)
+    const infoIdNormal = (value, akhir) => { let v = String(value || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-'); v = v.replace(/^-+/, ''); return akhir ? v.replace(/-+$/, '') : v; };
+    function normalInfoIdField(field, akhir) {
+        const sebelum = field.value, awal = field.selectionStart, v = infoIdNormal(sebelum, akhir);
+        if (v === sebelum) return v;
+        const posisi = infoIdNormal(sebelum.slice(0, awal || 0), false).length;
+        field.value = v;
+        try { field.setSelectionRange(Math.min(posisi, v.length), Math.min(posisi, v.length)); } catch (e) { /* kolom tidak mendukung kursor */ }
+        return v;
+    }
     function autoFillInfoId(record, previousTitle) {
         const current = String(record.infoID || '').trim();
         if (current !== '' && current !== infoIdFromTitle(previousTitle)) return;
@@ -2829,7 +2853,8 @@ if (objectList) {
         renderObjectItems(true); renderDupNote();
         cmsToast('Hotspot ' + String(objectRecords[selectedObject].targetID||'') + ': hanya object ini yang aktif sekarang. Simpan untuk menerapkan.');
     });
-    objectForm.addEventListener('input',event=>{const record=objectRecords[selectedObject];if(!record)return;if(event.target.dataset.objectField||event.target.dataset.objectLang||event.target.hasAttribute('data-object-active'))trackTyping(event.target.hasAttribute('data-object-active')?'Ubah status object':'Edit object');if(event.target.dataset.objectField){const previousTitle=record.title;record[event.target.dataset.objectField]=event.target.value;if(event.target.dataset.objectField==='title'){autoFillObjectLabels(record,previousTitle);autoFillInfoId(record,previousTitle);}}if(event.target.dataset.objectLang)record.labelTeks[event.target.dataset.objectLang]=event.target.value;if(event.target.hasAttribute('data-object-active'))record.isActive=event.target.checked;if(event.target.hasAttribute('data-object-active')){renderObjectItems(true);renderDupNote();return;}const item=objectList.querySelector('[data-object="'+selectedObject+'"]');if(item){item.querySelector('strong').textContent=objectDisplayName(record);item.querySelector('small').textContent=(record.route_key||'')+' · '+(record.nodeID||'Tanpa node');}if(event.target.dataset.objectField==='nodeID'||event.target.dataset.objectField==='targetID'){renderObjectItems();renderDupNote();}});
+    objectForm.addEventListener('input',event=>{const record=objectRecords[selectedObject];if(!record)return;if(event.target.dataset.objectField||event.target.dataset.objectLang||event.target.hasAttribute('data-object-active'))trackTyping(event.target.hasAttribute('data-object-active')?'Ubah status object':'Edit object');if(event.target.dataset.objectField){const previousTitle=record.title;if(event.target.dataset.objectField==='infoID')normalInfoIdField(event.target,false);record[event.target.dataset.objectField]=event.target.value;if(event.target.dataset.objectField==='title'){autoFillObjectLabels(record,previousTitle);autoFillInfoId(record,previousTitle);}}if(event.target.dataset.objectLang)record.labelTeks[event.target.dataset.objectLang]=event.target.value;if(event.target.hasAttribute('data-object-active'))record.isActive=event.target.checked;if(event.target.hasAttribute('data-object-active')){renderObjectItems(true);renderDupNote();return;}const item=objectList.querySelector('[data-object="'+selectedObject+'"]');if(item){item.querySelector('strong').textContent=objectDisplayName(record);item.querySelector('small').textContent=(record.route_key||'')+' · '+(record.nodeID||'Tanpa node');}if(event.target.dataset.objectField==='nodeID'||event.target.dataset.objectField==='targetID'){renderObjectItems();renderDupNote();}});
+    objectForm.addEventListener('change',event=>{if(event.target.dataset?.objectField!=='infoID')return;const record=objectRecords[selectedObject];if(record)record.infoID=normalInfoIdField(event.target,true);});   // selesai mengetik: strip di ujung dibuang
     objectForm.addEventListener('click',async event=>{
         const translate = event.target.closest('[data-translate-object]');
         if (translate) {
@@ -2850,6 +2875,28 @@ if (objectList) {
     });
     panoramaSelect?.addEventListener('change',()=>{pendingLook=null;selectedWebElement=-1;syncDeleteButton();if(objectPanoPlayer&&(objectPanoReady||objectSwitching)){switchObjectPanorama();return;}document.getElementById('objectPanoramaLoading').hidden=false;ensureObjectPanoPlayer().catch(error=>setPanoramaStatus('Gagal: '+error.message));});
     document.getElementById('addWebElement')?.addEventListener('click',()=>{if(!objectPanoReady)return setPanoramaStatus('Tunggu panorama selesai dimuat.');const used=editableWebElements.filter(item=>String(item.panoNodeId).toLowerCase()===panoramaSelect.value.toLowerCase()).map(item=>String(item.targetID).toLowerCase());const historyBefore=historySnapshot();let number=1,targetID;do{targetID='Element'+String(number++).padStart(2,'0');}while(used.includes(targetID.toLowerCase()));const element={nodeID:currentPublicNode(),panoNodeId:panoramaSelect.value,targetID,pan:Number(objectPanoPlayer.getPan()),tilt:Number(objectPanoPlayer.getTilt()),fov:31.53,width:3200,height:2400};editableWebElements.push(element);const record=blankObject();record.nodeID='{'+element.nodeID+'}';record.targetID=targetID;record.route_key=makeObjectRouteKey(element.nodeID,targetID);objectRecords.push(record);selectedObject=objectRecords.length-1;objectSearch.value='';renderObjectList();selectWebElement(editableWebElements.length-1);commitHistory(historyBefore,'Tambah '+targetID);setPanoramaStatus(targetID+' ditambahkan di tengah pandangan. Tarik pin untuk menggesernya, lalu tekan Simpan.');});
+    // "Load Objek Info": muat kembali pin aktif yang hilang dari pano.xml (mis. setelah export ulang) dari memori CMS, cadangan, atau pin Smart Kit. Berhenti di editor; pano.xml baru berubah saat Simpan.
+    window.OiLoad?.init({
+        button: document.getElementById('oiLoadBtn'), url: location.href, csrf: voiceCsrf, locationId: currentLocationId,
+        initial: <?= json_encode($oiRestoreInitial ?? null, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+        getRecords: () => objectRecords, getElements: () => editableWebElements,
+        toast: (message, kind) => window.cmsToast?.(message, kind),
+        load: elements => {
+            const keyOf = item => (String(item.nodeID).replace(/[{}]/g, '') + '|' + item.targetID).toLowerCase();
+            const have = new Set(editableWebElements.map(keyOf)), fresh = [];
+            elements.forEach(item => { const key = keyOf(item); if (!have.has(key)) { have.add(key); fresh.push(item); } });
+            if (!fresh.length) return 0;
+            const historyBefore = historySnapshot();
+            fresh.forEach(item => editableWebElements.push({...item}));
+            commitHistory(historyBefore, 'Load Objek Info (' + fresh.length + ' pin)');
+            const record = objectRecords.find(item => recordMatchesElement(item, fresh[0]));
+            if (record) { selectedObject = objectRecords.indexOf(record); objectSearch.value = ''; renderObjectList(); showObjectPanorama(record); focusObjectPin(record); }
+            else renderWebElementMarkers();
+            refreshSaveState();
+            setPanoramaStatus(fresh.length + ' pin dimuat dari data tersimpan. Periksa posisinya, lalu tekan Simpan untuk menuliskannya ke pano.xml.');
+            return fresh.length;
+        }
+    });
     // Hapus Objek Info = satu kesatuan: pin WebElement di panorama + SEMUA card yang memakai pin itu (termasuk sisa duplikat), satu langkah,
     // bisa diurungkan (Ctrl+Z) sebelum Simpan. Dipicu dari ikon sampah di card, atau tombol "Hapus pin" untuk pin yang belum punya card.
     async function deleteObjectInfo({record = null, element = null} = {}) {

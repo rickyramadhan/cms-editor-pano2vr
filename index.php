@@ -6,6 +6,8 @@ require_once __DIR__ . '/includes/backup-store.php';   // cadangan di folder pus
 
 require_once __DIR__ . '/language-manager.php';
 require_once __DIR__ . '/includes/pano-memory.php';   // memori perubahan pano.xml (penamaan + terjemahan)
+require_once __DIR__ . '/includes/oi-konten.php';   // Daftar Konten Object Info + oiCleanInfoId (Info ID = bagian alamat webview/objinfo/<info-id>)
+require_once __DIR__ . '/includes/oi-restore.php';   // Load Objek Info: pulihkan pin Object Informasi yang hilang dari pano.xml (memori, cadangan, pin Smart Kit)
 require_once __DIR__ . '/project-manager.php';
 require_once __DIR__ . '/skin-templates.php';
 
@@ -353,6 +355,24 @@ function saveTourWebElements(string $root, array $tour, array $elements, array $
     if(!copy($panoFile,$backupDirectory.'/pano-before-object-editor-'.date('Ymd-His').'.xml'))throw new RuntimeException('Backup pano.xml gagal dibuat.');
     $xml=$dom->saveXML();if($xml===false||file_put_contents($panoFile,$xml,LOCK_EX)===false)throw new RuntimeException('WebElement gagal disimpan ke pano.xml.');
     return $saved;
+}
+
+/** Pindai pin Objek Info yang hilang dari pano.xml satu tur. $elements null = baca dari pano.xml sekarang; selain itu keadaan editor. */
+function oiRestoreScanTour(string $root, array $tour, array $project, string $locationId, array $records, ?array $elements = null): array
+{
+    $tourDir = $root . '/' . str_replace('/', DIRECTORY_SEPARATOR, (string) $tour['path']);
+    $elements ??= readTourWebElements($root, $tour);
+    // jalur pins.js Smart Kit baru dicari bila ada pin yang perlu dicarikan sumbernya (memuat Smart Hub cukup berat)
+    $pinsFile = static function () use ($project, $locationId): string {
+        try {
+            if (!defined('SMART_HUB_INCLUDE_ONLY')) define('SMART_HUB_INCLUDE_ONLY', true);
+            require_once __DIR__ . '/smart-hub.php';
+            $kit = shSettings($project);
+            $candidate = rtrim((string) $kit['path'], '/\\') . '/packs/' . $kit['wilayah'] . '/' . $locationId . '/pins.js';
+            return is_file($candidate) ? $candidate : '';
+        } catch (Throwable) { return ''; }   // Smart Kit belum terhubung: sumber pin Smart Kit dilewati
+    };
+    return oiRestoreScan($tourDir, $records, $elements, readPanoramaNodes($root, $tour), $pinsFile);
 }
 
 /**
@@ -799,19 +819,26 @@ try {
         $locationId = cleanKey((string) ($payload['id_lokasi'] ?? ''));
         if ($locationId === '' || !isset($database[$locationId])) throw new RuntimeException('Lokasi Object Informasi tidak valid.');
         if (!is_array($payload['records'] ?? null)) throw new RuntimeException('Data Object Informasi tidak valid.');
+        if (($payload['action'] ?? '') === 'oi_scan') {   // tombol "Load Objek Info": pin mana yang hilang dari pano.xml dan dari mana posisinya bisa dimuat (tidak menulis apa pun)
+            if (!isset($detectedTours[$locationId])) throw new RuntimeException('Lokasi ini belum punya folder tur.');
+            $scan = oiRestoreScanTour($projectRoot, $detectedTours[$locationId], $activeProject, $locationId, array_values($payload['records']), is_array($payload['webElements'] ?? null) ? array_values($payload['webElements']) : null);
+            echo json_encode(['success' => true] + $scan, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE); exit;
+        }
         $keys = []; $cleanRecords = [];
         foreach ($payload['records'] as $index => $record) {
             $routeKey = cleanKey((string) ($record['route_key'] ?? ''));
             if ($routeKey === '' || isset($keys[$routeKey])) throw new RuntimeException('Route key object #' . ($index + 1) . ' kosong atau duplikat.');
             $keys[$routeKey] = true; $labels = [];
             foreach (cmsLanguages() as $code => $label) $labels[$code] = trim((string) ($record['labelTeks'][$code] ?? ''));
-            $cleanRecord = ['route_key' => $routeKey, 'infoID' => trim((string) ($record['infoID'] ?? '')), 'nodeID' => trim((string) ($record['nodeID'] ?? '')), 'targetID' => trim((string) ($record['targetID'] ?? '')), 'category' => trim((string) ($record['category'] ?? 'umum')), 'arah' => trim((string) ($record['arah'] ?? 'luruskanan')), 'versi' => '1', 'ukuran' => trim((string) ($record['ukuran'] ?? '500px')), 'labelTeks' => $labels, 'isActive' => (bool) ($record['isActive'] ?? true), 'title' => trim((string) ($record['title'] ?? ''))];
+            $cleanRecord = ['route_key' => $routeKey, 'infoID' => oiCleanInfoId((string) ($record['infoID'] ?? '')), 'nodeID' => trim((string) ($record['nodeID'] ?? '')), 'targetID' => trim((string) ($record['targetID'] ?? '')), 'category' => trim((string) ($record['category'] ?? 'umum')), 'arah' => trim((string) ($record['arah'] ?? 'luruskanan')), 'versi' => '1', 'ukuran' => trim((string) ($record['ukuran'] ?? '500px')), 'labelTeks' => $labels, 'isActive' => (bool) ($record['isActive'] ?? true), 'title' => trim((string) ($record['title'] ?? ''))];
             // `konten` = isi popup objek dari Smart Hub (per bahasa: title, sub, desc, kv[l,v]); tampil langsung tanpa iframe webview
             if (is_array($record['konten'] ?? null)) {
                 $konten = [];
                 foreach ($record['konten'] as $langCode => $block) {
                     if ($langCode === 'meta' && is_array($block)) {
                         $konten['meta'] = ['pin' => preg_replace('/[^A-Za-z0-9_-]/', '', (string) ($block['pin'] ?? '')), 'scene' => preg_replace('/[^A-Za-z0-9_-]/', '', (string) ($block['scene'] ?? '')), 'ico' => preg_replace('/[^a-z0-9_-]/i', '', (string) ($block['ico'] ?? 'info')), 'color' => preg_match('/^#[0-9a-fA-F]{3,8}$/', (string) ($block['color'] ?? '')) ? (string) $block['color'] : '#1a82d8'];
+                        // foto kartu (relatif terhadap assets/objek-info/); hanya karakter aman, tanpa '..'
+                        if (preg_match('#^[A-Za-z0-9._/-]{1,200}$#', (string) ($block['img'] ?? '')) && !str_contains((string) $block['img'], '..')) $konten['meta']['img'] = (string) $block['img'];
                         continue;
                     }
                     if (!is_array($block) || !preg_match('/^[a-z]{2,3}(-[A-Za-z]{2,4})?$/', (string) $langCode)) continue;
@@ -827,7 +854,14 @@ try {
         if (array_key_exists('webElements', $payload)) {
             if (!isset($detectedTours[$locationId]) || !is_array($payload['webElements'])) throw new RuntimeException('Data editor panorama tidak valid.');
             $hotspots=is_array($payload['hotspots']??null)?$payload['hotspots']:[];
+            $oiTourDir = $projectRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, (string) $detectedTours[$locationId]['path']);
+            $oiBeforeKeys = array_keys(oiRestoreParseElements((string) @file_get_contents($oiTourDir . '/pano.xml')));   // pin di pano.xml SEBELUM simpan (untuk membedakan pin yang dihapus dari pin yang hilang karena export ulang)
             $webElementCount = saveTourWebElements($projectRoot, $detectedTours[$locationId], $payload['webElements'], $hotspots);
+            try {   // ingat posisi pin supaya bisa dimuat lagi lewat "Load Objek Info" bila pano.xml tertimpa export ulang Pano2VR
+                $oiPublicByPano = [];
+                foreach (readPanoramaNodes($projectRoot, $detectedTours[$locationId]) as $oiNode) $oiPublicByPano[strtolower((string) $oiNode['nodeId'])] = (string) $oiNode['value'];
+                oiRestoreMemoryRemember($oiTourDir, $oiBeforeKeys, $payload['webElements'], $oiPublicByPano);
+            } catch (Throwable) { /* mencatat memori tidak boleh membatalkan simpan */ }
         }
         $oiDatabase[$locationId] = $cleanRecords;
         replaceJsObject($oiDatabaseFile, 'TourDatabase', $oiDatabase);
@@ -1110,8 +1144,15 @@ foreach ($selectedPanoramas as &$namedPanorama) {
 unset($namedPanorama);
 $selectedWebElements = isset($detectedTours[$selectedId]) ? readTourWebElements($projectRoot, $detectedTours[$selectedId]) : [];
 $selectedHotspots = isset($detectedTours[$selectedId]) ? readTourHotspotPositions($projectRoot, $detectedTours[$selectedId]) : [];
+$oiRestoreInitial = null;   // pin Objek Info aktif yang hilang dari pano.xml (mis. setelah export ulang): menyalakan lencana + pemberitahuan di tombol "Load Objek Info"
+if ($activeTab === 'object' && isset($detectedTours[$selectedId]) && !empty($oiDatabase[$selectedId])) {
+    try { $oiRestoreInitial = oiRestoreScanTour($projectRoot, $detectedTours[$selectedId], $activeProject, $selectedId, array_values((array) $oiDatabase[$selectedId]), $selectedWebElements); } catch (Throwable) { $oiRestoreInitial = null; }
+}
+if ($activeTab === 'object' && isset($detectedTours[$selectedId]) && $selectedWebElements !== []) {   // ingat pin yang ada sekarang, supaya export ulang pertama pun tidak menghilangkannya
+    try { oiRestoreMemorySync($projectRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, (string) $detectedTours[$selectedId]['path']), $selectedWebElements); } catch (Throwable) { /* mencatat memori tidak boleh mengganggu halaman */ }
+}
 $oiConfigContent = is_file($assetsRoot . '/oi-config.js') ? (string) file_get_contents($assetsRoot . '/oi-config.js') : '';
-$oiPreviewBaseUrl = preg_match("/baseUrl\s*:\s*['\"]([^'\"]+)['\"]/", $oiConfigContent, $oiBaseMatch) ? $oiBaseMatch[1] : 'https://webview-jakarta.govirtual.id/objinfo.php';
+$oiPreviewBaseUrl = projectUrl('webview/objinfo/');   // halaman isi Objek Info: <alamat>/<info-id>?lang=id
 $auditId = $selectedId;
 $auditResult = $activeTab === 'audit' && isset($detectedTours[$auditId]) ? auditTour($projectRoot, $detectedTours[$auditId]) : null;
 $voiceAudioAvailability = [];

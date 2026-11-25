@@ -29,7 +29,7 @@ function panoMemoryFile(string $tourDir): string
 
 function panoMemoryEmpty(): array
 {
-    return ['version' => 1, 'updated' => '', 'translations' => [], 'panoramas' => [], 'hotspots' => [], 'start' => [], 'ignored' => ''];
+    return ['version' => 1, 'updated' => '', 'translations' => [], 'panoramas' => [], 'hotspots' => [], 'start' => [], 'webelements' => [], 'ignored' => ''];   // webelements = posisi pin Object Info (includes/oi-restore.php), dipakai tombol "Load Objek Info"
 }
 
 function panoMemoryLoad(string $tourDir): ?array
