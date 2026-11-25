@@ -5,7 +5,7 @@ declare(strict_types=1);
  *
  * Konsep baru: preload dan pemutaran video sudah ditangani loader bersama (assets/main-loader/main-loader.js), jadi tidak ada
  * lagi yang perlu ditambal di skin.js/index.html. Bagian yang masih menentukan kecepatan buka adalah UKURAN video. Modul ini
- * mengompres video itu dengan FFmpeg (VP9, 720p mobile / 1280p desktop, 30 fps) segera setelah diunggah dari tab Video.
+ * mengompres video itu dengan FFmpeg (VP9, resolusi asli dipertahankan, maks 30 fps) segera setelah diunggah dari tab Video.
  *
  * Aman diulang: file yang sudah diproses dicatat di video/.optimized.json (ukuran + waktu ubah) dan dilewati. Video asli
  * disimpan di video/_original/ (jangan diupload ke server). Modul ini tidak bergantung pada kode CMS lain agar bisa dipakai
@@ -110,13 +110,13 @@ function voCompress(array $bin, string $tourDir, string $kind, bool $force = fal
 
     $before = (int) filesize($file); $mtime0 = (int) filemtime($file);
     $p = voProbe($bin, $file);
-    $portrait = $p['h'] > $p['w'];
-    $limit = ($kind === 'mobile' && $portrait) ? 720 : 1280;   // sama dengan mesin lama
-    $vf = "scale='min($limit,iw)':-2" . ($p['fps'] > 31 ? ',fps=30' : '');
+    // Resolusi TIDAK diturunkan: video sumber sudah dikompres tim, menurunkan resolusi hanya membuatnya buram.
+    // Hanya batasi fps ke 30 dan pastikan lebar/tinggi genap (syarat yuv420p).
+    $vf = 'scale=trunc(iw/2)*2:trunc(ih/2)*2' . ($p['fps'] > 31 ? ',fps=30' : '');
     $tmp = $dir . '/' . $kind . '.tmp.webm'; $prog = $dir . '/' . $kind . '.progress.txt';
     @unlink($tmp); @unlink($prog);
     $cmd = [$bin['ffmpeg'], '-hide_banner', '-nostats', '-loglevel', 'error', '-progress', $prog, '-y', '-i', $file, '-vf', $vf,
-        '-c:v', 'libvpx-vp9', '-crf', '40', '-b:v', '0', '-row-mt', '1', '-deadline', 'good', '-cpu-used', '2', '-pix_fmt', 'yuv420p'];
+        '-c:v', 'libvpx-vp9', '-crf', '33', '-b:v', '0', '-row-mt', '1', '-deadline', 'good', '-cpu-used', '2', '-pix_fmt', 'yuv420p'];
     array_push($cmd, ...($p['audio'] ? ['-c:a', 'libopus', '-b:a', '64k'] : ['-an']));
     $cmd[] = $tmp;
     $report(['pct' => 1, 'msg' => 'Mengompres ' . $kind . '.webm…']);
