@@ -4,6 +4,23 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>CMS Virtual Tour — Govirtual</title>
+    <script>try { if (localStorage.getItem('cmsRailWide') === '1') document.documentElement.classList.add('rail-wide'); } catch (_) {}</script>
+    <!-- Pindah tab terasa instan: halaman tujuan di-render di latar saat kursor diarahkan ke tab (Chrome/Edge). -->
+    <script type="speculationrules">{"prerender":[{"where":{"selector_matches":".location-tabs a:not(.disabled), #sidebarLocationList a"},"eagerness":"moderate"}]}</script>
+    <script>
+    // Setelah ada penyimpanan (request non-GET), render-di-latar dibuang lalu dipasang ulang supaya tab tujuan tidak menampilkan data basi.
+    (() => {
+        const selector = 'script[type="speculationrules"]', original = document.querySelector(selector); if (!original || !window.fetch) return;
+        const rules = original.textContent, nativeFetch = window.fetch;
+        window.fetch = function (input, init) {
+            const method = String((init && init.method) || (input && input.method) || 'GET').toUpperCase();
+            if (method === 'GET') return nativeFetch.apply(this, arguments);
+            document.querySelector(selector)?.remove();
+            const restore = () => { if (document.querySelector(selector)) return; const script = document.createElement('script'); script.type = 'speculationrules'; script.textContent = rules; document.head.appendChild(script); };
+            return nativeFetch.apply(this, arguments).finally(restore);
+        };
+    })();
+    </script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -13,6 +30,8 @@
     <link rel="stylesheet" href="assets/css/ai-hub.css?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/css/ai-hub.css')) ?>">
     <link rel="stylesheet" href="assets/css/cms-redesign.css?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/css/cms-redesign.css')) ?>">
     <link rel="stylesheet" href="assets/css/cms-refine.css?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/css/cms-refine.css')) ?>">
+    <link rel="stylesheet" href="assets/css/cms-toast.css?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/css/cms-toast.css')) ?>">
+    <script src="assets/js/cms-toast.js?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/js/cms-toast.js')) ?>"></script>
     <script src="assets/vendor/lucide.min.js" defer></script>
     <script defer>document.addEventListener('DOMContentLoaded',()=>window.lucide?.createIcons());</script>
 </head>
@@ -45,13 +64,13 @@
         <div class="topbar-actions"><?php if ($skinTemplateId !== ''): ?><a class="preview" href="<?= e(projectUrl($skinTemplateId . '/')) ?>" target="_blank" rel="noopener"><span aria-hidden="true"><i data-lucide="external-link"></i></span>Pratinjau Tur</a><?php endif; ?><a class="cms-create-action" href="?tab=lokasi&lokasi=baru"><span aria-hidden="true"><i data-lucide="plus"></i></span>Buat Baru</a></div>
     </header>
 
-    <?php if ($message !== ''): ?><div class="alert success"><?= e($message) ?></div><?php endif; ?>
-    <?php if ($error !== ''): ?><div class="alert error"><?= e($error) ?></div><?php endif; ?>
+    <?php if ($message !== ''): ?><div class="alert success" data-cms-flash="success"><?= e($message) ?></div><?php endif; ?>
+    <?php if ($error !== ''): ?><div class="alert error" data-cms-flash="error"><?= e($error) ?></div><?php endif; ?>
 
     <?php if (!in_array($activeTab, ['dashboard', 'languages', 'translations', 'custom', 'video360', 'inventaris', 'smart', 'aihub', 'inspector', 'loading'], true)): ?>
     <div class="layout">
         <aside class="sidebar card">
-            <div class="sidebar-title"><div><h2>Lokasi</h2><small><?= count($detectedTours) ?> tur terdeteksi</small></div><a href="?tab=lokasi&lokasi=baru" class="add">＋ Baru</a></div>
+            <div class="sidebar-title"><div><h2>Lokasi</h2><small><?= count($detectedTours) ?> tur terdeteksi</small></div><span class="sidebar-title-actions"><button type="button" class="rail-toggle" id="railToggle" aria-pressed="false" aria-label="Lebarkan daftar lokasi" title="Lebarkan daftar lokasi"><svg class="rt-expand" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 4h5v5"/><path d="m20 4-6 6"/><path d="M9 20H4v-5"/><path d="m4 20 6-6"/></svg><svg class="rt-shrink" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 9h-5V4"/><path d="m15 9 6-6"/><path d="M4 15h5v5"/><path d="m9 15-6 6"/></svg></button><a href="?tab=lokasi&lokasi=baru" class="add">＋ Baru</a></span></div>
             <div class="sidebar-tools">
                 <input type="search" id="locationSearch" placeholder="Cari lokasi…" aria-label="Cari lokasi">
                 <?php if ($sidebarTourStatus !== []): ?>
@@ -92,24 +111,34 @@
                         $issues = array_merge($tourStatus['missing'], $suspects);
                         $statusAttrs .= ' data-issues="' . e(implode("\n", $issues)) . '"';
                     }
-                    if ($isUnsaved) $statusAttrs .= ' data-unsaved="1"'; ?>
+                    if ($isUnsaved) $statusAttrs .= ' data-unsaved="1"';
+                    $topicStatus = array_filter(locationTopicStatus($tourStatus), static fn(array $topic): bool => in_array($topic['state'], ['miss', 'idle'], true)); // topik yang belum lengkap (+ penanda netral "Drone nonaktif") ?>
                     <a class="location <?= $id === $selectedId ? 'active' : '' ?> <?= $isUnsaved ? 'unsaved' : '' ?> <?= $isComplete ? 'complete' : '' ?>" data-location-category="<?= e(tourCategory($id)) ?>" data-location-search="<?= e(strtolower($locationName . ' ' . $id)) ?>"<?= $statusAttrs ?> href="?tab=<?= e($activeTab) ?>&lokasi=<?= e($id) ?>">
-                        <span class="location-title"><strong><?= e($locationName) ?></strong><?php if ($isUnsaved): ?><i>Belum disimpan</i><?php elseif ($isComplete): ?><i class="complete-badge" title="Semua komponen lengkap">✓ Lengkap</i><?php elseif ($tourStatus !== null): ?><i class="progress-badge" title="<?= e(implode("\n", $issues ?? [])) ?>"><?= e($tourStatus['score']) ?>%</i><?php endif; ?></span>
-                        <small><?= e($id) ?><?= isset($detectedTours[$id]) ? ' · ' . e($detectedTours[$id]['path']) : '' ?></small>
+                        <span class="location-title"><strong><?= e($locationName) ?></strong><?php foreach (($tourStatus['hints'] ?? []) as $hintText): ?><i class="hint-info" data-tip="<?= e((string) $hintText) ?>" data-state="hint">i</i><?php endforeach; ?><?php if ($isUnsaved): ?><i>Belum disimpan</i><?php elseif ($isComplete): ?><i class="complete-badge" title="Semua komponen lengkap">✓ Lengkap</i><?php elseif ($tourStatus !== null): ?><i class="progress-badge" title="<?= e(implode("\n", $issues ?? [])) ?>"><?= e($tourStatus['score']) ?>%</i><?php endif; ?></span>
+                        <?php if ($topicStatus !== []): $topicShort = ['data' => 'Data', 'voice' => 'Voice Over', 'video' => 'Video', 'audit' => 'Audit', 'object' => 'Object Info', 'drone' => 'Drone']; ?><span class="loc-meta" aria-label="Topik yang belum lengkap"><?php $chipTabs = ['data' => 'lokasi', 'voice' => 'voice', 'video' => 'video', 'audit' => 'audit', 'object' => 'object', 'drone' => 'lokasi']; foreach ($topicStatus as $topicKey => $topic):
+                            // klik label = langsung ke tab topik itu (Voice Over & Object Informasi hanya bila data lokasinya sudah ada)
+                            $chipHref = (!in_array($topicKey, ['voice', 'object'], true) || isset($database[$id])) ? '?tab=' . $chipTabs[$topicKey] . '&lokasi=' . $id : ''; ?><span class="loc-chip seg-<?= e($topicKey) ?> lv-<?= e($topic['level'] ?? 'partial') ?>" data-tip="<?= e($topic['tip']) ?>" data-state="<?= e($topic['state']) ?>"<?= $chipHref !== '' ? ' data-href="' . e($chipHref) . '" role="link" tabindex="0"' : '' ?>><i></i><?= e($topicShort[$topicKey] ?? $topic['label']) ?></span><?php endforeach; ?></span><?php endif; ?>
                     </a>
                 <?php endforeach; ?>
                 <div class="sidebar-empty" id="sidebarLocationEmpty" hidden>Tidak ada lokasi yang cocok.</div>
             </nav>
         </aside>
         <script src="assets/js/cms-shell.js?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/js/cms-shell.js')) ?>"></script>
+        <?php $selectedTopics = locationTopicStatus($sidebarTourStatus[$selectedId] ?? null); $tabTopic = static function (string $key) use ($selectedTopics): string { $topic = $selectedTopics[$key] ?? null; return $topic === null ? '' : ' data-topic="' . e($key) . '" data-state="' . e($topic['state']) . '" data-level="' . e((string) ($topic['level'] ?? '')) . '" data-tip="' . e($topic['tip']) . '" data-tip-pos="bottom"'; };
+        $tabFlag = static function (string $key) use ($selectedTopics): string {
+            if (($selectedTopics[$key]['level'] ?? '') === 'empty') return '<b class="tab-flag" aria-hidden="true">!</b>';
+            if ($key === 'data' && ($selectedTopics['drone']['state'] ?? '') === 'miss') return '<b class="tab-flag" aria-hidden="true" title="' . e((string) ($selectedTopics['drone']['tip'] ?? 'Drone belum diatur')) . '">!</b>';
+            if (($selectedTopics[$key]['hint'] ?? '') !== '') return '<b class="tab-flag is-info" aria-hidden="true">i</b>';
+            return '';
+        }; ?>
         <div class="location-workspace">
             <div class="location-toolbar">
             <nav class="location-tabs" aria-label="Bagian pengelolaan lokasi">
-                <a class="<?= $activeTab === 'lokasi' ? 'active' : '' ?>" href="?tab=lokasi&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'lokasi' ? 'aria-current="page"' : '' ?>><i data-lucide="file-text" aria-hidden="true"></i><span><small>Konten</small>Data</span></a>
-                <a class="<?= $activeTab === 'voice' ? 'active' : '' ?> <?= isset($database[$selectedId]) ? '' : 'disabled' ?>" href="?tab=voice&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'voice' ? 'aria-current="page"' : '' ?>><i data-lucide="audio-lines" aria-hidden="true"></i><span><small>Media</small>Voice Over</span></a>
-                <a class="<?= $activeTab === 'video' ? 'active' : '' ?> <?= isset($detectedTours[$selectedId]) ? '' : 'disabled' ?>" href="?tab=video&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'video' ? 'aria-current="page"' : '' ?>><i data-lucide="video" aria-hidden="true"></i><span><small>Media</small>Video</span></a>
-                <a class="<?= $activeTab === 'audit' ? 'active' : '' ?> <?= isset($detectedTours[$selectedId]) ? '' : 'disabled' ?>" href="?tab=audit&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'audit' ? 'aria-current="page"' : '' ?>><i data-lucide="clipboard-check" aria-hidden="true"></i><span><small>Peralatan</small>Audit</span></a>
-                <a class="<?= $activeTab === 'object' ? 'active' : '' ?> <?= isset($database[$selectedId]) ? '' : 'disabled' ?>" href="?tab=object&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'object' ? 'aria-current="page"' : '' ?>><i data-lucide="scan-search" aria-hidden="true"></i><span><small>Konten</small>Object Informasi</span></a>
+                <a<?= $tabTopic('data') ?> class="<?= $activeTab === 'lokasi' ? 'active' : '' ?>" href="?tab=lokasi&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'lokasi' ? 'aria-current="page"' : '' ?>><i data-lucide="file-text" aria-hidden="true"></i><span><small>Konten</small>Data</span><?= $tabFlag('data') ?></a>
+                <a<?= $tabTopic('voice') ?> class="<?= $activeTab === 'voice' ? 'active' : '' ?> <?= isset($database[$selectedId]) ? '' : 'disabled' ?>" href="?tab=voice&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'voice' ? 'aria-current="page"' : '' ?>><i data-lucide="audio-lines" aria-hidden="true"></i><span><small>Media</small>Voice Over</span><?= $tabFlag('voice') ?></a>
+                <a<?= $tabTopic('video') ?> class="<?= $activeTab === 'video' ? 'active' : '' ?> <?= isset($detectedTours[$selectedId]) ? '' : 'disabled' ?>" href="?tab=video&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'video' ? 'aria-current="page"' : '' ?>><i data-lucide="video" aria-hidden="true"></i><span><small>Media</small>Video</span><?= $tabFlag('video') ?></a>
+                <a<?= $tabTopic('audit') ?> class="<?= $activeTab === 'audit' ? 'active' : '' ?> <?= isset($detectedTours[$selectedId]) ? '' : 'disabled' ?>" href="?tab=audit&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'audit' ? 'aria-current="page"' : '' ?>><i data-lucide="clipboard-check" aria-hidden="true"></i><span><small>Peralatan</small>Audit</span><?= $tabFlag('audit') ?></a>
+                <a<?= $tabTopic('object') ?> class="<?= $activeTab === 'object' ? 'active' : '' ?> <?= isset($database[$selectedId]) ? '' : 'disabled' ?>" href="?tab=object&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'object' ? 'aria-current="page"' : '' ?>><i data-lucide="scan-search" aria-hidden="true"></i><span><small>Konten</small>Object Informasi</span><?= $tabFlag('object') ?></a>
                 <a class="location-tab-project <?= $activeTab === 'skin' ? 'active' : '' ?>" href="?tab=skin&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'skin' ? 'aria-current="page"' : '' ?>><i data-lucide="panel-top" aria-hidden="true"></i><span><small>Project</small>Template Skin</span></a>
             </nav>
             <?php if ($selectedId !== 'baru' && isset($detectedTours[$selectedId])): ?><a class="location-local-tour" href="<?= e(projectUrl(trim($detectedTours[$selectedId]['path'], '/') . '/')) ?>" target="_blank" rel="noopener"><i data-lucide="external-link" aria-hidden="true"></i><span>Kunjungi tur lokal</span></a><?php endif; ?>
@@ -145,7 +174,7 @@
                     <?php endforeach; ?>
                 </nav>
                 <div class="bulk-toolbar"><label><input type="checkbox" id="bulkSelectVisible"> Pilih yang tampil</label><strong id="bulkSelectedCount">0 lokasi dipilih</strong><div><button type="button" class="bulk-production-button" id="runBulkProduction">▶ Bulk Production</button><button type="button" id="openBulkEdit">✎ Bulk Edit</button><button type="button" data-bulk-action="translate">✦ Auto Translate</button><button type="button" data-bulk-action="voice">♫ Generate Voice</button><button type="button" data-bulk-action="health">♡ Health Check</button><button type="button" class="audit-all" id="openAuditAll">Audit Semua</button></div></div>
-                <div class="bulk-progress" id="bulkProgress" hidden></div>
+                <div class="bulk-progress" id="bulkProgress" data-cms-toast hidden></div>
                 <div class="bulk-production-results" id="bulkProductionResults" hidden aria-live="polite"></div>
                 <div class="dashboard-table-wrap"><table class="dashboard-table"><thead><tr><th class="select-column"></th><th>Lokasi</th><th>Kategori Smart Kit</th><th>Panorama</th><th>OI</th><th>Video 360</th><th>Kelengkapan data</th><th>Bundle</th><th>Implementasi</th><th>URL Local</th><th>URL Deploy</th><th class="dashboard-actions-column">Aksi</th></tr></thead><tbody id="tourStatusList">
                     <?php foreach ($dashboardTours as $tour): ?><tr class="tour-status-card" data-href="?tab=lokasi&lokasi=<?= e($tour['id']) ?>" title="Buka halaman <?= e($tour['name']) ?>" data-location-id="<?= e($tour['id']) ?>" data-dashboard-category-row="<?= e($tour['category']) ?>" data-dashboard-name="<?= e($tour['search_text']) ?>" data-dashboard-score="<?= $tour['score'] ?>">
@@ -250,18 +279,176 @@
                 <div class="translation-center-list" id="translationCenterList"><div class="translation-center-loading">Memindai seluruh data terjemahan…</div></div>
                 <div class="translation-pagination"><button type="button" id="translationPrevious">← Sebelumnya</button><span id="translationPage"></span><button type="button" id="translationNext">Berikutnya →</button></div>
             </section>
-            <div class="translation-save-bar"><span id="translationProgress">Centang field yang ingin disimpan.</span><button type="button" class="save" id="saveTranslations">Simpan Terpilih</button></div>
+            <div class="translation-save-bar"><span id="translationProgress" data-cms-toast>Centang field yang ingin disimpan.</span><button type="button" class="save" id="saveTranslations">Simpan Terpilih</button></div>
         </section>
     <?php elseif ($activeTab === 'lokasi'): ?>
-        <form method="post" class="editor">
+        <form method="post" class="editor location-editor">
             <input type="hidden" name="csrf" value="<?= e($_SESSION['cms_csrf']) ?>">
             <input type="hidden" name="original_id" value="<?= e($selectedId === 'baru' ? '' : $selectedId) ?>">
 
-            <section class="card section">
+            <section class="card section loc-data">
                 <div class="section-heading"><div><span class="step">01</span><h2>Data lokasi</h2></div><p>Disimpan ke global-database.js</p></div>
                 <div class="grid two">
-                    <label><span>ID lokasi</span><input required name="id_lokasi" pattern="[A-Za-z0-9_-]+" value="<?= e($selected['id_lokasi']) ?>" placeholder="contoh: monumennasional"></label>
-                    <label><span class="drone-field-heading"><span>Drone</span><span class="toggle-control"><input type="checkbox" name="has_drone" value="1" aria-label="Aktifkan fitur drone" <?= !empty($selected['has_drone']) ? 'checked' : '' ?>><i aria-hidden="true"></i></span></span><span class="drone-control"><input id="droneInput" name="drone" value="<?= e($selected['drone']) ?>" placeholder="Node ID / Custom Node ID"><button type="button" id="openPanoramaPicker" onclick="const modal=document.getElementById('panoramaModal');if(modal){modal.classList.add('open');modal.setAttribute('aria-hidden','false');document.body.classList.add('modal-open');}">Pilih Panorama &amp; View</button></span><input type="hidden" id="dronePan" name="drone_pan" value="<?= e($selected['drone_pan'] ?? 0) ?>"><input type="hidden" id="droneTilt" name="drone_tilt" value="<?= e($selected['drone_tilt'] ?? 0) ?>"><input type="hidden" id="droneFov" name="drone_fov" value="<?= e($selected['drone_fov'] ?? 70) ?>"><small id="droneViewSummary">Target view: pan <?= e($selected['drone_pan'] ?? 0) ?>° · tilt <?= e($selected['drone_tilt'] ?? 0) ?>° · FoV <?= e($selected['drone_fov'] ?? 70) ?>°</small></label>
+                    <div class="loc-sub loc-id">
+                        <div class="loc-sub-head"><div><strong>ID lokasi</strong><small>Nama unik lokasi (huruf, angka, - dan _). Dipakai sebagai nama folder dan alamat tur.</small></div></div>
+                        <label class="loc-id-field"><span class="sr-only">ID lokasi</span><input required name="id_lokasi" pattern="[A-Za-z0-9_-]+" value="<?= e($selected['id_lokasi']) ?>" placeholder="contoh: monumennasional"></label>
+                    </div>
+                    <?php
+                        $dronePanoramaMap = [];
+                        foreach ($selectedPanoramas as $dronePanorama) $dronePanoramaMap[(string) $dronePanorama['value']] = ['title' => (string) ($dronePanorama['title'] !== '' ? $dronePanorama['title'] : $dronePanorama['nodeId']), 'node' => (string) $dronePanorama['nodeId'], 'thumb' => (string) $dronePanorama['thumbnail']];
+                        $droneOn = !empty($selected['has_drone']);
+                        $droneHotspotTotal = isset($detectedTours[$selectedId]) ? tourDroneHotspotCount($projectRoot, $detectedTours[$selectedId]) : 0;
+                    ?>
+                    <div class="loc-sub drone-block<?= $droneOn ? '' : ' is-off' ?>" id="droneBlock" data-hotspots="<?= (int) $droneHotspotTotal ?>" data-panoramas="<?= e(json_encode($dronePanoramaMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>">
+                        <div class="drone-head loc-sub-head">
+                            <div><strong>Drone</strong><small>Panorama udara yang dibuka saat ikon drone ditekan di tur, beserta arah pandang awalnya. Saat Anda menyimpan, arah ini ikut diterapkan ke hotspot drone di tur.</small></div>
+                            <div class="drone-head-side"><span class="drone-status" id="droneStatus" role="status" hidden></span>
+                            <label class="drone-switch"><span class="drone-switch-text" id="droneSwitchText"><?= $droneOn ? 'Aktif' : 'Nonaktif' ?></span><span class="toggle-control"><input type="checkbox" name="has_drone" value="1" aria-label="Aktifkan fitur drone" <?= $droneOn ? 'checked' : '' ?>><i aria-hidden="true"></i></span></label></div>
+                        </div>
+                        <p class="drone-notice" id="droneNotice" hidden></p>
+                        <div class="drone-body">
+                            <button type="button" class="drone-thumb" id="droneThumb" aria-label="Lihat pratinjau panorama drone" title="Klik untuk pratinjau" disabled><img alt="" hidden><span class="drone-thumb-zoom" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></span><span class="drone-thumb-empty"><svg viewBox="0 0 24 24"><path d="M8 8l8 8M16 8l-8 8"/><circle cx="6" cy="6" r="2.6"/><circle cx="18" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><circle cx="18" cy="18" r="2.6"/><rect x="9.5" y="9.5" width="5" height="5" rx="1.4"/></svg></span></button>
+                            <div class="drone-info">
+                                <b id="droneTitle">Belum ada panorama drone</b>
+                                <div class="drone-node"><span>Node</span><input id="droneInput" name="drone" value="<?= e($selected['drone']) ?>" placeholder="Node ID / Custom Node ID" aria-label="Node ID atau Custom Node ID panorama drone"></div>
+                                <div class="drone-chips" id="droneChips"></div>
+                            </div>
+                            <div class="drone-actions">
+                                <button type="button" class="drone-btn" id="openPanoramaPicker" onclick="const modal=document.getElementById('panoramaModal');if(modal){modal.classList.add('open');modal.setAttribute('aria-hidden','false');document.body.classList.add('modal-open');}"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="m3 15 5-5 4 4 3-3 6 6"/></svg>Ganti panorama</button>
+                                <button type="button" class="drone-btn is-primary" id="droneSetView"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg>Atur arah pandang</button>
+                            </div>
+                        </div>
+                        <input type="hidden" id="dronePan" name="drone_pan" value="<?= e($selected['drone_pan'] ?? 0) ?>"><input type="hidden" id="droneTilt" name="drone_tilt" value="<?= e($selected['drone_tilt'] ?? 0) ?>"><input type="hidden" id="droneFov" name="drone_fov" value="<?= e($selected['drone_fov'] ?? 70) ?>">
+                        <small id="droneViewSummary" hidden>Target view: pan <?= e($selected['drone_pan'] ?? 0) ?>° · tilt <?= e($selected['drone_tilt'] ?? 0) ?>° · FoV <?= e($selected['drone_fov'] ?? 70) ?>°</small>
+                        <script>
+                        (() => {
+                            const block = document.getElementById('droneBlock'); if (!block) return;
+                            const map = JSON.parse(block.dataset.panoramas || '{}'), input = document.getElementById('droneInput'), toggle = block.querySelector('input[name="has_drone"]');
+                            const statusPill = document.getElementById('droneStatus'), notice = document.getElementById('droneNotice'), hotspotTotal = Number(block.dataset.hotspots || 0);
+                            const title = document.getElementById('droneTitle'), image = block.querySelector('.drone-thumb img'), chips = document.getElementById('droneChips'), switchText = document.getElementById('droneSwitchText'), setView = document.getElementById('droneSetView');
+                            const thumbButton = document.getElementById('droneThumb'), num = id => Number(document.getElementById(id)?.value || 0);
+                            // klik gambar = pratinjau besar (hanya melihat, tidak mengubah apa pun)
+                            const lightbox = (() => {
+                                let box = document.getElementById('cmsLightbox');
+                                if (!box) {
+                                    box = document.createElement('div'); box.id = 'cmsLightbox'; box.className = 'cms-lightbox'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-modal', 'true'); box.setAttribute('aria-hidden', 'true');
+                                    box.innerHTML = '<figure><button type="button" class="cms-lightbox-close" aria-label="Tutup pratinjau">\u00d7</button><img alt=""><figcaption></figcaption></figure>';
+                                    document.body.append(box);
+                                    const close = () => { box.classList.remove('open'); box.setAttribute('aria-hidden', 'true'); };
+                                    box.addEventListener('click', event => { if (event.target === box || event.target.closest('.cms-lightbox-close')) close(); });
+                                    document.addEventListener('keydown', event => { if (event.key === 'Escape') close(); });
+                                }
+                                return box;
+                            })();
+                            thumbButton.addEventListener('click', () => {
+                                const value = input.value.trim(), panorama = map[value]; if (!panorama || !panorama.thumb) return;
+                                lightbox.querySelector('img').src = panorama.thumb; lightbox.querySelector('img').alt = panorama.title;
+                                lightbox.querySelector('figcaption').innerHTML = '<b></b><span></span>';
+                                lightbox.querySelector('figcaption b').textContent = panorama.title;
+                                lightbox.querySelector('figcaption span').textContent = 'Node ' + panorama.node + ' \u00b7 Pan ' + num('dronePan').toFixed(1) + '\u00b0 \u00b7 Tilt ' + num('droneTilt').toFixed(1) + '\u00b0 \u00b7 FoV ' + num('droneFov').toFixed(1) + '\u00b0';
+                                lightbox.classList.add('open'); lightbox.setAttribute('aria-hidden', 'false');
+                            });
+                            const sync = () => {
+                                const value = input.value.trim(), panorama = map[value];
+                                block.classList.toggle('is-empty', value === ''); block.classList.toggle('is-off', !toggle.checked); switchText.textContent = toggle.checked ? 'Aktif' : 'Nonaktif';
+                                title.textContent = panorama ? panorama.title : (value === '' ? 'Belum ada panorama drone' : 'Panorama tidak ada di daftar tur');
+                                if (panorama && panorama.thumb) { image.src = panorama.thumb; image.hidden = false; } else { image.hidden = true; image.removeAttribute('src'); }
+                                chips.innerHTML = value === '' ? '' : '<span><i>Pan</i>' + num('dronePan').toFixed(1) + '\u00b0</span><span><i>Tilt</i>' + num('droneTilt').toFixed(1) + '\u00b0</span><span><i>FoV</i>' + num('droneFov').toFixed(1) + '\u00b0</span>';
+                                setView.disabled = value === '' || !map[value];
+                                thumbButton.disabled = !(panorama && panorama.thumb);
+                                // Status pengaturan drone (sama dengan penilaian di daftar Lokasi): beri tahu bila belum beres
+                                const viewIsDefault = Math.abs(num('dronePan')) < .005 && Math.abs(num('droneTilt')) < .005 && [70, 100].includes(Math.round(num('droneFov')));
+                                let state = 'ok', label = 'Siap dipakai', message = '';
+                                if (!toggle.checked && hotspotTotal === 0) { state = 'idle'; label = 'Belum diatur'; message = 'Lokasi ini belum memakai drone. Nyalakan toggle Aktif bila tur punya panorama udara, lalu pilih panorama dan arah pandangnya.'; }
+                                else if (value === '') { state = 'empty'; label = 'Belum diatur'; message = (hotspotTotal ? 'Tur ini punya ' + hotspotTotal + ' hotspot drone, tetapi panorama drone belum dipilih. ' : '') + 'Klik \u201cGanti panorama\u201d lalu \u201cAtur arah pandang\u201d.'; }
+                                else if (!panorama) { state = 'empty'; label = 'Panorama tidak ditemukan'; message = 'Node \u201c' + value + '\u201d tidak ada di tur ini. Pilih ulang lewat \u201cGanti panorama\u201d.'; }
+                                else if (!toggle.checked) { state = 'warn'; label = 'Belum diaktifkan'; message = 'Panorama drone sudah dipilih, tetapi tombol Aktif masih mati sehingga tur belum memakainya.'; }
+                                else if (viewIsDefault) { state = 'warn'; label = 'Arah pandang belum diatur'; message = 'Klik \u201cAtur arah pandang\u201d agar drone terbuka menghadap area yang tepat.'; }
+                                block.dataset.status = state;
+                                statusPill.hidden = false; statusPill.className = 'drone-status is-' + state; statusPill.textContent = label;
+                                notice.hidden = message === ''; notice.textContent = message; notice.className = 'drone-notice is-' + state;
+                            };
+                            input.addEventListener('input', sync); toggle.addEventListener('change', sync);
+                            // "Atur arah pandang": buka pemilih lalu langsung masuk ke mode atur arah untuk panorama yang sudah dipilih
+                            setView.addEventListener('click', () => {
+                                openPanoramaPicker();
+                                const option = Array.from(document.querySelectorAll('.panorama-option')).find(item => item.dataset.nodeValue === input.value.trim());
+                                if (option) option.click();
+                            });
+                            sync();
+                        })();
+                        </script>
+                    </div>
+                    <?php
+                        $tourStart = isset($detectedTours[$selectedId]) ? readTourStart($projectRoot, $detectedTours[$selectedId]) : null;
+                        $startPanoramaMap = [];
+                        foreach ($selectedPanoramas as $startPanorama) $startPanoramaMap[(string) $startPanorama['nodeId']] = ['title' => (string) ($startPanorama['title'] !== '' ? $startPanorama['title'] : $startPanorama['nodeId']), 'value' => (string) $startPanorama['value'], 'thumb' => (string) $startPanorama['thumbnail']];
+                    ?>
+                    <?php if ($tourStart !== null && $selectedPanoramas !== []): ?>
+                    <div class="loc-sub drone-block start-block" id="startBlock" data-explicit="<?= $tourStart['explicit'] ? '1' : '0' ?>" data-panoramas="<?= e(json_encode($startPanoramaMap, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>">
+                        <div class="drone-head loc-sub-head">
+                            <div><strong>Panorama awal</strong><small>Panorama yang pertama terbuka saat tur dimulai, beserta arah pandangnya. Terdeteksi dari pano.xml; pilihan baru ditulis ke pano.xml saat Anda menyimpan data lokasi.</small></div>
+                            <div class="drone-head-side"><span class="drone-status" id="startStatus" role="status" hidden></span></div>
+                        </div>
+                        <p class="drone-notice" id="startNotice" hidden></p>
+                        <div class="drone-body">
+                            <button type="button" class="drone-thumb" id="startThumb" aria-label="Lihat pratinjau panorama awal" title="Klik untuk pratinjau" disabled><img alt="" hidden><span class="drone-thumb-zoom" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></span><span class="drone-thumb-empty"><svg viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/></svg></span></button>
+                            <div class="drone-info">
+                                <b id="startTitle">Belum ada panorama awal</b>
+                                <div class="drone-node"><span>Node</span><input id="startInput" value="" readonly aria-label="Node panorama awal tur" tabindex="-1"></div>
+                                <div class="drone-chips" id="startChips"></div>
+                            </div>
+                            <div class="drone-actions">
+                                <button type="button" class="drone-btn" id="startPick"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="m3 15 5-5 4 4 3-3 6 6"/></svg>Ganti panorama</button>
+                                <button type="button" class="drone-btn is-primary" id="startSetView"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 3v4M12 17v4M3 12h4M17 12h4"/></svg>Atur arah pandang</button>
+                            </div>
+                        </div>
+                        <input type="hidden" id="startNode" name="start_node" value="<?= e($tourStart['node']) ?>"><input type="hidden" id="startPan" name="start_pan" value="<?= e(panoNumber((float) $tourStart['pan'])) ?>"><input type="hidden" id="startTilt" name="start_tilt" value="<?= e(panoNumber((float) $tourStart['tilt'])) ?>"><input type="hidden" id="startFov" name="start_fov" value="<?= e(panoNumber((float) $tourStart['fov'])) ?>"><input type="hidden" id="startDirty" name="start_dirty" value="0">
+                        <script>
+                        (() => {
+                            const block = document.getElementById('startBlock'); if (!block) return;
+                            const map = JSON.parse(block.dataset.panoramas || '{}'), explicit = block.dataset.explicit === '1';
+                            const field = id => document.getElementById(id), num = id => Number(field(id)?.value || 0);
+                            const node = field('startNode'), dirty = field('startDirty'), input = field('startInput'), title = field('startTitle'), chips = field('startChips');
+                            const image = block.querySelector('.drone-thumb img'), thumbButton = field('startThumb'), statusPill = field('startStatus'), notice = field('startNotice'), setView = field('startSetView');
+                            // klik gambar = pratinjau besar (memakai lightbox yang sama dengan blok Drone)
+                            thumbButton.addEventListener('click', () => {
+                                const panorama = map[node.value.trim()], box = document.getElementById('cmsLightbox'); if (!panorama || !panorama.thumb || !box) return;
+                                box.querySelector('img').src = panorama.thumb; box.querySelector('img').alt = panorama.title;
+                                box.querySelector('figcaption').innerHTML = '<b></b><span></span>';
+                                box.querySelector('figcaption b').textContent = panorama.title;
+                                box.querySelector('figcaption span').textContent = 'Node ' + node.value.trim() + ' \u00b7 Pan ' + num('startPan').toFixed(1) + '\u00b0 \u00b7 Tilt ' + num('startTilt').toFixed(1) + '\u00b0 \u00b7 FoV ' + num('startFov').toFixed(1) + '\u00b0';
+                                box.classList.add('open'); box.setAttribute('aria-hidden', 'false');
+                            });
+                            const render = () => {
+                                const id = node.value.trim(), panorama = map[id];
+                                block.classList.toggle('is-empty', id === '');
+                                title.textContent = panorama ? panorama.title : (id === '' ? 'Belum ada panorama awal' : 'Panorama tidak ada di daftar tur');
+                                input.value = panorama ? panorama.value : id;
+                                if (panorama && panorama.thumb) { image.src = panorama.thumb; image.hidden = false; } else { image.hidden = true; image.removeAttribute('src'); }
+                                chips.innerHTML = id === '' ? '' : '<span><i>Pan</i>' + num('startPan').toFixed(1) + '\u00b0</span><span><i>Tilt</i>' + num('startTilt').toFixed(1) + '\u00b0</span><span><i>FoV</i>' + num('startFov').toFixed(1) + '\u00b0</span>';
+                                setView.disabled = !panorama; thumbButton.disabled = !(panorama && panorama.thumb);
+                                let state = 'ok', label = 'Terdeteksi', message = '';
+                                if (!panorama) { state = 'empty'; label = id === '' ? 'Belum diatur' : 'Panorama tidak ditemukan'; message = id === '' ? 'Pilih panorama awal lewat \u201cGanti panorama\u201d.' : 'Node \u201c' + id + '\u201d tidak ada di tur ini. Pilih ulang lewat \u201cGanti panorama\u201d.'; }
+                                else if (dirty.value === '1') { state = 'warn'; label = 'Belum disimpan'; message = 'Panorama awal diubah ke \u201c' + panorama.title + '\u201d. Tekan \u201cSimpan data lokasi\u201d agar tur memakainya.'; }
+                                else if (!explicit) { state = 'warn'; label = 'Bawaan'; message = 'pano.xml belum menentukan panorama awal, jadi tur membuka panorama pertama. Atur di sini bila ingin panorama dan arah yang lain.'; }
+                                block.dataset.status = state;
+                                statusPill.hidden = false; statusPill.className = 'drone-status is-' + state; statusPill.textContent = label;
+                                notice.hidden = message === ''; notice.textContent = message; notice.className = 'drone-notice is-' + state;
+                            };
+                            node.addEventListener('input', render);
+                            field('startPick').addEventListener('click', () => openPanoramaPicker('start'));
+                            // "Atur arah pandang": buka pemilih lalu langsung masuk ke mode atur arah untuk panorama awal yang sedang dipilih
+                            setView.addEventListener('click', () => {
+                                openPanoramaPicker('start');
+                                const option = Array.from(document.querySelectorAll('.panorama-option')).find(item => item.dataset.nodeId === node.value.trim());
+                                if (option) option.click();
+                            });
+                            render();
+                        })();
+                        </script>
+                    </div>
+                    <?php endif; ?>
                 </div>
                 <?php if ($selectedPanoramas !== []): ?>
                     <div class="panorama-modal" id="panoramaModal" aria-hidden="true">
@@ -270,7 +457,7 @@
                         <div class="panorama-heading"><div><strong id="panoramaTitle">Pilih panorama drone</strong><small>Custom node ID diprioritaskan; jika kosong akan memakai node ID.</small></div><div class="panorama-actions"><span><?= count($selectedPanoramas) ?> panorama</span><button type="button" data-close-panorama aria-label="Tutup">×</button></div></div>
                         <div class="panorama-grid" id="panoramaGrid">
                             <?php foreach ($selectedPanoramas as $panorama): $isSelected = (string) $selected['drone'] === $panorama['value']; ?>
-                                <button type="button" class="panorama-option <?= $isSelected ? 'selected' : '' ?>" data-node-value="<?= e($panorama['value']) ?>">
+                                <button type="button" class="panorama-option <?= $isSelected ? 'selected' : '' ?>" data-node-value="<?= e($panorama['value']) ?>" data-node-id="<?= e($panorama['nodeId']) ?>">
                                     <span class="panorama-image">
                                         <?php if ($panorama['thumbnail'] !== ''): ?><img src="<?= e($panorama['thumbnail']) ?>" alt="<?= e($panorama['nodeId']) ?>" loading="lazy"><?php else: ?><em>Tanpa thumbnail</em><?php endif; ?>
                                     </span>
@@ -291,7 +478,7 @@
                 <?php endif; ?>
             </section>
 
-            <section class="card section">
+            <section class="card section loc-lang">
                 <div class="section-heading"><div><span class="step">02</span><h2>Bahasa</h2></div><button type="button" class="translate" id="autoTranslate">✦ Auto Translate dari Indonesia</button></div>
                 <div class="tabs" role="tablist">
                     <?php $first = true; foreach (cmsLanguages() as $code => $label): ?>
@@ -306,10 +493,34 @@
                 <?php $first = false; endforeach; ?>
             </section>
 
+            <section class="card section loc-preview">
+                <div class="welcome-preview" id="welcomePreview">
+                    <div class="welcome-preview-head"><strong>Pratinjau di tur</strong><small>Kartu sambutan persis seperti di virtual tour (mengikuti skin wilayah ini), tanpa bendera bahasa. Ikut berubah saat Anda mengetik atau berpindah bahasa.</small></div>
+                    <div class="welcome-preview-stage" id="welcomePreviewStage"><iframe id="welcomePreviewFrame" title="Pratinjau welcome text" src="api.php?action=welcome-preview&amp;id_lokasi=<?= e(rawurlencode($selectedId)) ?>"></iframe></div>
+                </div>
+                <script>
+                (() => {
+                    const frame = document.getElementById('welcomePreviewFrame'), stage = document.getElementById('welcomePreviewStage'); if (!frame) return;
+                    let last = '';
+                    // iframe dirender selebar layar desktop (1100px) lalu diperkecil agar tampilannya persis seperti di tur, tetapi muat di kolom ini
+                    const fit = () => stage.style.setProperty('--s', (stage.clientWidth / 1100).toFixed(4));
+                    new ResizeObserver(fit).observe(stage); fit();
+                    const activeCode = () => document.querySelector('.tabs .tab.active')?.dataset.tab || 'id';
+                    const push = (force = false) => {
+                        const code = activeCode(), text = document.querySelector('[name="welcomeText[' + code + ']"]')?.value || '', name = document.querySelector('[name="lokasi[' + code + ']"]')?.value || '';
+                        const key = code + '' + name + '' + text; if (!force && key === last) return; last = key;
+                        frame.contentWindow?.postMessage({type: 'welcome-preview', lang: code, text, name}, location.origin);
+                    };
+                    window.addEventListener('message', event => { if (event.origin === location.origin && event.data?.type === 'welcome-preview-ready') push(true); });
+                    frame.addEventListener('load', () => push(true));
+                    document.addEventListener('input', event => { if (event.target.matches('[name^="welcomeText["],[name^="lokasi["]')) push(); });
+                    document.querySelectorAll('.tabs .tab').forEach(button => button.addEventListener('click', () => setTimeout(push, 0)));
+                    setInterval(push, 1000);   // menangkap perubahan non-ketik (mis. Auto Translate)
+                })();
+                </script>
+            </section>
+
             <div class="actions">
-                <?php if ($selectedId !== 'baru' && isset($database[$selectedId])): ?>
-                    <button class="danger" name="action" value="delete" formnovalidate data-cute-confirm data-confirm-icon="🗺️" data-confirm-title="Hapus lokasi ini?" data-confirm-message="Data lokasi akan dihapus dari database CMS. Pastikan lokasinya memang sudah tidak digunakan." data-confirm-action="Ya, hapus lokasi">Hapus lokasi</button>
-                <?php endif; ?>
                 <a class="ah-btn ah-btn--ghost" href="?tab=aihub" title="Sinkronkan nama &amp; teks sambutan ke AI Guide Hub setelah disimpan">Hubungkan ke AI Guide Hub</a>
                 <button class="save" name="action" value="save_location">Simpan data lokasi</button>
             </div>
@@ -422,7 +633,7 @@
             <section class="card section">
                 <div class="section-heading"><div><span class="step">SK</span><div><h2>Template Skin</h2><p>Pilih template dari folder <code>skin-templates/</code> di CMS, lalu terapkan ke lokasi project ini.</p></div></div><span class="skin-template-badge"><?= $activeSkinTemplate ? 'Aktif: ' . e($activeSkinTemplate['name']) : 'Belum ada template dipilih' ?></span></div>
                 <?php if ($skinTemplates === []): ?>
-                    <div class="skin-notice"><strong>Belum ada template</strong><span>Buat folder di <code>cms-editor-pano2vr/skin-templates/&lt;nama&gt;/</code> berisi <code>skin.js</code> (dan <code>pano2vr_player.js</code>). Panduan: <code>skin-templates/README.md</code>.</span></div>
+                    <div class="skin-notice"><strong>Belum ada template</strong><span>Buat folder di <code>cms-virtual-tour/skin-templates/&lt;nama&gt;/</code> berisi <code>skin.js</code> (dan <code>pano2vr_player.js</code>). Panduan: <code>skin-templates/README.md</code>.</span></div>
                 <?php else: ?>
                     <div class="skin-sync-list">
                         <?php foreach ($skinTemplates as $template): ?>
@@ -467,35 +678,77 @@
                 </div>
                 <div class="skin-notice"><strong>Yang diganti</strong><span>Hanya <code>skin.js</code> tersimpan yang diterapkan ke lokasi tercentang. Skin lama dicadangkan ke <code>.skin-backups</code> dan dikembalikan otomatis bila penyalinan gagal. Player, panorama, peta, tiles, video, aset, dan data lokasi tidak disentuh.</span></div>
             </section>
-            <div class="actions"><button class="save" name="action" value="sync_skin" data-cute-confirm data-confirm-icon="✨" data-confirm-title="Terapkan template <?= e($activeSkinTemplate['name']) ?>?" data-confirm-message="skin.js lokasi tercentang akan diganti dengan template <?= e($activeSkinTemplate['name']) ?>. File lama dicadangkan otomatis." data-confirm-action="Terapkan">Terapkan Template ke Lokasi Terpilih</button></div>
+            <div class="actions"><button class="save" name="action" value="sync_skin" data-cute-confirm data-confirm-icon="✨" data-confirm-title="Terapkan template <?= e($activeSkinTemplate['name']) ?>?" data-confirm-message="skin.js lokasi tercentang akan diganti dengan template <?= e($activeSkinTemplate['name']) ?>. File lama dicadangkan otomatis." data-confirm-action="Terapkan">Terapkan Template ke Lokasi Terpilih</button><button type="button" class="save skin-combo" id="updateSkinKit" title="Terapkan template skin DAN Smart Kit (bangun paket + terapkan + salin ke smart-kit proyek) ke lokasi tercentang, sekaligus"><i data-lucide="refresh-cw" aria-hidden="true"></i>Update Skin + Smart Kit (satu klik)</button></div>
+            <div class="skin-notice skin-combo-result" id="updateSkinKitResult" hidden role="status"></div>
+            <script>
+            (() => {
+                const button = document.getElementById('updateSkinKit'), box = document.getElementById('updateSkinKitResult'); if (!button || !box) return;
+                const csrf = <?= json_encode($_SESSION['cms_csrf']) ?>, label = button.innerHTML;
+                const text = (tag, content, cls) => { const node = document.createElement(tag); if (cls) node.className = cls; node.textContent = content; return node; };
+                button.addEventListener('click', async () => {
+                    const ids = Array.from(document.querySelectorAll('input[name="skin_targets[]"]:checked')).map(input => input.value);
+                    if (!ids.length) { box.hidden = false; box.replaceChildren(text('strong', 'Centang minimal satu lokasi.')); return; }
+                    if (!confirm('Update skin + Smart Kit untuk ' + ids.length + ' lokasi?\nskin.js diganti dengan template project, paket Smart Kit dibangun dan diterapkan, lalu hasilnya disalin ke smart-kit di folder proyek. index.html dicadangkan otomatis.')) return;
+                    button.disabled = true; button.textContent = 'Memproses ' + ids.length + ' lokasi…'; box.hidden = false; box.replaceChildren(text('strong', 'Sedang memperbarui… jangan tutup halaman ini.'));
+                    try {
+                        const response = await fetch('api.php?action=smart-hub', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({csrf, op: 'update_skin_kit', locations: ids})});
+                        let data; try { data = await response.json(); } catch (error) { throw new Error('Respons server tidak valid (' + response.status + ').'); }
+                        if (!data.success && !data.results) throw new Error(data.message || 'Gagal.');
+                        const list = document.createElement('ul'); list.className = 'sh-results';
+                        (data.results || []).forEach(result => {
+                            const item = document.createElement('li'); item.className = result.ok ? 'is-ok' : 'is-bad'; item.append(text('b', result.id), text('pre', result.message)); list.append(item);
+                            if (result.steps && result.steps.skin === 'ok') {   // status baris di daftar lokasi ikut berubah
+                                const row = document.querySelector('input[name="skin_targets[]"][value="' + CSS.escape(result.id) + '"]')?.closest('.skin-sync-item');
+                                if (row) { row.classList.remove('outdated'); row.classList.add('synced'); const badge = row.querySelector('em'); if (badge) badge.textContent = 'Sesuai'; }
+                            }
+                        });
+                        box.replaceChildren(text('strong', data.message), list);
+                    } catch (error) { box.replaceChildren(text('strong', 'Gagal: ' + error.message)); }
+                    finally { button.disabled = false; button.innerHTML = label; window.lucide?.createIcons?.(); }
+                });
+            })();
+            </script>
             <?php endif; ?>
         </form>
         <form method="post" id="projectTemplateForm"><input type="hidden" name="csrf" value="<?= e($_SESSION['cms_csrf']) ?>"><input type="hidden" name="project_action" value="set_template"></form>
     <?php elseif ($activeTab === 'object'): ?>
-        <section class="card section object-editor">
-            <div class="section-heading"><div><span class="step">OI</span><h2>Object Informasi</h2></div><div class="object-head-actions"><button type="button" class="translate" id="importWebElements">＋ Ambil WebElement</button><button type="button" class="translate" id="addObject">＋ Manual</button><button type="button" class="save object-save" id="saveObjects">Simpan</button></div></div>
-            <?php if (isset($detectedTours[$selectedId]) && $selectedPanoramas !== []): ?>
+        <?php $oiStudio = isset($detectedTours[$selectedId]) && $selectedPanoramas !== []; ?>
+        <section class="card section object-editor<?= $oiStudio ? ' oi-studio' : '' ?>">
+            <div class="section-heading"><div><span class="step">OI</span><h2>Object Informasi</h2><?php if ($oiStudio): ?><div class="oi-stats" id="objectCount" aria-live="polite"></div><?php endif; ?></div><div class="object-head-actions"><button type="button" class="save object-save" id="saveObjects" title="Simpan semua perubahan (Ctrl+S). Perubahan juga disimpan otomatis saat berpindah object."><span class="oi-save-label">Simpan</span><kbd>Ctrl+S</kbd></button></div></div>
+            <?php if ($oiStudio): ?>
             <div class="object-panorama-editor">
                 <div class="object-panorama-toolbar">
-                    <div><strong>Editor Panorama</strong><small>Geser panorama, lalu tarik pin WebElement untuk mengubah posisinya.</small></div>
+                    <div><strong>Editor Panorama</strong><small>Pilih object di kiri, geser panorama, lalu tarik pin WebElement untuk mengubah posisinya.</small>
+                        <div class="oi-legend" aria-label="Keterangan ikon pin"><span class="oi-legend-item"><i class="pin-info"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="7.8" r=".6" fill="currentColor"/></svg></i>Objek Info</span><span class="oi-legend-item"><i class="pin-land"><svg viewBox="0 0 24 24"><path d="M12 3l7 17-7-4-7 4z" fill="currentColor" fill-opacity=".28"/></svg></i>Hotspot</span><span class="oi-legend-item"><i class="pin-drone"><svg viewBox="0 0 24 24"><path d="M8 8l8 8M16 8l-8 8"/><circle cx="6" cy="6" r="2.6"/><circle cx="18" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><circle cx="18" cy="18" r="2.6"/><rect x="9.5" y="9.5" width="5" height="5" rx="1.4"/></svg></i>Drone</span></div></div>
                     <label><span>Panorama</span><select id="objectPanoramaNode"><?php foreach ($selectedPanoramas as $panorama): ?><option value="<?= e($panorama['nodeId']) ?>" data-public-node="<?= e($panorama['value']) ?>"><?= e($panorama['title'] ?: $panorama['value']) ?></option><?php endforeach; ?></select></label>
-                    <button type="button" class="translate" id="addWebElement">＋ WebElement di Tengah</button>
-                    <button type="button" class="danger" id="removeWebElement" disabled>Hapus Pin</button>
+                    <div class="oi-history" role="group" aria-label="Riwayat perubahan"><button type="button" class="translate" id="oiUndo" disabled title="Tidak ada yang bisa diurungkan"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg><span>Urungkan</span></button><button type="button" class="translate" id="oiRedo" disabled title="Tidak ada yang bisa diulang"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg><span>Ulangi</span></button></div>
+                    <button type="button" class="translate" id="addWebElement" title="Tambah pin Objek Info di tengah pandangan panorama"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg><span>Objek Info</span></button>
+                    <button type="button" class="oi-preview-btn" id="previewInTour" title="Buka tur sungguhan langsung di panorama ini, lengkap dengan skin dan Object Info, menghadap objek yang dipilih"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span>Pratinjau di tur</span></button>
                 </div>
-                <div class="object-panorama-stage" id="objectPanoramaStage"><div id="objectPanoramaHost"></div><div class="object-panorama-loading" id="objectPanoramaLoading">Memuat panorama editor…</div></div>
-                <div class="object-panorama-status"><span id="objectPanoramaStatus">Tarik pin untuk memindahkan WebElement.</span><span>Perubahan pano.xml baru diterapkan saat tombol <b>Simpan</b> ditekan.</span></div>
+                <div class="oi-stage-wrap<?= empty($oiDatabase[$selectedId] ?? []) ? ' oi-empty' : '' ?>" id="oiStageWrap">
+                    <div class="object-panorama-stage" id="objectPanoramaStage"><div id="objectPanoramaHost"></div><div class="object-panorama-loading" id="objectPanoramaLoading">Memuat panorama editor…</div></div>
+                    <div class="oi-overlay">
+                        <aside class="object-list-panel"><input id="objectSearch" type="search" placeholder="Cari object…"><div id="objectList"></div></aside>
+                        <button type="button" class="oi-collapse oi-collapse-left" data-oi-collapse="left" aria-label="Sembunyikan daftar object" title="Sembunyikan / tampilkan daftar">‹</button>
+                        <button type="button" class="oi-collapse oi-collapse-right" data-oi-collapse="right" aria-label="Sembunyikan form object" title="Sembunyikan / tampilkan form">›</button>
+                        <div id="objectForm" class="object-form"><div class="object-empty">Pilih atau tambahkan object informasi.</div></div>
+                        <div class="voice-progress oi-toast" id="objectProgress" data-cms-toast="only" role="status" aria-live="polite">Data tersimpan ke assets/oi-database.js.</div>
+                    </div>
+                </div>
+                <div class="object-panorama-status"><span id="objectPanoramaStatus">Tarik pin untuk memindahkan WebElement.</span><span><?= count($selectedWebElements) ?> WebElement terdeteksi · Perubahan pano.xml baru diterapkan saat tombol <b>Simpan</b> ditekan.</span></div>
             </div>
-            <?php endif; ?>
+            <?php else: ?>
             <div class="skin-notice"><strong>WebElement pano.xml</strong><span><?= count($selectedWebElements) ?> elemen terdeteksi. OI hanya dinilai jika lokasi memiliki WebElement. Data memakai <code>assets/oi-database.js</code> dan <code>assets/oi-config.js</code>.</span></div>
             <div class="object-layout"><aside class="object-list-panel"><input id="objectSearch" type="search" placeholder="Cari object…"><div id="objectCount"></div><div id="objectList"></div></aside><div id="objectForm" class="object-form"><div class="object-empty">Pilih atau tambahkan object informasi.</div></div></div>
-            <div class="voice-progress" id="objectProgress">Data tersimpan ke assets/oi-database.js.</div>
+            <div class="voice-progress" id="objectProgress" data-cms-toast="only">Data tersimpan ke assets/oi-database.js.</div>
+            <?php endif; ?>
         </section>
     <?php elseif ($activeTab === 'voice'): ?>
         <section class="card section voice-editor">
             <div class="section-heading"><div><span class="step">VO</span><h2>Generate Voice Over</h2></div><p>Hasil otomatis disimpan ke assets/audio/{id_lokasi}/</p></div>
             <select id="voiceLocation" hidden><option value="<?= e($selectedId) ?>" selected><?= e($selectedId) ?></option></select>
             <div id="voiceLanguages" class="voice-languages"></div>
-            <div class="voice-progress" id="voiceProgress">Siap membuat audio.</div>
+            <div class="voice-progress" id="voiceProgress" data-cms-toast>Siap membuat audio.</div>
             <div class="actions"><button type="button" class="save" id="generateVoice">Generate Semua Audio</button></div>
         </section>
     <?php elseif ($activeTab === 'video'): ?>
@@ -505,6 +758,7 @@
             <div class="video-grid">
                 <article class="video-card">
                     <div class="video-card-head"><div><strong>Mobile</strong><small id="mobileFileName">video/mobile.webm / .mp4</small></div><span id="mobileStatus" class="media-status">Memeriksa…</span></div>
+                    <p class="video-card-note" id="mobileNote" hidden><b>i</b>Versi mobile belum ada. Tur memakai video desktop yang dipotong otomatis agar memenuhi layar ponsel; unggah video mobile bila ingin hasil yang pas.</p>
                     <video id="mobilePreview" controls playsinline></video>
                     <label class="upload-box"><span>Pilih video mobile (WebM/MP4)</span><input type="file" id="mobileFile" accept="video/webm,video/mp4,.webm,.mp4"></label>
                 </article>
@@ -514,7 +768,7 @@
                     <label class="upload-box"><span>Pilih video desktop (WebM/MP4)</span><input type="file" id="desktopFile" accept="video/webm,video/mp4,.webm,.mp4"></label>
                 </article>
             </div>
-            <div class="voice-progress" id="videoProgress">Pilih satu atau dua video (WebM atau MP4) untuk diunggah.</div>
+            <div class="voice-progress" id="videoProgress" data-cms-toast>Pilih satu atau dua video (WebM atau MP4) untuk diunggah.</div>
             <div class="actions"><button type="button" class="save" id="uploadVideo">Upload & Timpa Video</button></div>
         </section>
     <?php elseif ($activeTab === 'inventaris'): $jenis = ($_GET['jenis'] ?? '') === 'video360' ? 'video360' : 'oi'; ?>
@@ -545,7 +799,7 @@
                 <input type="hidden" name="csrf" value="<?= e($_SESSION['cms_csrf']) ?>">
                 <label><span>Nama Folder / ID Video</span><input name="video_id" id="video360Id" required pattern="[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?" placeholder="contoh: kota-tua"></label>
                 <label class="upload-box"><span>Upload Video Sumber</span><small>MP4, WebM, MOV, atau MKV. File masuk ke folder ID di atas.</small><input type="file" name="files[]" id="video360Files" accept="video/*,.mp4,.webm,.mov,.mkv" required></label>
-                <div class="voice-progress" id="video360Progress">Tambahkan folder baru dengan nama ID dan satu video sumber. Gunakan Encoder GUI untuk membuat hasil HLS.</div>
+                <div class="voice-progress" id="video360Progress" data-cms-toast>Tambahkan folder baru dengan nama ID dan satu video sumber. Gunakan Encoder GUI untuk membuat hasil HLS.</div>
                 <div class="actions"><button type="submit" class="save">＋ Tambah Folder Video</button></div>
             </form>
             <div class="video360-list">
@@ -565,14 +819,118 @@
             <div class="optimizer-controls"><label><span>Lebar maksimum</span><select id="optimizerMaxWidth"><option value="1280">1280 px</option><option value="1920" selected>1920 px</option><option value="2560">2560 px</option><option value="4096">4096 px</option></select></label><label><span>Kualitas WebP</span><select id="optimizerQuality"><option value="70">70 — kecil</option><option value="82" selected>82 — rekomendasi</option><option value="90">90 — tinggi</option></select></label><div><strong id="optimizerSummary">Memindai gambar…</strong><small>Gambar rekomendasi akan dipilih otomatis.</small></div></div>
             <div class="optimizer-list-head"><label><input type="checkbox" id="optimizerSelectAll"> Pilih semua</label><span id="optimizerSelected">0 gambar dipilih</span></div>
             <div class="optimizer-list" id="optimizerList"><div class="optimizer-loading">Memindai aset gambar…</div></div>
-            <div class="voice-progress" id="optimizerProgress">Siap memindai dan mengoptimasi gambar.</div>
+            <div class="voice-progress" id="optimizerProgress" data-cms-toast>Siap memindai dan mengoptimasi gambar.</div>
             <div class="actions"><button type="button" class="save" id="runOptimizer">Optimasi Gambar Terpilih</button></div>
         </section>
     <?php else: ?>
         <section class="card section audit-editor">
             <div class="section-heading"><div><span class="step">AU</span><h2>Audit pano.xml</h2></div><p>Memeriksa link kosong dan teks yang belum diterjemahkan. <a href="?tab=inspector&amp;lokasi=<?= e($selectedId) ?>">Inspeksi lengkap di tab Inspector</a></p></div>
-            <?php if ($auditResult !== null): $stats = $auditResult['stats']; ?>
-                <div class="audit-summary"><div><strong><?= e($stats['panoramas']) ?></strong><span>Panorama</span></div><div><strong><?= e($stats['hotspots']) ?></strong><span>Hotspot</span></div><div class="audit-error"><strong><?= e($stats['errors']) ?></strong><span>Link belum diisi</span></div><div class="audit-warning"><strong><?= e($stats['warnings']) ?></strong><span>Terjemahan kosong</span></div></div>
+            <?php
+                // Tur tanpa blok terjemahan Pano2VR: tampilkan kolom bahasa dari registry CMS (en/zh/ar). Blok dibuat otomatis saat disimpan.
+                if ($auditResult !== null && ($auditResult['translationUsed'] ?? true) === false) {
+                    $virtualLanguages = [];
+                    foreach ($languageRegistry as $registryCode => $registryLanguage) if ($registryCode !== 'id') $virtualLanguages[] = (string) ($registryLanguage['pano'] ?? $registryCode);
+                    if ($virtualLanguages !== []) {
+                        $auditResult['languages'] = $virtualLanguages;
+                        $auditResult['displayLanguageIndexes'] = array_keys($virtualLanguages);
+                        foreach ($auditResult['translations'] as &$virtualRow) { $virtualRow['values'] = array_fill(0, count($virtualLanguages), ''); $virtualRow['missingCount'] = count($virtualLanguages); }
+                        unset($virtualRow);
+                        $auditResult['stats']['warnings'] = count($auditResult['translations']) * count($virtualLanguages);
+                    }
+                }
+                if ($auditResult !== null): $stats = $auditResult['stats'];
+                    // Memori perubahan: bila pano.xml (mis. hasil export ulang) kehilangan penamaan/terjemahan yang pernah disimpan lewat CMS, tawarkan menerapkannya lagi.
+                    $memoryPlan = null;
+                    try {
+                        $memoryTourDir = $projectRoot . '/' . $detectedTours[$auditId]['path'];
+                        $memoryDom = new DOMDocument('1.0', 'UTF-8');
+                        if (@$memoryDom->load($memoryTourDir . '/pano.xml')) {
+                            panoMemorySeed($memoryTourDir, $memoryDom);
+                            $memoryData = panoMemoryLoad($memoryTourDir);
+                            $memoryPlan = $memoryData !== null ? panoMemoryPlan($memoryDom, $memoryData) : null;
+                            if ($memoryPlan !== null && ($memoryPlan['count'] === 0 || $memoryPlan['hash'] === ($memoryData['ignored'] ?? ''))) $memoryPlan = null;
+                        }
+                    } catch (Throwable $memoryError) { $memoryPlan = null; }
+                ?>
+                <?php if ($memoryPlan !== null):
+                    $memoryRows = [];
+                    foreach ($memoryPlan['translations'] as $item) $memoryRows[] = ['Terjemahan', $item['source'] . ' · ' . $item['code'], '', $item['value']];
+                    foreach ($memoryPlan['panoramas'] as $item) $memoryRows[] = ['Panorama', $item['node'] . ' · ' . $item['field'], $item['from'], $item['value']];
+                    foreach ($memoryPlan['hotspots'] as $item) $memoryRows[] = ['Hotspot', $item['node'] . '/' . $item['hotspot'] . ' · ' . $item['field'], $item['from'], $item['value']];
+                    foreach ((array) ($memoryPlan['start'] ?? []) as $item) $memoryRows[] = ['Panorama awal', 'Start tur', $item['from'], $item['value']];
+                ?>
+                <div class="memory-banner" id="panoMemoryBanner" role="status">
+                    <div class="memory-banner-head">
+                        <span class="memory-icon" aria-hidden="true">&#8635;</span>
+                        <div><strong><?= e((string) $memoryPlan['count']) ?> perubahan tersimpan belum ada di pano.xml</strong><small>Biasanya terjadi setelah tur di-export ulang dari Pano2VR. Terjemahan hanya mengisi yang <b>kosong</b>, tidak menimpa terjemahan yang sudah ada.</small></div>
+                        <div class="memory-actions"><button type="button" class="save" id="panoMemoryApply">Terapkan ulang (<?= e((string) $memoryPlan['count']) ?>)</button><button type="button" class="pe-link" id="panoMemoryIgnore">Abaikan</button></div>
+                    </div>
+                    <details><summary>Lihat rincian</summary><ul>
+                        <?php foreach (array_slice($memoryRows, 0, 60) as [$kind, $label, $from, $to]): ?><li><b><?= e($kind) ?></b><span><?= e($label) ?></span><em><?= $from !== '' ? e($from) . ' → ' : '' ?><?= e($to) ?></em></li><?php endforeach; ?>
+                        <?php if (count($memoryRows) > 60): ?><li><span>…dan <?= count($memoryRows) - 60 ?> lainnya</span></li><?php endif; ?>
+                    </ul></details>
+                </div>
+                <script>
+                (() => {
+                    const call = async mode => {
+                        if (window.cmsPanoEditorDirty) { cmsToast('Simpan dulu perubahan yang sedang diedit di editor pano.xml, lalu coba lagi.'); return; }
+                        const buttons = document.querySelectorAll('#panoMemoryBanner button'); buttons.forEach(button => { button.disabled = true; });
+                        try {
+                            const response = await fetch('api.php?action=pano-memory', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({csrf:<?= json_encode($_SESSION['cms_csrf']) ?>, id_lokasi:<?= json_encode($auditId) ?>, mode})});
+                            const result = await response.json();
+                            if (!response.ok || !result.success) throw new Error(result.message || 'Gagal.');
+                            const banner = document.getElementById('panoMemoryBanner'); banner.classList.add('is-done'); banner.querySelector('.memory-banner-head strong').textContent = '\u2713 ' + result.message;
+                            setTimeout(() => location.reload(), mode === 'apply' ? 900 : 300);
+                        } catch (error) { cmsToast('Gagal: ' + error.message); buttons.forEach(button => { button.disabled = false; }); }
+                    };
+                    document.getElementById('panoMemoryApply')?.addEventListener('click', () => call('apply'));
+                    document.getElementById('panoMemoryIgnore')?.addEventListener('click', () => call('ignore'));
+                })();
+                </script>
+                <?php endif; ?>
+                <div class="audit-summary"><div><strong><?= e($stats['panoramas']) ?></strong><span>Panorama</span></div><div><strong><?= e($stats['hotspots']) ?></strong><span>Hotspot</span></div><?php $auditErrors = array_values(array_filter($auditResult['issues'], static fn(array $issue): bool => ($issue['level'] ?? '') === 'error')); $linkIssueCount = count(array_filter($auditErrors, static fn(array $issue): bool => ($issue['type'] ?? '') === 'Link kosong')); ?><div class="audit-error"><strong><?= e($linkIssueCount) ?></strong><span>Link belum diisi</span></div><div class="audit-warning"><strong><?= e($stats['warnings']) ?></strong><span>Terjemahan kosong</span></div></div>
+                <?php if ($auditErrors !== []):
+                    $panoramaTitleByNode = []; foreach ($selectedPanoramas as $panoramaItem) $panoramaTitleByNode[strtolower((string) $panoramaItem['nodeId'])] = (string) ($panoramaItem['title'] !== '' ? $panoramaItem['title'] : $panoramaItem['nodeId']);
+                ?>
+                <div class="audit-issues" role="alert">
+                    <div class="audit-issues-head"><strong><?= count($auditErrors) ?> masalah perlu diperbaiki</strong><span>Klik “Lihat” untuk langsung ke lokasinya.</span></div>
+                    <ul>
+                    <?php foreach ($auditErrors as $issue):
+                        $isLink = ($issue['type'] ?? '') === 'Link kosong';
+                        [$issueNode, $issueHotspot] = array_pad(array_map('trim', explode('/', (string) ($issue['location'] ?? ''), 2)), 2, '');
+                        $issueTitle = $panoramaTitleByNode[strtolower($issueNode)] ?? '';
+                    ?>
+                        <li>
+                            <span class="audit-issue-type <?= $isLink ? 'is-link' : 'is-other' ?>"><?= e((string) ($issue['type'] ?? 'Masalah')) ?></span>
+                            <span class="audit-issue-text">
+                                <?php if ($isLink): ?><strong><?= e($issueTitle !== '' ? $issueTitle : $issueNode) ?></strong><small><?= e($issueNode) ?> · hotspot <?= e($issueHotspot) ?></small><?php else: ?><strong><?= e((string) ($issue['location'] ?? '')) ?></strong><?php endif; ?>
+                                <em><?= e((string) ($issue['message'] ?? '')) ?></em>
+                            </span>
+                            <?php if ($isLink): ?><button type="button" class="pe-link" data-audit-jump="hotspot" data-node="<?= e($issueNode) ?>" data-hotspot="<?= e($issueHotspot) ?>">Lihat</button>
+                            <?php elseif (($issue['type'] ?? '') === 'Terjemahan'): ?><button type="button" class="pe-link" data-audit-jump="translation">Lihat</button><?php endif; ?>
+                        </li>
+                    <?php endforeach; ?>
+                    </ul>
+                </div>
+                <script>
+                document.addEventListener('click', event => {
+                    const button = event.target.closest('[data-audit-jump]'); if (!button) return;
+                    const flash = element => { element.classList.add('audit-flash'); setTimeout(() => element.classList.remove('audit-flash'), 2400); };
+                    if (button.dataset.auditJump === 'translation') {
+                        document.querySelector('[data-pano-editor-tab="translation"]')?.click();
+                        const panel = document.querySelector('[data-pano-editor-panel="translation"]'); panel?.scrollIntoView({behavior:'smooth', block:'start'}); if (panel) flash(panel);
+                        return;
+                    }
+                    document.querySelector('[data-pano-editor-tab="hotspot"]')?.click();
+                    const group = Array.from(document.querySelectorAll('[data-hotspot-group]')).find(item => item.dataset.hotspotGroup === button.dataset.node);
+                    if (!group) return;
+                    group.open = true;
+                    const card = Array.from(group.querySelectorAll('.pano-edit-card')).find(item => item.dataset.hotspotId === button.dataset.hotspot);
+                    const target = card || group;
+                    setTimeout(() => { target.scrollIntoView({behavior:'smooth', block:'center'}); flash(target); }, 60);
+                });
+                </script>
+                <?php endif; ?>
                 <div class="pano-editor-actions"><strong>Editor pano.xml</strong><span>Field yang belum lengkap langsung ditandai. Backup otomatis dibuat setiap kali menyimpan · <kbd>Ctrl</kbd>+<kbd>S</kbd> untuk simpan.</span><button type="button" class="save" id="savePanoEditor" disabled>Simpan pano.xml</button></div>
                 <nav class="pano-editor-tabs"><button type="button" class="active" data-pano-editor-tab="panorama">Panorama <span><?= count($selectedPanoramas) ?></span></button><button type="button" data-pano-editor-tab="hotspot">Hotspot <span><?= count($auditResult['hotspots']) ?></span></button><button type="button" data-pano-editor-tab="translation">Terjemahan <span><?= count($auditResult['translations']) ?></span></button></nav>
                 <?php $needsTarget = static fn(array $hotspot): bool => trim((string) ($hotspot['url'] ?? '')) === '' && !str_contains(strtolower((string) ($hotspot['skinId'] ?? '')), '360_video_experience'); ?>
@@ -640,7 +998,7 @@
                     <div class="pe-empty" data-hotspot-empty hidden>Tidak ada hotspot yang cocok.</div>
                     </div>
                 </section>
-                <section class="pano-editor-panel" data-pano-editor-panel="translation"><div class="pano-filter"><button type="button" class="active" data-translation-filter="all">Semua Terjemahan</button><button type="button" data-translation-filter="missing">Belum Diisi (<?= e($stats['warnings']) ?>)</button></div><div class="translation-editor" id="panoTranslationEditor">
+                <section class="pano-editor-panel" data-pano-editor-panel="translation"><div class="pano-filter"><button type="button" class="active" data-translation-filter="all">Semua Terjemahan</button><button type="button" data-translation-filter="missing">Belum Diisi (<?= e($stats['warnings']) ?>)</button><button type="button" class="translate-all" id="translateAllPano" data-state="idle" title="Terjemahkan semua teks yang masih kosong ke bahasa lain"><span class="ta-fill" aria-hidden="true"></span><span class="ta-spinner" aria-hidden="true"></span><span class="ta-star" aria-hidden="true">✦</span><span class="ta-label">Terjemahkan Semua</span></button></div><div class="translation-editor" id="panoTranslationEditor">
                     <?php foreach ($auditResult['translations'] as $translation): $translationMissing = (int) ($translation['missingCount'] ?? 0); ?><article class="translation-row <?= $translationMissing > 0 ? 'needs-translation' : '' ?>" data-source="<?= e($translation['source']) ?>"><div class="translation-source"><strong><?= e($translation['source']) ?></strong><button type="button" class="translation-auto" data-translate-pano title="Auto Translate Kosong" aria-label="Auto Translate Kosong">✦</button></div><?php if ($translationMissing > 0): ?><span class="translation-warning">! <?= $translationMissing ?> bahasa kosong</span><?php endif; ?><div class="translation-fields"><?php foreach ($auditResult['languages'] as $index => $language): $translationValue = (string) ($translation['values'][$index] ?? ''); $isDisplayedLanguage = in_array($index, $auditResult['displayLanguageIndexes'], true); $languageLabel = match (strtolower($language)) { 'en', 'en-us' => 'English', 'zh', 'zh-cn' => 'Mandarin', 'ar', 'ar-sa' => 'Arab', default => $language }; ?><?php if (!$isDisplayedLanguage): ?><textarea hidden data-translation-index="<?= $index ?>"><?= e($translationValue) ?></textarea><?php else: ?><label class="translation-field <?= trim($translationValue) === '' ? 'empty-translation' : '' ?>"><span><?= e($languageLabel) ?></span><textarea rows="1" data-translation-index="<?= $index ?>"><?= e($translationValue) ?></textarea></label><?php endif; ?><?php endforeach; ?></div></article><?php endforeach; ?>
                 </div></section>
                 <section class="pano-editor-panel active" data-pano-editor-panel="panorama">
@@ -1172,7 +1530,11 @@ if (panoSaveButton) {
 
     // --- Status bar & penanda perubahan
     let saving = false, dirtyCount = 0, hideTimer = 0, dirtyFrame = 0;
-    const flash = (message, tone = '') => { clearTimeout(hideTimer); panoProgress.textContent = message; saveBar.dataset.tone = tone; saveBar.classList.add('visible'); };
+    const flash = (message, tone = '') => {
+        clearTimeout(hideTimer); panoProgress.textContent = message; saveBar.dataset.tone = tone; saveBar.classList.add('visible');
+        if (tone === 'success' || tone === 'error') cmsToast(String(message).replace(/^\s*[\u2713\u2714]\s*/, ''), tone);
+        else if (tone === '') cmsToast(message, 'info');
+    };
     const readHotspot = card => ({nodeId:card.dataset.nodeId,id:card.dataset.hotspotId,deleted:card.querySelector('[data-pano-field="deleted"]')?.value === '1',title:card.querySelector('[data-pano-field="title"]').value,url:card.querySelector('[data-pano-field="url"]').value,target:card.querySelector('[data-pano-field="target"]').value});
     const readPanorama = card => ({nodeId:card.dataset.panoramaNodeId,title:card.querySelector('[data-panorama-field="title"]').value,customNodeId:card.querySelector('[data-panorama-field="customNodeId"]').value,latitude:card.querySelector('[data-panorama-field="latitude"]').value,longitude:card.querySelector('[data-panorama-field="longitude"]').value});
     const readTranslation = row => Array.from(row.querySelectorAll('[data-translation-index]')).map(field => field.value);
@@ -1619,11 +1981,11 @@ if (panoSaveButton) {
     };
     const startAim = card => {
         const input = card.querySelector('[data-pano-field="target"]'); if (!input) return;
-        if (card.querySelector('[data-hs-pane="pano"]')?.hidden) { alert('Ubah jenis tujuan ke Panorama dulu untuk mengatur arah pandang.'); return; }
+        if (card.querySelector('[data-hs-pane="pano"]')?.hidden) { cmsToast('Ubah jenis tujuan ke Panorama dulu untuk mengatur arah pandang.'); return; }
         const target = card.querySelector('[data-hs-target-select]')?.value?.trim() || '';
-        if (!target) { alert('Pilih panorama tujuan dulu sebelum mengatur arah pandang.'); return; }
+        if (!target) { cmsToast('Pilih panorama tujuan dulu sebelum mengatur arah pandang.'); return; }
         const targetCard = document.querySelector('[data-panorama-node-id="' + CSS.escape(target) + '"]');
-        if (!targetCard) { alert('Panorama tujuan tidak ditemukan di daftar panorama.'); return; }
+        if (!targetCard) { cmsToast('Panorama tujuan tidak ditemukan di daftar panorama.'); return; }
         aimInput = input; aimSeeked = false;
         preview.dataset.mode = 'aim'; // set sebelum openPreview agar iframe tidak ditutup skin-mode
         preview.querySelectorAll('[data-preview-step]').forEach(button => { button.hidden = true; });
@@ -1679,29 +2041,141 @@ if (panoSaveButton) {
         if (emptyFields.length > 0 && !warning) { warning=document.createElement('span');warning.className='translation-warning';row.querySelector('.translation-source').after(warning); }
         if (warning) { warning.textContent='! '+emptyFields.length+' bahasa kosong';warning.hidden=emptyFields.length===0; }
         row.hidden=activeTranslationFilter==='missing'&&emptyFields.length===0;
+        syncTranslationCounters();
     };
     document.querySelectorAll('[data-translation-filter]').forEach(button=>button.addEventListener('click',()=>{
         document.querySelectorAll('[data-translation-filter]').forEach(item=>item.classList.remove('active'));button.classList.add('active');activeTranslationFilter=button.dataset.translationFilter;
         translationRows().forEach(refreshTranslationRow);
     }));
     document.getElementById('panoTranslationEditor')?.addEventListener('input',event=>{if(event.target.matches('[data-translation-index]'))refreshTranslationRow(event.target.closest('.translation-row'));});
+    // Terjemahan otomatis: tombol ✦ per baris dan tombol besar "Terjemahkan Semua" (dengan indikator progres).
+    const translateLanguages = <?= json_encode($auditResult['languages'] ?? []) ?>;
+    const translateTargets = <?= json_encode(array_reduce(array_keys($languageRegistry), static function(array $map, string $code) use ($languageRegistry): array { $map[$code] = $languageRegistry[$code]['translate']; $map[$languageRegistry[$code]['pano']] = $languageRegistry[$code]['translate']; return $map; }, []), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    const translateRowFields = async row => {
+        const source = row.dataset.source; let filled = 0;
+        for (const field of row.querySelectorAll('[data-translation-index]')) {
+            if (field.value.trim()) continue;
+            const language = translateLanguages[Number(field.dataset.translationIndex)], target = translateTargets[language] || language;
+            const response = await fetch('https://translate.googleapis.com/translate_a/single?client=gtx&sl=id&tl=' + encodeURIComponent(target) + '&dt=t&q=' + encodeURIComponent(source));
+            if (!response.ok) throw new Error('Terjemahan ' + (language || '') + ' gagal.');
+            const data = await response.json(); field.value = (data[0] || []).map(part => part[0] || '').join(''); filled++;
+        }
+        refreshTranslationRow(row); return filled;
+    };
     document.querySelectorAll('[data-translate-pano]').forEach(function(button) {
         button.addEventListener('click', async function() {
-            const row=button.closest('.translation-row'), source=row.dataset.source;
-            button.disabled=true;button.textContent='…';
-            try {
-                const languageTargets=<?= json_encode(array_reduce(array_keys($languageRegistry), static function(array $map, string $code) use ($languageRegistry): array { $map[$code] = $languageRegistry[$code]['translate']; $map[$languageRegistry[$code]['pano']] = $languageRegistry[$code]['translate']; return $map; }, []), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
-                for (const field of row.querySelectorAll('[data-translation-index]')) {
-                    if (field.value.trim()) continue;
-                    const language=<?= json_encode($auditResult['languages'] ?? []) ?>[Number(field.dataset.translationIndex)];
-                    const target=languageTargets[language]||language;
-                    const response=await fetch('https://translate.googleapis.com/translate_a/single?client=gtx&sl=id&tl='+encodeURIComponent(target)+'&dt=t&q='+encodeURIComponent(source));
-                    const data=await response.json();field.value=(data[0]||[]).map(part=>part[0]||'').join('');
-                }
-            } catch(error) { alert('Auto translate gagal: '+error.message); }
-            finally { button.disabled=false;button.textContent='✦';refreshTranslationRow(row);refreshDirty(); }
+            const row = button.closest('.translation-row');
+            button.disabled = true; button.classList.add('is-loading'); row.classList.add('is-translating');
+            try { await translateRowFields(row); }
+            catch (error) { cmsToast('Auto translate gagal: ' + error.message); }
+            finally { button.disabled = false; button.classList.remove('is-loading'); row.classList.remove('is-translating'); refreshTranslationRow(row); refreshDirty(); refreshTranslateAll(); }
         });
     });
+    const translateAllButton = document.getElementById('translateAllPano');
+    const translateAllLabel = translateAllButton?.querySelector('.ta-label');
+    let translateAllRunning = false, translateAllReset = 0;
+    const pendingTranslationRows = () => translationRows().filter(row => Array.from(row.querySelectorAll('[data-translation-index]')).some(field => !field.value.trim()));
+    function setTranslateAllProgress(done, total) {
+        translateAllButton.style.setProperty('--p', total ? (done / total * 100).toFixed(1) + '%' : '0%');
+        translateAllLabel.textContent = 'Menerjemahkan… ' + done + '/' + total;
+    }
+    function refreshTranslateAll() {
+        if (!translateAllButton || translateAllRunning) return;
+        clearTimeout(translateAllReset);
+        const pending = pendingTranslationRows().length;
+        translateAllButton.style.setProperty('--p', '0%');
+        translateAllButton.dataset.state = pending ? 'idle' : 'complete';
+        translateAllButton.disabled = pending === 0;
+        translateAllLabel.textContent = pending ? 'Terjemahkan Semua (' + pending + ')' : '\u2713 Semua sudah diterjemahkan';
+        const missingFilter = document.querySelector('[data-translation-filter="missing"]');
+        if (missingFilter) missingFilter.textContent = 'Belum Diisi (' + translationRows().filter(row => row.classList.contains('needs-translation')).length + ')';
+    }
+    translateAllButton?.addEventListener('click', async () => {
+        if (translateAllRunning) return;
+        const queue = pendingTranslationRows(), total = queue.length; if (!total) return;
+        translateAllRunning = true; translateAllButton.disabled = true; translateAllButton.dataset.state = 'running';
+        let finished = 0, failed = 0; setTranslateAllProgress(0, total);
+        const worker = async () => {
+            while (queue.length) {
+                const row = queue.shift(), rowButton = row.querySelector('[data-translate-pano]');
+                rowButton?.classList.add('is-loading'); row.classList.add('is-translating');
+                try { await translateRowFields(row); } catch (_) { failed++; }
+                rowButton?.classList.remove('is-loading'); row.classList.remove('is-translating');
+                finished++; setTranslateAllProgress(finished, total); refreshDirty();
+            }
+        };
+        await Promise.all([worker(), worker(), worker()]);
+        translateAllRunning = false; translateAllButton.disabled = false;
+        translateAllButton.style.setProperty('--p', '100%');
+        translateAllButton.dataset.state = failed ? 'partial' : 'finished';
+        translateAllLabel.textContent = failed ? 'Selesai, ' + failed + ' gagal \u2014 klik untuk ulangi' : '\u2713 Selesai \u00b7 ' + total + ' teks diterjemahkan';
+        flash(failed ? failed + ' teks gagal diterjemahkan. Klik tombol lagi untuk mengulang yang kosong.' : '\u2713 Terjemahan selesai. Tekan Simpan pano.xml untuk menyimpan.', failed ? 'error' : 'success');
+        if (!failed) celebrateStars(translateAllButton);
+        translateAllReset = setTimeout(refreshTranslateAll, 5000);
+    });
+    document.getElementById('panoTranslationEditor')?.addEventListener('input', () => refreshTranslateAll());
+
+    // ---- Angka "Terjemahan kosong" ikut berubah langsung; saat mencapai 0 angkanya "terbakar" (api), dan tombol memercikkan bintang.
+    const warningCard = document.querySelector('.audit-summary .audit-warning');
+    const warningValue = warningCard?.querySelector('strong');
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    let shownWarnings = Number(warningValue?.textContent) || 0, warningFrame = 0;
+    function countEmptyTranslations() {
+        return translationRows().reduce((sum, row) => sum + Array.from(row.querySelectorAll('textarea[data-translation-index]:not([hidden])')).filter(field => !field.value.trim()).length, 0);
+    }
+    function setWarningBurning(on) {
+        if (!warningCard) return;
+        warningCard.classList.toggle('is-zero', on);
+        let flame = warningCard.querySelector('.fire-icon');
+        if (on && !flame) { flame = document.createElement('span'); flame.className = 'fire-icon'; flame.setAttribute('aria-hidden', 'true'); flame.textContent = '\uD83D\uDD25'; warningCard.append(flame); }
+        if (!on) flame?.remove();
+    }
+    function igniteWarningCard() {
+        setWarningBurning(true);
+        if (reduceMotion || !warningCard) return;
+        warningCard.classList.remove('ignite'); void warningCard.offsetWidth; warningCard.classList.add('ignite');
+        const rect = warningCard.getBoundingClientRect();
+        for (let i = 0; i < 14; i++) {
+            const flame = document.createElement('span');
+            flame.className = 'fire-particle'; flame.textContent = '\uD83D\uDD25';
+            flame.style.left = (rect.left + 28 + Math.random() * 70) + 'px'; flame.style.top = (rect.top + 26 + Math.random() * 20) + 'px';
+            flame.style.setProperty('--dx', ((Math.random() - .5) * 90).toFixed(0) + 'px'); flame.style.setProperty('--dy', (-(50 + Math.random() * 90)).toFixed(0) + 'px');
+            flame.style.setProperty('--s', (.7 + Math.random() * .9).toFixed(2)); flame.style.animationDelay = (Math.random() * .35).toFixed(2) + 's';
+            document.body.append(flame); flame.addEventListener('animationend', () => flame.remove(), {once:true});
+        }
+    }
+    function syncTranslationCounters(immediate = false) {
+        const total = countEmptyTranslations();
+        const missingFilter = document.querySelector('[data-translation-filter="missing"]');
+        if (missingFilter) missingFilter.textContent = 'Belum Diisi (' + translationRows().filter(row => row.classList.contains('needs-translation')).length + ')';
+        if (!warningValue || total === shownWarnings) return;
+        cancelAnimationFrame(warningFrame);
+        const from = shownWarnings;
+        if (immediate || reduceMotion) { warningValue.textContent = shownWarnings = total; setWarningBurning(total === 0); return; }
+        if (total > 0) setWarningBurning(false);
+        const start = performance.now(), duration = Math.min(1100, 300 + Math.abs(from - total) * 16);
+        const step = now => {
+            const t = Math.min(1, (now - start) / duration), eased = 1 - Math.pow(1 - t, 3);
+            shownWarnings = Math.round(from + (total - from) * eased); warningValue.textContent = shownWarnings;
+            if (t < 1) warningFrame = requestAnimationFrame(step);
+            else { shownWarnings = total; warningValue.textContent = total; if (total === 0) igniteWarningCard(); }
+        };
+        warningFrame = requestAnimationFrame(step);
+    }
+    function celebrateStars(button) {
+        if (reduceMotion || !button) return;
+        const rect = button.getBoundingClientRect(), glyphs = ['\u2726', '\u2727', '\u2605', '\u2736'], colors = ['#fde047', '#ffffff', '#c4b5fd', '#f9a8d4', '#86efac'];
+        for (let i = 0; i < 22; i++) {
+            const star = document.createElement('span'), angle = Math.random() * Math.PI * 2, distance = 50 + Math.random() * 90;
+            star.className = 'sparkle-particle'; star.textContent = glyphs[i % glyphs.length]; star.style.color = colors[i % colors.length];
+            star.style.left = (rect.left + rect.width / 2 + (Math.random() - .5) * rect.width * .8) + 'px'; star.style.top = (rect.top + rect.height / 2 + (Math.random() - .5) * rect.height * .6) + 'px';
+            star.style.setProperty('--dx', (Math.cos(angle) * distance).toFixed(0) + 'px'); star.style.setProperty('--dy', (Math.sin(angle) * distance * .8).toFixed(0) + 'px');
+            star.style.setProperty('--s', (.7 + Math.random() * 1.1).toFixed(2)); star.style.setProperty('--r', ((Math.random() - .5) * 240).toFixed(0) + 'deg'); star.style.animationDelay = (Math.random() * .25).toFixed(2) + 's';
+            document.body.append(star); star.addEventListener('animationend', () => star.remove(), {once:true});
+        }
+    }
+    syncTranslationCounters(true);
+    refreshTranslateAll();
 
     // --- Simpan
     const savePano = async () => {
@@ -1775,7 +2249,7 @@ if (translateButton) {
         const sourceLocation = document.querySelector('[name="lokasi[id]"]').value.trim();
         const sourceWelcome = document.querySelector('[name="welcomeText[id]"]').value.trim();
         if (!sourceLocation && !sourceWelcome) {
-            alert('Isi teks bahasa Indonesia terlebih dahulu.');
+            cmsToast('Isi teks bahasa Indonesia terlebih dahulu.');
             return;
         }
         const targets = <?= json_encode(array_map(static fn(array $language): string => $language['translate'], array_filter($languageRegistry, static fn(string $code): bool => $code !== 'id', ARRAY_FILTER_USE_KEY)), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
@@ -1802,7 +2276,7 @@ if (translateButton) {
             }
             document.querySelector('[data-tab="en"]').click();
         } catch (error) {
-            alert('Auto translate gagal: ' + error.message);
+            cmsToast('Auto translate gagal: ' + error.message);
         } finally {
             translateButton.disabled = false;
             translateButton.textContent = originalText;
@@ -1814,15 +2288,16 @@ const panoramaModal = document.getElementById('panoramaModal');
 const panoramaGrid = document.getElementById('panoramaGrid');
 const droneViewPicker = document.getElementById('droneViewPicker');
 const droneViewFrame = document.getElementById('droneViewFrame');
-let pendingDroneNode = '', droneViewTimer = 0;
+let pendingDroneNode = '', pendingPickNodeId = '', droneViewTimer = 0, pickerMode = 'drone';
+const pickerTitles = {drone: ['Pilih panorama drone', 'Arahkan target view drone'], start: ['Pilih panorama awal tur', 'Arahkan pandangan awal tur']};
 const droneTourUrl = <?= json_encode(isset($detectedTours[$selectedId]) ? projectUrl($detectedTours[$selectedId]['path'] . '/index.html') : '', JSON_UNESCAPED_SLASHES) ?>;
 function droneFramePlayer() { try { return droneViewFrame?.contentWindow?.pano || null; } catch (_) { return null; } }
 function droneViewValues() { const player=droneFramePlayer();return {pan:Number(player?.getPan?.()||0),tilt:Number(player?.getTilt?.()||0),fov:Number(player?.getFov?.()||70)}; }
 function refreshDroneLiveView(){if(!droneViewPicker||droneViewPicker.hidden)return;const value=droneViewValues();document.getElementById('droneLiveView').textContent='Pan '+value.pan.toFixed(1)+'° · Tilt '+value.tilt.toFixed(1)+'° · FoV '+value.fov.toFixed(1)+'°';droneViewTimer=requestAnimationFrame(refreshDroneLiveView);}
 document.querySelectorAll('.panorama-option').forEach(function (option) {
     option.addEventListener('click', function () {
-        document.querySelectorAll('.panorama-option').forEach(item=>item.classList.remove('selected'));option.classList.add('selected');pendingDroneNode=option.dataset.nodeValue;
-        panoramaGrid.hidden=true;droneViewPicker.hidden=false;document.getElementById('panoramaTitle').textContent='Arahkan target view drone';document.getElementById('droneViewLoading').hidden=false;
+        document.querySelectorAll('.panorama-option').forEach(item=>item.classList.remove('selected'));option.classList.add('selected');pendingDroneNode=option.dataset.nodeValue;pendingPickNodeId=option.dataset.nodeId||'';
+        panoramaGrid.hidden=true;droneViewPicker.hidden=false;document.getElementById('panoramaTitle').textContent=pickerTitles[pickerMode][1];document.getElementById('droneViewLoading').hidden=false;
         droneViewFrame.src=droneTourUrl+(droneTourUrl.includes('?')?'&':'?')+'cms_target_view=1#'+encodeURIComponent(pendingDroneNode);
         droneViewFrame.onload=()=>{
             const wait=()=>{
@@ -1851,6 +2326,12 @@ document.querySelectorAll('.panorama-option').forEach(function (option) {
                     try{player.stopAutorotate?.();}catch(_){}
                     try{player.setLockedMouse?.(false);player.setLockedWheel?.(false);}catch(_){}
                     player.openNext('{'+pendingDroneNode+'}');
+                    if(pickerMode==='start'&&pendingPickNodeId&&pendingPickNodeId===(document.getElementById('startNode')?.value||'')){
+                        // panorama awal yang sedang dipilih: mulai dari arah yang tersimpan/dipilih, bukan dari arah bawaan node
+                        const saved=['startPan','startTilt','startFov'].map(id=>Number(document.getElementById(id)?.value));
+                        const restore=()=>{try{player.setPan(saved[0]);player.setTilt(saved[1]);player.setFov(saved[2]);}catch(_){}};
+                        restore();setTimeout(restore,400);
+                    }
                     player.setLocked?.(false);
                 }catch(_){}
                 document.getElementById('droneViewLoading').hidden=true;cancelAnimationFrame(droneViewTimer);refreshDroneLiveView();
@@ -1859,17 +2340,27 @@ document.querySelectorAll('.panorama-option').forEach(function (option) {
         };
     });
 });
-function openPanoramaPicker() {
+function openPanoramaPicker(mode) {
     if (!panoramaModal) return;
+    pickerMode = mode === 'start' ? 'start' : 'drone';   // tombol Drone memanggil tanpa argumen (atau dengan event): mode drone
+    const pickerTitle = document.getElementById('panoramaTitle'); if (pickerTitle) pickerTitle.textContent = pickerTitles[pickerMode][0];
+    const currentStart = document.getElementById('startNode')?.value || '', currentDrone = (document.getElementById('droneInput')?.value || '').trim();
+    document.querySelectorAll('.panorama-option').forEach(option => option.classList.toggle('selected', pickerMode === 'start' ? option.dataset.nodeId === currentStart : option.dataset.nodeValue === currentDrone));
     panoramaModal.classList.add('open'); panoramaModal.setAttribute('aria-hidden', 'false'); document.body.classList.add('modal-open');
 }
 function closePanoramaPicker() {
     if (!panoramaModal) return;
-    cancelAnimationFrame(droneViewTimer);if(droneViewFrame)droneViewFrame.src='';if(panoramaGrid)panoramaGrid.hidden=false;if(droneViewPicker)droneViewPicker.hidden=true;const title=document.getElementById('panoramaTitle');if(title)title.textContent='Pilih panorama drone';
+    cancelAnimationFrame(droneViewTimer);if(droneViewFrame)droneViewFrame.src='';if(panoramaGrid)panoramaGrid.hidden=false;if(droneViewPicker)droneViewPicker.hidden=true;const title=document.getElementById('panoramaTitle');if(title)title.textContent=pickerTitles[pickerMode][0];
     panoramaModal.classList.remove('open'); panoramaModal.setAttribute('aria-hidden', 'true'); document.body.classList.remove('modal-open');
 }
-document.getElementById('droneViewBack')?.addEventListener('click',()=>{cancelAnimationFrame(droneViewTimer);droneViewFrame.src='';droneViewPicker.hidden=true;panoramaGrid.hidden=false;document.getElementById('panoramaTitle').textContent='Pilih panorama drone';});
-document.getElementById('saveDroneView')?.addEventListener('click',()=>{const value=droneViewValues();document.getElementById('droneInput').value=pendingDroneNode;document.getElementById('dronePan').value=value.pan.toFixed(2);document.getElementById('droneTilt').value=value.tilt.toFixed(2);document.getElementById('droneFov').value=value.fov.toFixed(2);document.getElementById('droneViewSummary').textContent='Target view: pan '+value.pan.toFixed(1)+'° · tilt '+value.tilt.toFixed(1)+'° · FoV '+value.fov.toFixed(1)+'°';document.getElementById('droneInput').dispatchEvent(new Event('input',{bubbles:true}));closePanoramaPicker();});
+document.getElementById('droneViewBack')?.addEventListener('click',()=>{cancelAnimationFrame(droneViewTimer);droneViewFrame.src='';droneViewPicker.hidden=true;panoramaGrid.hidden=false;document.getElementById('panoramaTitle').textContent=pickerTitles[pickerMode][0];});
+document.getElementById('saveDroneView')?.addEventListener('click',()=>{const value=droneViewValues();
+    if(pickerMode==='start'){   // "Gunakan Arah Ini" untuk panorama awal: isi kolom tersembunyi, ditulis ke pano.xml saat data lokasi disimpan
+        const startNode=document.getElementById('startNode');if(!startNode||!pendingPickNodeId)return;
+        startNode.value=pendingPickNodeId;document.getElementById('startPan').value=(((value.pan+180)%360+360)%360-180).toFixed(2);document.getElementById('startTilt').value=value.tilt.toFixed(2);document.getElementById('startFov').value=value.fov.toFixed(2);document.getElementById('startDirty').value='1';
+        startNode.dispatchEvent(new Event('input',{bubbles:true}));closePanoramaPicker();return;
+    }
+    document.getElementById('droneInput').value=pendingDroneNode;document.getElementById('dronePan').value=value.pan.toFixed(2);document.getElementById('droneTilt').value=value.tilt.toFixed(2);document.getElementById('droneFov').value=value.fov.toFixed(2);document.getElementById('droneViewSummary').textContent='Target view: pan '+value.pan.toFixed(1)+'° · tilt '+value.tilt.toFixed(1)+'° · FoV '+value.fov.toFixed(1)+'°';document.getElementById('droneInput').dispatchEvent(new Event('input',{bubbles:true}));closePanoramaPicker();});
 document.getElementById('openPanoramaPicker')?.addEventListener('click', openPanoramaPicker);
 document.querySelectorAll('[data-close-panorama]').forEach(function (element) { element.addEventListener('click', closePanoramaPicker); });
 document.addEventListener('keydown', function (event) { if (event.key === 'Escape') closePanoramaPicker(); });
@@ -1924,11 +2415,11 @@ if (video360Form) {
     };
     document.querySelectorAll('[data-video360-edit]').forEach(button => button.addEventListener('click', async () => {
         const id=button.dataset.video360Edit,newId=window.prompt('ID video 360 baru:',id); if(!newId||newId===id)return;
-        try { await video360Action({action:'rename',video_id:id,new_id:newId}); location.reload(); } catch(error){alert(error.message);}
+        try { await video360Action({action:'rename',video_id:id,new_id:newId}); location.reload(); } catch(error){cmsToast(error.message, 'error');}
     }));
     document.querySelectorAll('[data-video360-delete]').forEach(button => button.addEventListener('click', async () => {
         const id=button.dataset.video360Delete;if(!confirm('Hapus video 360 '+id+' beserta seluruh playlist dan segment?'))return;
-        try { await video360Action({action:'delete',video_id:id}); location.reload(); } catch(error){alert(error.message);}
+        try { await video360Action({action:'delete',video_id:id}); location.reload(); } catch(error){cmsToast(error.message, 'error');}
     }));
 }
 const voiceCodes = <?= json_encode(array_map(static fn(array $language): string => $language['audio'], $languageRegistry), JSON_UNESCAPED_UNICODE) ?>;
@@ -1940,33 +2431,106 @@ if (objectList) {
     let objectRecords = structuredClone(oiDatabase[currentLocationId] || []);
     let editableWebElements = structuredClone(detectedWebElements);
     let editableObjectHotspots = structuredClone(detectedObjectHotspots);
-    let selectedObject = objectRecords.length ? 0 : -1;
+    let selectedObject = objectRecords.length ? Math.max(0, objectRecords.findIndex(record => record.isActive)) : -1;   // object aktif paling atas (daftar menaruh yang aktif di atas, urutan data dipertahankan)
     let selectedWebElement = -1;
-    let objectPanoPlayer = null, objectPanoXml = null, objectPanoReady = false, objectPanoDragging = false;
+    let objectPanoPlayer = null, objectPanoXml = null, objectPanoReady = false, objectPanoDragging = false, objectSwitching = false, objectSwitchTimer = 0, pendingLook = null, lookTimer = 0;
     const objectForm = document.getElementById('objectForm');
     const objectSearch = document.getElementById('objectSearch');
     const escapeObjectHtml = value => String(value ?? '').replace(/[&<>'"]/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[char]));
+    // Route Key object baru = node + nama lokasi + target (mis. node115-pantai-legian-element02) agar unik di antara semua lokasi.
+    const makeObjectRouteKey = (nodeId, targetId) => {
+        const clean = value => String(value || '').toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+        const base = [clean(nodeId), clean(currentLocationId), clean(targetId)].filter(Boolean).join('-');
+        let key = base, number = 2;
+        while (objectRecords.some(record => String(record.route_key || '').toLowerCase() === key)) key = base + '-' + number++;
+        return key;
+    };
     const blankObject = () => ({route_key:'objectbaru',infoID:'',nodeID:'',targetID:'Element01',category:'umum',arah:'luruskanan',versi:'1',ukuran:'500px',labelTeks:Object.fromEntries(Object.keys(voiceLabels).map(code=>[code,''])),isActive:true,title:''});
-    function renderObjectList() {
+    // Nama di daftar = teks setelah <br>/</br> pada label Indonesia (mis. "Klik untuk Informasi </br>Patung Masolah" → "Patung Masolah").
+    const objectDisplayName = record => {
+        const text = String(record.labelTeks?.id || '').trim();
+        const parts = text.split(/<\s*\/?\s*br\s*\/?\s*>/i);
+        return (parts.length > 1 ? parts[parts.length - 1].trim() : '') || text || String(record.title || '').trim() || 'Tanpa judul';
+    };
+    // Daftar: object aktif di atas, nonaktif di bawah (urutan asli dipertahankan di tiap kelompok). Hanya tampilan; urutan data tidak berubah.
+    function renderObjectItems(animate = false) {
+        // FLIP: catat posisi lama tiap item, render ulang, lalu animasikan dari posisi lama ke posisi baru.
+        const before = new Map();
+        if (animate) objectList.querySelectorAll('[data-object]').forEach(item => before.set(item.dataset.object, item.getBoundingClientRect().top));
         const query = objectSearch.value.trim().toLowerCase();
-        const visible = objectRecords.map((record,index)=>({record,index})).filter(({record}) => !query || [record.route_key,record.nodeID,record.labelTeks?.id].some(value=>String(value||'').toLowerCase().includes(query)));
-        document.getElementById('objectCount').textContent = visible.length + ' dari ' + objectRecords.length + ' object';
-        objectList.innerHTML = visible.map(({record,index}) => '<button type="button" class="object-item '+(index===selectedObject?'active':'')+'" data-object="'+index+'"><strong>'+escapeObjectHtml(record.labelTeks?.id||'Tanpa judul')+'</strong><small>'+escapeObjectHtml(record.route_key)+' · '+escapeObjectHtml(record.nodeID||'Tanpa node')+'</small></button>').join('');
-        renderObjectForm();
+        const visible = objectRecords.map((record,index)=>({record,index})).filter(({record}) => !query || [record.route_key,record.nodeID,record.labelTeks?.id,objectDisplayName(record)].some(value=>String(value||'').toLowerCase().includes(query)));
+        visible.sort((a,b) => (b.record.isActive ? 1 : 0) - (a.record.isActive ? 1 : 0) || a.index - b.index);
+        const activeTotal = objectRecords.filter(record => record.isActive).length, offTotal = objectRecords.length - activeTotal;
+        const counter = document.getElementById('objectCount');
+        if (counter) counter.innerHTML = '<span class="oi-chip oi-chip-on' + (animate ? ' pop' : '') + '"><i></i><b>' + activeTotal + '</b> Aktif</span><span class="oi-chip oi-chip-off' + (animate ? ' pop' : '') + '"><i></i><b>' + offTotal + '</b> Nonaktif</span>' + (visible.length !== objectRecords.length ? '<span class="oi-chip">' + visible.length + ' dari ' + objectRecords.length + '</span>' : '');
+        objectList.innerHTML = visible.map(({record,index}) => '<button type="button" class="object-item '+(record.isActive?'is-on':'is-off')+(index===selectedObject?' active':'')+'" data-object="'+index+'"><span class="oi-row"><strong>'+escapeObjectHtml(objectDisplayName(record))+'</strong><em class="oi-state">'+(record.isActive?'Aktif':'Nonaktif')+'</em></span><small>'+escapeObjectHtml(record.route_key)+' \u00b7 '+escapeObjectHtml(record.nodeID||'Tanpa node')+'</small><span class="oi-trash" role="button" tabindex="0" data-trash="'+index+'" title="Hapus Objek Info ini beserta pin-nya" aria-label="Hapus Objek Info '+escapeObjectHtml(objectDisplayName(record))+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg></span></button>').join('');
+        if (animate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            objectList.querySelectorAll('[data-object]').forEach(item => {
+                const from = before.get(item.dataset.object); if (from === undefined) return;
+                const delta = from - item.getBoundingClientRect().top; if (Math.abs(delta) < 1) return;
+                item.style.zIndex = '1';
+                item.animate([{transform:'translateY(' + delta + 'px)'},{transform:'translateY(0)'}], {duration:420, easing:'cubic-bezier(.22,.9,.28,1)'}).onfinish = () => { item.style.zIndex = ''; };
+            });
+        }
     }
+    function renderObjectList() {
+        renderObjectItems();
+        renderObjectForm();
+        syncDeleteButton();
+        // Belum ada object sama sekali: panel daftar & form disembunyikan (muncul sendiri begitu object pertama ditambahkan).
+        document.getElementById('oiStageWrap')?.classList.toggle('oi-empty', objectRecords.length === 0);
+    }
+    const recordMatchesElement = (record, element) => String(record.nodeID || '').replace(/[{}]/g, '').toLowerCase() === String(element.nodeID).toLowerCase() && String(record.targetID || '').toLowerCase() === String(element.targetID).toLowerCase();
+    function syncDeleteButton() {
+        const button = document.getElementById('removeWebElement');
+        if (button) button.disabled = !(objectRecords[selectedObject] || editableWebElements[selectedWebElement]);
+    }
+    // Ikon & warna pin: Objek Info (biru), Hotspot darat (hijau), Drone (ungu).
+    const objectPinIcons = {
+        info: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="7.8" r=".6" fill="currentColor"/></svg>',
+        land: '<svg viewBox="0 0 24 24"><path d="M12 3l7 17-7-4-7 4z" fill="currentColor" fill-opacity=".28"/></svg>',
+        drone: '<svg viewBox="0 0 24 24"><path d="M8 8l8 8M16 8l-8 8"/><circle cx="6" cy="6" r="2.6"/><circle cx="18" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><circle cx="18" cy="18" r="2.6"/><rect x="9.5" y="9.5" width="5" height="5" rx="1.4"/></svg>'
+    };
+    const objectHotspotKind = hotspot => (/drone/i.test(String(hotspot.skin || '')) || /^\s*drone\b/i.test(String(hotspot.title || ''))) ? 'drone' : 'land';
     const normalizeObjectPan = value => ((Number(value) + 180) % 360 + 360) % 360 - 180;
     const panoramaSelect = document.getElementById('objectPanoramaNode');
     const panoramaHost = document.getElementById('objectPanoramaHost');
     const panoramaStatus = document.getElementById('objectPanoramaStatus');
     const setPanoramaStatus = message => { if (panoramaStatus) panoramaStatus.textContent = message; };
     const currentPublicNode = () => panoramaSelect?.selectedOptions[0]?.dataset.publicNode || '';
+    // Klik pin di panorama → panel form di kanan langsung terbuka (walau sebelumnya disembunyikan) dan menampilkan object pin itu;
+    // item terpilih di daftar kiri ikut digulir ke area terlihat.
+    function revealObjectForm() {
+        const studio = document.getElementById('oiStageWrap');
+        if (studio?.classList.contains('hide-right')) {
+            studio.classList.remove('hide-right');
+            const arrow = studio.querySelector('[data-oi-collapse="right"]'); if (arrow) arrow.textContent = '›';
+        }
+        if (studio?.classList.contains('hide-left')) {
+            studio.classList.remove('hide-left');
+            const arrow = studio.querySelector('[data-oi-collapse="left"]'); if (arrow) arrow.textContent = '‹';
+        }
+        objectForm.scrollTop = 0;
+        objectList.querySelector('.object-item.active')?.scrollIntoView({block:'nearest'});
+    }
+    // Pin WebElement yang belum punya record di oi-database: buat record kosongnya (route key, node, target terisi otomatis).
+    function createRecordForElement(element) {
+        const historyBefore = historySnapshot();
+        const record = blankObject();
+        record.nodeID = '{' + element.nodeID + '}'; record.targetID = element.targetID; record.route_key = makeObjectRouteKey(element.nodeID, element.targetID);
+        objectRecords.push(record); selectedObject = objectRecords.length - 1; objectSearch.value = '';
+        renderObjectList(); revealObjectForm(); commitHistory(historyBefore, 'Buat data ' + element.targetID);
+        setPanoramaStatus('Data ' + element.targetID + ' dibuat. Isi judul dan teksnya, lalu tekan Simpan.');
+    }
     function selectWebElement(index, refreshMarkers = true) {
         selectedWebElement = index;
         const element = editableWebElements[index];
-        document.getElementById('removeWebElement').disabled = !element;
+        syncDeleteButton();
         if (element) {
             const recordIndex = objectRecords.findIndex(record => String(record.nodeID || '').replace(/[{}]/g, '').toLowerCase() === String(element.nodeID).toLowerCase() && String(record.targetID || '').toLowerCase() === String(element.targetID).toLowerCase());
             if (recordIndex >= 0) { selectedObject = recordIndex; objectSearch.value = ''; renderObjectList(); }
+            else { selectedObject = -1; renderObjectList(); }   // pin belum punya data: panel kanan menawarkan "Buat data" (bukan menampilkan form object lain)
+            revealObjectForm();
         }
         if (refreshMarkers) renderWebElementMarkers();
         else panoramaHost?.querySelectorAll('.object-web-pin').forEach(marker => marker.classList.toggle('selected', marker.title === element?.targetID));
@@ -1979,7 +2543,7 @@ if (objectList) {
             const first = objectPanoPlayer.getPositionAngles(event.clientX - rect.left, event.clientY - rect.top);
             const startPan = Number(element.pan);
             const tiltOffset = Number(element.tilt) - Number(first.tilt);
-            objectPanoDragging = true; objectPanoPlayer.stopAutorotate?.(); objectPanoPlayer.setLocked(true); button.setPointerCapture?.(event.pointerId);
+            const historyBefore = historySnapshot(); objectPanoDragging = true; objectPanoPlayer.stopAutorotate?.(); objectPanoPlayer.setLocked(true); button.setPointerCapture?.(event.pointerId);
             const move = moveEvent => {
                 moveEvent.preventDefault(); moveEvent.stopPropagation();
                 const area = panoramaHost.getBoundingClientRect(), angle = objectPanoPlayer.getPositionAngles(moveEvent.clientX - area.left, moveEvent.clientY - area.top);
@@ -1989,7 +2553,7 @@ if (objectList) {
                 setPanoramaStatus(element.targetID + ' · Pan ' + element.pan.toFixed(2) + '° · Tilt ' + element.tilt.toFixed(2) + '°');
             };
             const end = endEvent => {
-                endEvent?.preventDefault(); endEvent?.stopPropagation(); objectPanoDragging = false; objectPanoPlayer.setLocked(false);
+                endEvent?.preventDefault(); endEvent?.stopPropagation(); objectPanoDragging = false; objectPanoPlayer.setLocked(false); commitHistory(historyBefore, 'Geser ' + element.targetID);
                 button.removeEventListener('pointermove', move); button.removeEventListener('pointerup', end); button.removeEventListener('pointercancel', end);
                 setPanoramaStatus('Posisi ' + element.targetID + ' diperbarui. Tekan Simpan untuk menerapkan ke pano.xml.');
             };
@@ -1997,15 +2561,15 @@ if (objectList) {
         });
     }
     function attachObjectHotspotDrag(button, hotspot, index) {
-        button.addEventListener('pointerdown',event=>{if(event.button!==0||!objectPanoReady||objectPanoDragging)return;event.preventDefault();event.stopPropagation();const rect=panoramaHost.getBoundingClientRect(),first=objectPanoPlayer.getPositionAngles(event.clientX-rect.left,event.clientY-rect.top),startPan=Number(hotspot.pan),tiltOffset=Number(hotspot.tilt)-Number(first.tilt);objectPanoDragging=true;objectPanoPlayer.stopAutorotate?.();objectPanoPlayer.setLocked(true);button.setPointerCapture?.(event.pointerId);const move=moveEvent=>{moveEvent.preventDefault();moveEvent.stopPropagation();const area=panoramaHost.getBoundingClientRect(),angle=objectPanoPlayer.getPositionAngles(moveEvent.clientX-area.left,moveEvent.clientY-area.top),panDelta=normalizeObjectPan(Number(angle.pan)-Number(first.pan));hotspot.pan=normalizeObjectPan(startPan-panDelta);hotspot.tilt=Math.max(-90,Math.min(90,Number(angle.tilt)+tiltOffset));objectPanoPlayer.updateHotspot('cms_hs_'+index,hotspot.pan,hotspot.tilt);setPanoramaStatus('Hotspot '+hotspot.id+' · Pan '+hotspot.pan.toFixed(2)+'° · Tilt '+hotspot.tilt.toFixed(2)+'°');};const end=endEvent=>{endEvent?.preventDefault();endEvent?.stopPropagation();objectPanoDragging=false;objectPanoPlayer.setLocked(false);button.removeEventListener('pointermove',move);button.removeEventListener('pointerup',end);button.removeEventListener('pointercancel',end);setPanoramaStatus('Posisi hotspot '+hotspot.id+' diperbarui. Tekan Simpan untuk menerapkan.');};button.addEventListener('pointermove',move);button.addEventListener('pointerup',end);button.addEventListener('pointercancel',end);});
+        button.addEventListener('pointerdown',event=>{if(event.button!==0||!objectPanoReady||objectPanoDragging)return;event.preventDefault();event.stopPropagation();const rect=panoramaHost.getBoundingClientRect(),first=objectPanoPlayer.getPositionAngles(event.clientX-rect.left,event.clientY-rect.top),startPan=Number(hotspot.pan),tiltOffset=Number(hotspot.tilt)-Number(first.tilt);const historyBefore=historySnapshot();objectPanoDragging=true;objectPanoPlayer.stopAutorotate?.();objectPanoPlayer.setLocked(true);button.setPointerCapture?.(event.pointerId);const move=moveEvent=>{moveEvent.preventDefault();moveEvent.stopPropagation();const area=panoramaHost.getBoundingClientRect(),angle=objectPanoPlayer.getPositionAngles(moveEvent.clientX-area.left,moveEvent.clientY-area.top),panDelta=normalizeObjectPan(Number(angle.pan)-Number(first.pan));hotspot.pan=normalizeObjectPan(startPan-panDelta);hotspot.tilt=Math.max(-90,Math.min(90,Number(angle.tilt)+tiltOffset));objectPanoPlayer.updateHotspot('cms_hs_'+index,hotspot.pan,hotspot.tilt);setPanoramaStatus('Hotspot '+hotspot.id+' · Pan '+hotspot.pan.toFixed(2)+'° · Tilt '+hotspot.tilt.toFixed(2)+'°');};const end=endEvent=>{endEvent?.preventDefault();endEvent?.stopPropagation();objectPanoDragging=false;objectPanoPlayer.setLocked(false);commitHistory(historyBefore,'Geser hotspot '+hotspot.id);button.removeEventListener('pointermove',move);button.removeEventListener('pointerup',end);button.removeEventListener('pointercancel',end);setPanoramaStatus('Posisi hotspot '+hotspot.id+' diperbarui. Tekan Simpan untuk menerapkan.');};button.addEventListener('pointermove',move);button.addEventListener('pointerup',end);button.addEventListener('pointercancel',end);});
     }
     function renderWebElementMarkers() {
         if (!objectPanoPlayer || !objectPanoReady || objectPanoDragging || !panoramaSelect) return;
         objectPanoPlayer.removeHotspots();
-        editableObjectHotspots.forEach((hotspot,index)=>{if(String(hotspot.panoNodeId).toLowerCase()!==panoramaSelect.value.toLowerCase())return;const marker=document.createElement('button');marker.type='button';marker.className='object-web-pin object-hotspot-pin';marker.title='Hotspot '+hotspot.id;marker.innerHTML='<i>↗</i><span>'+escapeObjectHtml(hotspot.title||hotspot.id)+'</span>';attachObjectHotspotDrag(marker,hotspot,index);objectPanoPlayer.addHotspot('cms_hs_'+index,normalizeObjectPan(hotspot.pan),Number(hotspot.tilt),marker);});
+        editableObjectHotspots.forEach((hotspot,index)=>{if(String(hotspot.panoNodeId).toLowerCase()!==panoramaSelect.value.toLowerCase())return;const marker=document.createElement('button');marker.type='button';const kind=objectHotspotKind(hotspot);marker.className='object-web-pin object-hotspot-pin pin-'+kind;marker.title=(kind==='drone'?'Drone ':'Hotspot ')+hotspot.id;marker.innerHTML='<i>'+objectPinIcons[kind]+'</i><span>'+escapeObjectHtml(hotspot.title||hotspot.id)+'</span>';attachObjectHotspotDrag(marker,hotspot,index);objectPanoPlayer.addHotspot('cms_hs_'+index,normalizeObjectPan(hotspot.pan),Number(hotspot.tilt),marker);});
         editableWebElements.forEach((element, index) => {
             if (String(element.panoNodeId).toLowerCase() !== panoramaSelect.value.toLowerCase()) return;
-            const marker = document.createElement('button'); marker.type = 'button'; marker.className = 'object-web-pin' + (index === selectedWebElement ? ' selected' : ''); marker.title = element.targetID; marker.innerHTML = '<i>＋</i><span>' + escapeObjectHtml(element.targetID) + '</span>';
+            const marker = document.createElement('button'); marker.type = 'button'; marker.className = 'object-web-pin pin-info' + (index === selectedWebElement ? ' selected' : ''); marker.title = 'Objek Info ' + element.targetID; marker.innerHTML = '<i>' + objectPinIcons.info + '</i><span>' + escapeObjectHtml(element.targetID) + '</span>';
             marker.addEventListener('click', event => { event.stopPropagation(); selectWebElement(index); }); attachWebElementDrag(marker, element, index);
             objectPanoPlayer.addHotspot('cms_we_' + index, normalizeObjectPan(element.pan), Number(element.tilt), marker);
         });
@@ -2015,31 +2579,203 @@ if (objectList) {
         const base = new URL(objectTourBaseUrl, document.baseURI);
         if (!window.pano2vrPlayer) await new Promise((resolve, reject) => { const script = document.createElement('script'); script.src = new URL('pano2vr_player.js', base).href; script.onload = resolve; script.onerror = () => reject(new Error('pano2vr_player.js tidak dapat dimuat.')); document.head.appendChild(script); });
         if (!objectPanoXml) { const response = await fetch(new URL('pano.xml?v=' + Date.now(), base), {cache:'no-store'}); if (!response.ok) throw new Error('pano.xml tidak dapat dibaca.'); objectPanoXml = new DOMParser().parseFromString(await response.text(), 'application/xml'); if (objectPanoXml.querySelector('parsererror')) throw new Error('pano.xml tidak valid.'); }
-        if (!objectPanoPlayer) objectPanoPlayer = new pano2vrPlayer('objectPanoramaHost');
+        if (!objectPanoPlayer) { objectPanoPlayer = new pano2vrPlayer('objectPanoramaHost'); objectPanoPlayer.addListener('changenode', finishObjectSwitch); }
         const config = objectPanoXml.cloneNode(true); config.documentElement.setAttribute('start', panoramaSelect.value);
         config.querySelectorAll('hotspots,media,animation,autorotate').forEach(node => node.remove());
         config.querySelectorAll('input[leveltileurl],input[previewurl]').forEach(input => ['leveltileurl','previewurl'].forEach(attribute => { const value=input.getAttribute(attribute); if(value) input.setAttribute(attribute,new URL(value.replace(/^\.\//,''),base).href); }));
         config.querySelectorAll('control').forEach(control => { control.setAttribute('lockedmouse','0'); control.setAttribute('lockedwheel','0'); control.setAttribute('lockedkeyboard','0'); });
         objectPanoReady = false; objectPanoPlayer.readConfigString(new XMLSerializer().serializeToString(config));
-        window.setTimeout(() => { objectPanoReady = true; document.getElementById('objectPanoramaLoading').hidden = true; renderWebElementMarkers(); setPanoramaStatus('Panorama siap. Tarik pin untuk memindahkan WebElement.'); }, 350);
+        window.setTimeout(() => { objectPanoReady = true; document.getElementById('objectPanoramaLoading').hidden = true; renderWebElementMarkers(); setPanoramaStatus('Panorama siap. Tarik pin untuk memindahkan WebElement.'); flushPendingLook(); }, 350);
+    }
+    function finishObjectSwitch() {
+        if (!objectSwitching) return;
+        objectSwitching = false; clearTimeout(objectSwitchTimer); objectPanoReady = true;
+        renderWebElementMarkers(); setPanoramaStatus('Panorama siap. Tarik pin untuk memindahkan WebElement.');
+        flushPendingLook();
+    }
+    // Pindah panorama di player yang sama (transisi crossdissolve bawaan pano.xml) tanpa memuat ulang konfigurasi, supaya mulus tanpa layar "Memuat…".
+    function switchObjectPanorama() {
+        objectSwitching = true; objectPanoReady = false; objectPanoPlayer.removeHotspots();
+        setPanoramaStatus('Berpindah panorama…');
+        clearTimeout(objectSwitchTimer); objectSwitchTimer = setTimeout(finishObjectSwitch, 2000);
+        objectPanoPlayer.openNext('{' + panoramaSelect.value + '}', '');
     }
     function renderObjectForm() {
         const record = objectRecords[selectedObject];
-        if (!record) { objectForm.innerHTML='<div class="object-empty">Pilih atau tambahkan object informasi.</div>'; return; }
+        if (!record) {
+            const orphan = editableWebElements[selectedWebElement];   // pin terpilih tanpa data Object Info
+            objectForm.innerHTML = orphan
+                ? '<div class="object-empty oi-orphan"><b>' + escapeObjectHtml(orphan.targetID) + '</b><span>Pin ini belum punya data Object Informasi (judul, teks, dan terjemahan).</span><span class="oi-orphan-actions"><button type="button" class="translate" data-create-record>Buat data Object Info</button><button type="button" class="danger" data-delete-orphan>Hapus pin</button></span></div>'
+                : '<div class="object-empty">Pilih atau tambahkan object informasi.</div>';
+            return;
+        }
         const input=(field,label,cls='')=>'<label class="'+cls+'"><span>'+label+'</span><input data-object-field="'+field+'" value="'+escapeObjectHtml(record[field])+'"></label>';
         const select=(field,label,values)=>'<label><span>'+label+'</span><select data-object-field="'+field+'">'+values.map(value=>'<option '+(record[field]===value?'selected':'')+'>'+value+'</option>').join('')+'</select></label>';
         const translations=Object.entries(voiceLabels).map(([code,label])=>'<label><span>'+label+'</span><textarea rows="3" data-object-lang="'+code+'">'+escapeObjectHtml(record.labelTeks?.[code]||'')+'</textarea></label>').join('');
         const previewUrl=record.infoID ? oiPreviewBaseUrl+'?info='+encodeURIComponent(record.infoID)+'&lang=id' : '';
-        objectForm.innerHTML='<div class="object-form-head"><label class="object-active-toggle"><span>Object</span><span class="toggle-control"><input type="checkbox" data-object-active aria-label="Aktifkan object" '+(record.isActive?'checked':'')+'><i aria-hidden="true"></i></span></label><div class="object-form-actions"><button type="button" class="translate" data-translate-object>✦ Auto Translate</button><button type="button" class="danger" data-delete-object>Hapus</button></div></div><div class="object-detail-layout"><div><div class="object-fields">'+input('route_key','Route Key','span2')+input('title','Title')+input('nodeID','Node ID')+select('targetID','Target ID',Array.from({length:10},(_,index)=>'Element'+String(index+1).padStart(2,'0')))+input('infoID','Info ID')+select('arah','Arah',['luruskanan','luruskiri','kanan','kiri'])+input('ukuran','Ukuran')+'</div><div class="object-translations">'+translations+'</div></div><aside class="object-preview"><header><strong>Preview Info</strong><a href="'+escapeObjectHtml(previewUrl)+'" target="_blank" rel="noopener">Buka ↗</a></header>'+(previewUrl?'<iframe src="'+escapeObjectHtml(previewUrl)+'" title="Preview Object Informasi"></iframe>':'<div>Isi Info ID untuk melihat preview.</div>')+'</aside></div>';
+        objectForm.innerHTML='<div class="object-form-head"><label class="object-active-toggle"><span>Object</span><span class="toggle-control"><input type="checkbox" data-object-active aria-label="Aktifkan object" '+(record.isActive?'checked':'')+'><i aria-hidden="true"></i></span></label><div class="object-form-actions"><button type="button" class="translate" data-translate-object>✦ Auto Translate</button></div></div><div class="object-detail-layout"><div><div class="object-fields">'+input('route_key','Route Key','span2')+input('title','Title')+input('nodeID','Node ID')+select('targetID','Target ID',Array.from({length:10},(_,index)=>'Element'+String(index+1).padStart(2,'0')))+input('infoID','Info ID')+select('arah','Arah',['luruskanan','luruskiri','kanan','kiri'])+input('ukuran','Ukuran')+'</div><div class="object-translations">'+translations+'</div></div><aside class="object-preview"><header><strong>Preview Info</strong><a href="'+escapeObjectHtml(previewUrl)+'" target="_blank" rel="noopener">Buka ↗</a></header>'+(previewUrl?'<iframe src="'+escapeObjectHtml(previewUrl)+'" title="Preview Object Informasi"></iframe>':'<div>Isi Info ID untuk melihat preview.</div>')+'</aside></div>';
     }
-    objectList.addEventListener('click',event=>{const item=event.target.closest('[data-object]');if(item){selectedObject=Number(item.dataset.object);renderObjectList();}});
+    // Pusat area panorama yang benar-benar terlihat (di antara panel daftar kiri dan form kanan) relatif terhadap pusat panggung, dalam piksel.
+    // Memakai posisi tata letak akhir (bukan posisi saat animasi buka/tutup panel), supaya hasilnya tetap tepat walau panel baru dibuka.
+    function visibleStageOffset() {
+        const wrap = document.getElementById('oiStageWrap'); if (!wrap) return 0;
+        let left = 0, right = wrap.clientWidth;
+        if (innerWidth >= 1100 && !wrap.classList.contains('oi-empty')) {
+            const panel = wrap.querySelector('.object-list-panel');
+            if (panel && !wrap.classList.contains('hide-left')) left = Math.max(left, panel.offsetLeft + panel.offsetWidth);
+            if (!wrap.classList.contains('hide-right')) right = Math.min(right, objectForm.offsetLeft);
+        }
+        if (right - left < 160) return 0;
+        return (left + right) / 2 - wrap.clientWidth / 2;
+    }
+    // Putar pandangan editor (animasi singkat) agar pin berada di tengah area yang terlihat; zoom tidak diubah.
+    function lookAtElement(element, animate = true) {
+        if (!objectPanoPlayer || !objectPanoReady || !element) return;
+        cancelAnimationFrame(lookTimer);
+        const host = panoramaHost.getBoundingClientRect(); if (!host.width || !host.height) return;
+        const offset = visibleStageOffset();
+        const middle = objectPanoPlayer.getPositionAngles(host.width / 2, host.height / 2), shifted = objectPanoPlayer.getPositionAngles(host.width / 2 + offset, host.height / 2);
+        // getPositionAngles memakai arah pan terbalik terhadap pan WebElement (naik ke kanan, sedangkan pan WebElement turun ke kanan), jadi selisihnya DITAMBAH.
+        const shift = normalizeObjectPan(Number(shifted.pan) - Number(middle.pan));
+        const toPan = normalizeObjectPan(Number(element.pan) + (Number.isFinite(shift) ? shift : 0));
+        const toTilt = Math.max(-85, Math.min(85, Number(element.tilt)));
+        const fromPan = Number(objectPanoPlayer.getPan()), fromTilt = Number(objectPanoPlayer.getTilt());
+        const deltaPan = normalizeObjectPan(toPan - fromPan), deltaTilt = toTilt - fromTilt;
+        const apply = (pan, tilt) => { objectPanoPlayer.setPan(pan); objectPanoPlayer.setTilt(tilt); };
+        objectPanoPlayer.stopAutorotate?.();
+        if (!animate || window.matchMedia('(prefers-reduced-motion: reduce)').matches || (Math.abs(deltaPan) < .05 && Math.abs(deltaTilt) < .05)) { apply(toPan, toTilt); return; }
+        const startedAt = performance.now(), duration = Math.min(750, 300 + Math.hypot(deltaPan, deltaTilt) * 5);
+        const step = now => {
+            const t = Math.min(1, (now - startedAt) / duration), eased = 1 - Math.pow(1 - t, 3);
+            apply(normalizeObjectPan(fromPan + deltaPan * eased), fromTilt + deltaTilt * eased);
+            if (t < 1 && !objectPanoDragging) lookTimer = requestAnimationFrame(step);
+        };
+        lookTimer = requestAnimationFrame(step);
+    }
+    function flushPendingLook() {
+        if (!pendingLook) return;
+        const element = pendingLook; pendingLook = null;
+        requestAnimationFrame(() => lookAtElement(element, false));
+    }
+    // Klik card di daftar → pandangan langsung menghadap pin object itu (tanpa perlu menggeser panorama), pin ikut ditandai terpilih.
+    function focusObjectPin(record) {
+        if (!record) return;
+        const element = editableWebElements.find(item => recordMatchesElement(record, item));
+        if (!element) { setPanoramaStatus('Card ini belum punya pin di panorama. Tambahkan lewat tombol Objek Info.'); return; }
+        selectedWebElement = editableWebElements.indexOf(element);
+        if (objectSwitching || !objectPanoReady) { pendingLook = element; return; }   // panorama masih berpindah: arahkan begitu selesai
+        renderWebElementMarkers();
+        requestAnimationFrame(() => lookAtElement(element));   // setelah panel kanan selesai diatur ulang
+    }
+    // Pengguna mulai menggeser/men-zoom panorama sendiri: hentikan putaran otomatis agar tidak berebut kendali.
+    ['pointerdown', 'wheel'].forEach(type => panoramaHost?.addEventListener(type, () => cancelAnimationFrame(lookTimer), {capture: true, passive: true}));
+    // Klik object di daftar → editor panorama di atas langsung pindah ke panorama object itu (preview cepat).
+    const objectPanoramaOption = record => {
+        const wanted = String(record?.nodeID || '').replace(/[{}]/g, '').trim().toLowerCase();
+        return wanted && panoramaSelect ? Array.from(panoramaSelect.options).find(item => item.value.toLowerCase() === wanted || String(item.dataset.publicNode || '').toLowerCase() === wanted) || null : null;
+    };
+    function showObjectPanorama(record) {
+        if (!panoramaSelect || !record) return;
+        const option = objectPanoramaOption(record);
+        if (!option || panoramaSelect.value === option.value) return;
+        panoramaSelect.value = option.value;
+        panoramaSelect.dispatchEvent(new Event('change'));
+    }
+    objectForm.addEventListener('click', event => {
+        const element = editableWebElements[selectedWebElement];
+        if (event.target.closest('[data-create-record]')) { if (element) createRecordForElement(element); return; }
+        if (event.target.closest('[data-delete-orphan]') && element) deleteObjectInfo({element});
+    });
+    // ikon sampah di card (ditangani lebih dulu agar tidak ikut memilih card)
+    objectList.addEventListener('click', event => {
+        const trash = event.target.closest('[data-trash]'); if (!trash) return;
+        event.preventDefault(); event.stopPropagation();
+        deleteObjectInfo({record: objectRecords[Number(trash.dataset.trash)]});
+    }, true);
+    objectList.addEventListener('keydown', event => {
+        const trash = event.target.closest?.('[data-trash]'); if (!trash || (event.key !== 'Enter' && event.key !== ' ')) return;
+        event.preventDefault(); event.stopPropagation();
+        deleteObjectInfo({record: objectRecords[Number(trash.dataset.trash)]});
+    }, true);
+    objectList.addEventListener('click',event=>{const item=event.target.closest('[data-object]');if(item){if(Number(item.dataset.object)!==selectedObject&&objectsDirty())saveObjectData(true);selectedObject=Number(item.dataset.object);renderObjectList();showObjectPanorama(objectRecords[selectedObject]);focusObjectPin(objectRecords[selectedObject]);const studio=document.getElementById('oiStageWrap');if(studio?.classList.contains('hide-right')){studio.classList.remove('hide-right');const arrow=studio.querySelector('[data-oi-collapse="right"]');if(arrow)arrow.textContent='›';}}});
+    // Isi label tiap bahasa otomatis dari Title saat diketik (format "Klik untuk Informasi </br>Judul"), lalu nama diterjemahkan live per bahasa.
+    // Label yang sudah diubah manual tidak ditimpa.
+    const objectLabelTemplates = (title, names = {}) => {
+        const name = String(title || '').trim();
+        const local = code => String(names[code] || name).trim();
+        return name ? {
+            id: 'Klik untuk Informasi </br>' + name,
+            en: 'Click for Information on </br>' + local('en'),
+            zh: '点击了解</br>' + local('zh') + '的信息',
+            ar: 'انقر للحصول على معلومات عن </br>' + local('ar')
+        } : {};
+    };
+    const objectTranslateTargets = <?= json_encode(array_map(static fn(array $language): string => $language['translate'], array_filter($languageRegistry, static fn(string $code): bool => $code !== 'id', ARRAY_FILTER_USE_KEY)), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    const objectAutoLabels = new WeakMap(), objectTranslateTimers = new WeakMap(), objectNameCache = new Map();
+    function flashObjectLabel(field) {
+        field.classList.remove('label-flash'); void field.offsetWidth; field.classList.add('label-flash');
+        field.addEventListener('animationend', () => field.classList.remove('label-flash'), {once:true});
+    }
+    // Tulis label otomatis hanya bila kolom kosong, masih berisi hasil otomatis sebelumnya, atau sama dengan templat judul lama.
+    function setAutoObjectLabel(record, code, value, legacy = '') {
+        const auto = objectAutoLabels.get(record) || {}; objectAutoLabels.set(record, auto);
+        const current = String(record.labelTeks?.[code] || '');
+        if (current.trim() !== '' && current !== (auto[code] ?? '') && current !== legacy) return false;
+        record.labelTeks = record.labelTeks || {};
+        record.labelTeks[code] = value; auto[code] = value;
+        const field = record === objectRecords[selectedObject] ? objectForm.querySelector('[data-object-lang="' + code + '"]') : null;   // jangan menulis ke form object lain bila pengguna sudah pindah
+        if (field && field.value !== value) { field.value = value; return field; }
+        return true;
+    }
+    async function translateObjectName(name, code) {
+        const key = code + '|' + name;
+        if (objectNameCache.has(key)) return objectNameCache.get(key);
+        const response = await fetch('https://api.mymemory.translated.net/get?q=' + encodeURIComponent(name) + '&langpair=id|' + objectTranslateTargets[code]);
+        const result = await response.json();
+        const text = String(result.responseData?.translatedText || '').trim();
+        if (!response.ok || !text || /MYMEMORY WARNING|QUERY LENGTH LIMIT/i.test(text)) throw new Error('gagal');
+        objectNameCache.set(key, text); return text;
+    }
+    function scheduleLiveTranslate(record) {
+        clearTimeout(objectTranslateTimers.get(record));
+        const name = String(record.title || '').trim(); if (!name) return;
+        objectTranslateTimers.set(record, setTimeout(async () => {
+            const codes = Object.keys(objectTranslateTargets).filter(code => code in objectLabelTemplates(name));
+            const fields = {}; codes.forEach(code => { const field = objectForm.querySelector('[data-object-lang="' + code + '"]'); if (field && record === objectRecords[selectedObject]) { fields[code] = field; field.classList.add('is-translating'); } });
+            const names = {};
+            await Promise.all(codes.map(async code => { try { names[code] = await translateObjectName(name, code); } catch (_) {} }));
+            Object.values(fields).forEach(field => field.classList.remove('is-translating'));
+            if (String(record.title || '').trim() !== name) return;   // judul berubah lagi saat menunggu → hasil basi dibuang
+            const templates = objectLabelTemplates(name, names), raw = objectLabelTemplates(name);
+            codes.forEach(code => { if (!(code in names)) return; const written = setAutoObjectLabel(record, code, templates[code], raw[code]); if (written && written !== true) flashObjectLabel(written); });
+        }, 650));
+    }
+    function autoFillObjectLabels(record, previousTitle) {
+        const next = objectLabelTemplates(record.title), previous = objectLabelTemplates(previousTitle);
+        Object.keys(voiceLabels).forEach(code => {
+            if (!(code in next) && !(code in previous)) return;
+            setAutoObjectLabel(record, code, next[code] ?? '', previous[code] ?? '');
+        });
+        scheduleLiveTranslate(record);
+    }
+    // Info ID otomatis dari Title: huruf kecil, tanpa aksen, pemisah underscore ("Patung Gajah Mina" → patung_gajah_mina).
+    // Hanya diisi bila kolomnya kosong atau masih hasil otomatis dari judul sebelumnya; Info ID yang diubah manual tidak ditimpa.
+    const infoIdFromTitle = title => String(title || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    function autoFillInfoId(record, previousTitle) {
+        const current = String(record.infoID || '').trim();
+        if (current !== '' && current !== infoIdFromTitle(previousTitle)) return;
+        const next = infoIdFromTitle(record.title);
+        if (next === current) return;
+        record.infoID = next;
+        const field = objectForm.querySelector('[data-object-field="infoID"]'); if (field) field.value = next;
+    }
     objectSearch.addEventListener('input',renderObjectList);
-    objectForm.addEventListener('input',event=>{const record=objectRecords[selectedObject];if(!record)return;if(event.target.dataset.objectField)record[event.target.dataset.objectField]=event.target.value;if(event.target.dataset.objectLang)record.labelTeks[event.target.dataset.objectLang]=event.target.value;if(event.target.hasAttribute('data-object-active'))record.isActive=event.target.checked;const item=objectList.querySelector('[data-object="'+selectedObject+'"]');if(item){item.querySelector('strong').textContent=record.labelTeks?.id||'Tanpa judul';item.querySelector('small').textContent=(record.route_key||'')+' · '+(record.nodeID||'Tanpa node');}});
+    objectForm.addEventListener('input',event=>{const record=objectRecords[selectedObject];if(!record)return;if(event.target.dataset.objectField||event.target.dataset.objectLang||event.target.hasAttribute('data-object-active'))trackTyping(event.target.hasAttribute('data-object-active')?'Ubah status object':'Edit object');if(event.target.dataset.objectField){const previousTitle=record.title;record[event.target.dataset.objectField]=event.target.value;if(event.target.dataset.objectField==='title'){autoFillObjectLabels(record,previousTitle);autoFillInfoId(record,previousTitle);}}if(event.target.dataset.objectLang)record.labelTeks[event.target.dataset.objectLang]=event.target.value;if(event.target.hasAttribute('data-object-active'))record.isActive=event.target.checked;if(event.target.hasAttribute('data-object-active')){renderObjectItems(true);return;}const item=objectList.querySelector('[data-object="'+selectedObject+'"]');if(item){item.querySelector('strong').textContent=objectDisplayName(record);item.querySelector('small').textContent=(record.route_key||'')+' · '+(record.nodeID||'Tanpa node');}});
     objectForm.addEventListener('click',async event=>{
         const translate = event.target.closest('[data-translate-object]');
         if (translate) {
             const record=objectRecords[selectedObject], source=(record?.labelTeks?.id||'').trim();
-            if (!source) { alert('Isi label bahasa Indonesia terlebih dahulu.'); return; }
+            if (!source) { cmsToast('Isi label bahasa Indonesia terlebih dahulu.'); return; }
             translate.disabled=true;translate.textContent='Menerjemahkan…';
             try {
                 for (const [code,target] of Object.entries(<?= json_encode(array_map(static fn(array $language): string => $language['translate'], array_filter($languageRegistry, static fn(string $code): bool => $code !== 'id', ARRAY_FILTER_USE_KEY)), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>)) {
@@ -2049,27 +2785,357 @@ if (objectList) {
                     record.labelTeks[code]=result.responseData.translatedText;
                 }
                 renderObjectForm();
-            } catch(error) { alert('Auto translate gagal: '+error.message);translate.disabled=false;translate.textContent='✦ Auto Translate'; }
+            } catch(error) { cmsToast('Auto translate gagal: '+error.message);translate.disabled=false;translate.textContent='✦ Auto Translate'; }
             return;
         }
-        if(event.target.closest('[data-delete-object]')&&await cuteConfirm({icon:'🧩',title:'Hapus object ini?',message:'Object akan dihapus dari daftar editor. Perubahan permanen setelah tombol Simpan ditekan.',action:'Ya, hapus object'})){objectRecords.splice(selectedObject,1);selectedObject=Math.min(selectedObject,objectRecords.length-1);renderObjectList();}
     });
-    document.getElementById('addObject').addEventListener('click',()=>{objectRecords.push(blankObject());selectedObject=objectRecords.length-1;objectSearch.value='';renderObjectList();});
-    panoramaSelect?.addEventListener('change',()=>{selectedWebElement=-1;document.getElementById('removeWebElement').disabled=true;document.getElementById('objectPanoramaLoading').hidden=false;ensureObjectPanoPlayer().catch(error=>setPanoramaStatus('Gagal: '+error.message));});
-    document.getElementById('addWebElement')?.addEventListener('click',()=>{if(!objectPanoReady)return setPanoramaStatus('Tunggu panorama selesai dimuat.');const used=editableWebElements.filter(item=>String(item.panoNodeId).toLowerCase()===panoramaSelect.value.toLowerCase()).map(item=>String(item.targetID).toLowerCase());let number=1,targetID;do{targetID='Element'+String(number++).padStart(2,'0');}while(used.includes(targetID.toLowerCase()));const element={nodeID:currentPublicNode(),panoNodeId:panoramaSelect.value,targetID,pan:Number(objectPanoPlayer.getPan()),tilt:Number(objectPanoPlayer.getTilt()),fov:31.53,width:3200,height:2400};editableWebElements.push(element);const record=blankObject();record.nodeID='{'+element.nodeID+'}';record.targetID=targetID;record.route_key=(element.nodeID+'-'+targetID).toLowerCase().replace(/[^a-z0-9_-]/g,'');objectRecords.push(record);selectedObject=objectRecords.length-1;objectSearch.value='';renderObjectList();selectWebElement(editableWebElements.length-1);setPanoramaStatus(targetID+' ditambahkan di tengah pandangan. Tarik pin untuk menggesernya, lalu tekan Simpan.');});
-    document.getElementById('removeWebElement')?.addEventListener('click',async()=>{const element=editableWebElements[selectedWebElement];if(!element||!await cuteConfirm({icon:'📍',title:'Hapus WebElement ini?',message:element.targetID+' akan dihapus dari pano.xml setelah disimpan. Data Object Informasi terkait tidak otomatis dihapus.',action:'Hapus pin'}))return;editableWebElements.splice(selectedWebElement,1);selectedWebElement=-1;document.getElementById('removeWebElement').disabled=true;renderWebElementMarkers();setPanoramaStatus('WebElement dihapus dari editor. Tekan Simpan untuk menerapkan.');});
-    document.getElementById('importWebElements').addEventListener('click',()=>{let added=0;detectedWebElements.forEach(element=>{const exists=objectRecords.some(record=>String(record.nodeID||'').replace(/[{}]/g,'').toLowerCase()===String(element.nodeID).toLowerCase()&&String(record.targetID||'').toLowerCase()===String(element.targetID).toLowerCase());if(exists)return;const record=blankObject();record.nodeID='{'+element.nodeID+'}';record.targetID=element.targetID;record.route_key=(element.nodeID+'-'+element.targetID).toLowerCase().replace(/[^a-z0-9_-]/g,'');objectRecords.push(record);added++;});if(added){selectedObject=objectRecords.length-added;objectSearch.value='';renderObjectList();}document.getElementById('objectProgress').textContent=added+' WebElement baru ditambahkan; simpan untuk menerapkan.';});
-    document.getElementById('saveObjects').addEventListener('click',async function(){this.disabled=true;const progress=document.getElementById('objectProgress');progress.textContent='Menyimpan Object Informasi, hotspot, dan WebElement…';try{const response=await fetch(location.href,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({csrf:voiceCsrf,id_lokasi:currentLocationId,records:objectRecords,webElements:editableWebElements,hotspots:editableObjectHotspots})});const result=await response.json();if(!response.ok||!result.success)throw new Error(result.message||'Gagal menyimpan.');progress.textContent=result.message;}catch(error){progress.textContent='Gagal: '+error.message;}finally{this.disabled=false;}});
+    panoramaSelect?.addEventListener('change',()=>{pendingLook=null;selectedWebElement=-1;syncDeleteButton();if(objectPanoPlayer&&(objectPanoReady||objectSwitching)){switchObjectPanorama();return;}document.getElementById('objectPanoramaLoading').hidden=false;ensureObjectPanoPlayer().catch(error=>setPanoramaStatus('Gagal: '+error.message));});
+    document.getElementById('addWebElement')?.addEventListener('click',()=>{if(!objectPanoReady)return setPanoramaStatus('Tunggu panorama selesai dimuat.');const used=editableWebElements.filter(item=>String(item.panoNodeId).toLowerCase()===panoramaSelect.value.toLowerCase()).map(item=>String(item.targetID).toLowerCase());const historyBefore=historySnapshot();let number=1,targetID;do{targetID='Element'+String(number++).padStart(2,'0');}while(used.includes(targetID.toLowerCase()));const element={nodeID:currentPublicNode(),panoNodeId:panoramaSelect.value,targetID,pan:Number(objectPanoPlayer.getPan()),tilt:Number(objectPanoPlayer.getTilt()),fov:31.53,width:3200,height:2400};editableWebElements.push(element);const record=blankObject();record.nodeID='{'+element.nodeID+'}';record.targetID=targetID;record.route_key=makeObjectRouteKey(element.nodeID,targetID);objectRecords.push(record);selectedObject=objectRecords.length-1;objectSearch.value='';renderObjectList();selectWebElement(editableWebElements.length-1);commitHistory(historyBefore,'Tambah '+targetID);setPanoramaStatus(targetID+' ditambahkan di tengah pandangan. Tarik pin untuk menggesernya, lalu tekan Simpan.');});
+    // Hapus Objek Info = satu kesatuan: pin WebElement di panorama + SEMUA card yang memakai pin itu (termasuk sisa duplikat), satu langkah,
+    // bisa diurungkan (Ctrl+Z) sebelum Simpan. Dipicu dari ikon sampah di card, atau tombol "Hapus pin" untuk pin yang belum punya card.
+    async function deleteObjectInfo({record = null, element = null} = {}) {
+        if (record && !element) element = editableWebElements.find(item => recordMatchesElement(record, item)) || null;
+        let records = element ? objectRecords.filter(item => recordMatchesElement(item, element)) : (record ? [record] : []);
+        if (record && !records.includes(record)) records.push(record);
+        // card nonaktif yang cuma duplikat dari card aktif pada pin yang sama: hapus card itu saja, pin tetap dipakai card aktifnya
+        let keepPin = false;
+        if (record && element && record.isActive === false && records.some(item => item !== record && item.isActive !== false)) { records = [record]; keepPin = true; }
+        if (!element && !records.length) return;
+        const name = records[0] ? objectDisplayName(record || records[0]) : element.targetID, others = records.length - 1;
+        const message = keepPin
+            ? '\u201c' + name + '\u201d adalah card duplikat (nonaktif) untuk pin ' + element.targetID + '. Hanya card ini yang dihapus; pin tetap dipakai card aktifnya.'
+            : (records.length ? '\u201c' + name + '\u201d akan dihapus' + (element ? ' beserta pin-nya (' + element.targetID + ')' : '') + (others > 0 ? ' dan ' + others + ' card lain yang memakai pin yang sama' : '') : 'Pin ' + element.targetID + ' (belum punya card) akan dihapus')
+              + '. Perubahan permanen setelah tombol Simpan ditekan; sebelum itu masih bisa diurungkan (Ctrl+Z).';
+        if (!await cuteConfirm({icon:'\ud83d\uddd1\ufe0f', title:'Hapus Objek Info ini?', message, action:'Ya, hapus'})) return;
+        const historyBefore = historySnapshot(), firstAt = Math.min(...records.map(item => objectRecords.indexOf(item)).filter(at => at >= 0), objectRecords.length);
+        if (element && !keepPin) { const at = editableWebElements.indexOf(element); if (at >= 0) editableWebElements.splice(at, 1); }
+        records.forEach(item => { const at = objectRecords.indexOf(item); if (at >= 0) objectRecords.splice(at, 1); });
+        selectedObject = objectRecords.length ? Math.max(0, Math.min(firstAt, objectRecords.length - 1)) : -1;
+        selectedWebElement = -1; renderObjectList(); renderWebElementMarkers();
+        commitHistory(historyBefore, 'Hapus Objek Info ' + name);
+        setPanoramaStatus((keepPin ? 'Card duplikat dihapus' : 'Objek Info dihapus (pin + card)') + '. Tekan Simpan untuk menerapkan, atau Urungkan (Ctrl+Z) untuk mengembalikan.');
+        document.getElementById('objectProgress').textContent = '\u201c' + name + '\u201d dihapus \u00b7 tekan \u21b6 Urungkan untuk mengembalikan';
+    }
+    // ---- Urungkan / Ulangi (Ctrl+Z / Ctrl+Y): snapshot object, WebElement, dan posisi hotspot.
+    const historyUndo = [], historyRedo = [], HISTORY_LIMIT = 60;
+    let typingBefore = null, typingLabel = '', typingTimer = 0;
+    const undoButton = document.getElementById('oiUndo'), redoButton = document.getElementById('oiRedo');
+    function historySnapshot() { return JSON.stringify({objectRecords, editableWebElements, editableObjectHotspots}); }
+    function refreshHistoryButtons() {
+        refreshSaveState();
+        [[undoButton, historyUndo, 'Urungkan', 'Ctrl+Z', 'Tidak ada yang bisa diurungkan'], [redoButton, historyRedo, 'Ulangi', 'Ctrl+Y', 'Tidak ada yang bisa diulang']].forEach(([button, stack, verb, key, empty]) => {
+            if (!button) return;
+            button.disabled = !stack.length;
+            button.title = stack.length ? verb + ': ' + stack[stack.length - 1].label + ' (' + key + ')' : empty;
+            button.dataset.count = stack.length ? String(stack.length) : '';
+        });
+    }
+    function flushTyping() {
+        if (typingBefore === null) return;
+        clearTimeout(typingTimer);
+        const before = typingBefore; typingBefore = null;
+        if (before !== historySnapshot()) { historyUndo.push({state:before, label:typingLabel}); if (historyUndo.length > HISTORY_LIMIT) historyUndo.shift(); historyRedo.length = 0; }
+        refreshHistoryButtons();
+    }
+    // Ketikan beruntun digabung jadi satu langkah riwayat (jeda 1 detik).
+    function trackTyping(label) {
+        if (typingBefore === null) { typingBefore = historySnapshot(); typingLabel = label; }
+        clearTimeout(typingTimer); typingTimer = setTimeout(flushTyping, 1000); refreshSaveState();
+    }
+    function commitHistory(before, label) {
+        flushTyping();
+        if (before === historySnapshot()) return;
+        historyUndo.push({state:before, label}); if (historyUndo.length > HISTORY_LIMIT) historyUndo.shift();
+        historyRedo.length = 0; refreshHistoryButtons();
+    }
+    function restoreHistory(state) {
+        const data = JSON.parse(state), previousRecords = objectRecords;
+        objectRecords = data.objectRecords; editableWebElements = data.editableWebElements; editableObjectHotspots = data.editableObjectHotspots;
+        if (objectRecords.length > previousRecords.length) {   // object yang dikembalikan langsung dipilih
+            const index = objectRecords.findIndex((record, i) => !previousRecords[i] || JSON.stringify(previousRecords[i]) !== JSON.stringify(record));
+            selectedObject = index >= 0 ? index : objectRecords.length - 1;
+        } else selectedObject = Math.max(0, Math.min(selectedObject, objectRecords.length - 1));
+        selectedWebElement = -1;
+        objectSearch.value = ''; renderObjectList(); renderWebElementMarkers();
+    }
+    function stepHistory(from, to, verb) {
+        flushTyping();
+        const entry = from.pop(); if (!entry) return;
+        to.push({state:historySnapshot(), label:entry.label});
+        restoreHistory(entry.state); refreshHistoryButtons();
+        const progress = document.getElementById('objectProgress'); if (progress) progress.textContent = verb + ': ' + entry.label;
+    }
+    const undoHistory = () => stepHistory(historyUndo, historyRedo, '\u21b6 Dibatalkan'), redoHistory = () => stepHistory(historyRedo, historyUndo, '\u21b7 Diulang');
+    undoButton?.addEventListener('click', undoHistory); redoButton?.addEventListener('click', redoHistory);
+    document.addEventListener('keydown', event => {
+        if (!(event.ctrlKey || event.metaKey) || event.altKey) return;
+        const target = event.target, key = event.key.toLowerCase();
+        if (target?.closest?.('input,textarea,select,[contenteditable="true"]')) return;   // biarkan undo teks bawaan browser di kolom isian
+        if (key === 'z' && !event.shiftKey) { event.preventDefault(); undoHistory(); }
+        else if (key === 'y' || (key === 'z' && event.shiftKey)) { event.preventDefault(); redoHistory(); }
+    });
+    // ---- Simpan: tombol, Ctrl+S, dan simpan otomatis saat berpindah object (hanya bila ada perubahan).
+    let lastSavedState = historySnapshot(), savingObjects = false, savePending = false;
+    const saveButton = document.getElementById('saveObjects');
+    const objectsDirty = () => historySnapshot() !== lastSavedState;
+    function refreshSaveState() {
+        if (!saveButton) return;
+        saveButton.classList.toggle('is-dirty', !savingObjects && objectsDirty());
+        saveButton.classList.toggle('is-saving', savingObjects);
+    }
+    // Perbarui indikator kelengkapan (kartu Lokasi aktif + tab Object Informasi) dari status yang dikirim server setelah simpan.
+    function applyLocationStatus(status) {
+        if (!status) return;
+        const card = document.querySelector('.sidebar-location-list .location.active');
+        if (card) {
+            card.dataset.score = String(status.score); card.classList.toggle('complete', !!status.complete);
+            const title = card.querySelector('.location-title');
+            if (title) {
+                title.querySelectorAll('i').forEach(node => node.remove());
+                (status.hints || []).forEach(text => { const hint = document.createElement('i'); hint.className = 'hint-info'; hint.dataset.tip = text; hint.dataset.state = 'hint'; hint.textContent = 'i'; title.append(hint); });
+                const badge = document.createElement('i');
+                if (status.complete) { badge.className = 'complete-badge'; badge.title = 'Semua komponen lengkap'; badge.textContent = '\u2713 Lengkap'; }
+                else { badge.className = 'progress-badge'; badge.title = status.issues || ''; badge.textContent = status.score + '%'; }
+                title.append(badge);
+            }
+            card.dataset.issues = status.issues || '';
+            let meta = card.querySelector('.loc-meta');
+            if ((status.chips || []).length) {
+                if (!meta) { meta = document.createElement('span'); meta.className = 'loc-meta'; meta.setAttribute('aria-label', 'Topik yang belum lengkap'); card.append(meta); }
+                meta.innerHTML = status.chips.map(chip => '<span class="loc-chip seg-' + escapeObjectHtml(chip.key) + ' lv-' + escapeObjectHtml(chip.level) + '" data-tip="' + escapeObjectHtml(chip.tip) + '" data-state="' + escapeObjectHtml(chip.state) + '" data-href="' + escapeObjectHtml(chip.href) + '" role="link" tabindex="0"><i></i>' + escapeObjectHtml(chip.label) + '</span>').join('');
+            } else meta?.remove();
+        }
+        const tab = document.querySelector('.location-tabs a[data-topic="object"]'), topic = status.object;
+        if (tab && topic) {
+            tab.dataset.state = topic.state; tab.dataset.level = topic.level || ''; tab.dataset.tip = topic.tip || '';
+            tab.querySelector('.tab-flag')?.remove();
+            const flag = document.createElement('b'); flag.className = 'tab-flag'; flag.setAttribute('aria-hidden', 'true');
+            if ((topic.level || '') === 'empty') { flag.textContent = '!'; tab.append(flag); }
+            else if (topic.hint) { flag.classList.add('is-info'); flag.textContent = 'i'; tab.append(flag); }
+        }
+    }
+    async function saveObjectData(auto = false) {
+        if (savingObjects) { savePending = true; return; }
+        if (auto && !objectsDirty()) return;
+        flushTyping();
+        const progress = document.getElementById('objectProgress'), sent = historySnapshot();
+        savingObjects = true; if (saveButton) saveButton.disabled = true; refreshSaveState();
+        progress.textContent = auto ? 'Menyimpan otomatis…' : 'Menyimpan Object Informasi, hotspot, dan WebElement…';
+        try {
+            const response = await fetch(location.href, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({csrf:voiceCsrf, id_lokasi:currentLocationId, records:objectRecords, webElements:editableWebElements, hotspots:editableObjectHotspots})});
+            const result = await response.json();
+            if (!response.ok || !result.success) throw new Error(result.message || 'Gagal menyimpan.');
+            lastSavedState = sent;
+            try { applyLocationStatus(result.status); } catch (statusError) { /* indikator saja; tidak boleh menggagalkan simpan */ }
+            progress.textContent = (auto ? '\u2713 Tersimpan otomatis \u00b7 ' : '\u2713 ') + result.message;
+        } catch (error) { progress.textContent = (auto ? 'Gagal simpan otomatis: ' : 'Gagal: ') + error.message; }
+        finally {
+            savingObjects = false; if (saveButton) saveButton.disabled = false; refreshSaveState();
+            if (savePending) { savePending = false; if (objectsDirty()) saveObjectData(true); }
+        }
+    }
+    saveButton?.addEventListener('click', () => saveObjectData(false));
+    document.addEventListener('keydown', event => {
+        if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === 's') { event.preventDefault(); saveObjectData(false); }
+    });
+    window.addEventListener('beforeunload', event => { if (objectsDirty()) { event.preventDefault(); event.returnValue = ''; } });
+    // Mode studio (panorama penuh + panel melayang): tombol sembunyikan panel & pesan status berupa toast yang hilang sendiri.
+    (() => {
+        const wrap = document.getElementById('oiStageWrap'); if (!wrap) return;
+        wrap.querySelectorAll('[data-oi-collapse]').forEach(button => button.addEventListener('click', () => {
+            const side = button.dataset.oiCollapse, hidden = wrap.classList.toggle('hide-' + side);
+            button.textContent = side === 'left' ? (hidden ? '›' : '‹') : (hidden ? '‹' : '›');
+        }));
+        // Pas satu layar: tinggi panorama = sisa tinggi jendela di bawah header, supaya halaman tidak perlu digulir.
+        const stage = document.getElementById('objectPanoramaStage'), section = wrap.closest('.object-editor'), status = wrap.parentElement.querySelector('.object-panorama-status'), shell = document.querySelector('main.shell');
+        let fitting = false;
+        const fit = () => {
+            if (fitting || !stage) return;
+            const root = document.documentElement;
+            if (innerWidth < 1100) { stage.style.height = ''; root.style.overflowY = ''; return; }
+            const px = value => parseFloat(value) || 0, sectionStyle = getComputedStyle(section), shellStyle = shell ? getComputedStyle(shell) : null;
+            const tail = px(sectionStyle.marginBottom) + (shellStyle ? px(shellStyle.paddingBottom) + px(shellStyle.marginBottom) : 0);
+            const before = stage.offsetHeight, MIN = 380;
+            stage.style.height = MIN + 'px';   // ukur dasar card pada tinggi minimum, lalu tambahkan seluruh sisa tinggi jendela
+            const bottom = section.getBoundingClientRect().bottom + scrollY + tail;
+            const height = Math.floor(MIN + innerHeight - bottom);
+            stage.style.height = Math.max(MIN, height) + 'px';
+            root.style.overflowY = height >= MIN ? 'hidden' : '';   // muat satu layar → kunci scroll halaman; jendela terlalu pendek → biarkan bisa digulir
+            if (height >= MIN && scrollY) scrollTo(0, 0);
+            if (stage.offsetHeight !== before) { fitting = true; setTimeout(() => { window.dispatchEvent(new Event('resize')); fitting = false; }, 30); }
+        };
+        document.body.classList.add('oi-fit');
+        window.addEventListener('resize', fit); window.addEventListener('load', fit); fit(); setTimeout(fit, 400); setTimeout(fit, 1500); if (document.fonts?.ready) document.fonts.ready.then(fit);
+        // Pesan status object (simpan, hapus, urungkan) tampil sebagai toast global: lihat atribut data-cms-toast pada #objectProgress.
+    })();
+    // ---- Pratinjau di tur: tur sungguhan (skin, Smart Kit, Object Info) langsung di panorama yang sedang dibuka editor.
+    (() => {
+        const button = document.getElementById('previewInTour'); if (!button || !objectTourBaseUrl) { button?.remove(); return; }
+        let modal = null, frame = null, titleBox = null, noteBox = null, openUrl = '';
+        // objek yang jadi sasaran pandangan: pin terpilih, atau objek terpilih di daftar, atau pin pertama di panorama ini
+        const targetElement = () => {
+            const node = panoramaSelect.value.toLowerCase(), inPano = item => item && String(item.panoNodeId).toLowerCase() === node;
+            let element = editableWebElements[selectedWebElement];
+            if (!inPano(element)) { const record = objectRecords[selectedObject]; element = record ? editableWebElements.find(item => inPano(item) && recordMatchesElement(record, item)) : undefined; }
+            return inPano(element) ? element : (editableWebElements.find(inPano) || null);
+        };
+        const buildUrl = () => {
+            const element = targetElement(), url = new URL(objectTourBaseUrl, document.baseURI);
+            url.search = '?cms_preview=' + Date.now();   // lewati cache index.html; pano.xml & data CMS sudah selalu diambil baru oleh tur
+            url.hash = '#' + [currentPublicNode() || panoramaSelect.value].concat(element ? [Number(element.pan).toFixed(2), Number(element.tilt).toFixed(2), '60'] : []).join(',');
+            return { href: url.href, element };
+        };
+        const close = () => { if (!modal) return; modal.classList.remove('open'); modal.setAttribute('aria-hidden', 'true'); document.body.classList.remove('oi-preview-open'); frame.src = 'about:blank'; };
+        const ensureModal = () => {
+            if (modal) return modal;
+            modal = document.createElement('div'); modal.className = 'oi-preview-modal'; modal.setAttribute('role', 'dialog'); modal.setAttribute('aria-modal', 'true'); modal.setAttribute('aria-hidden', 'true');
+            modal.innerHTML = '<div class="oi-preview-card"><header><div class="oi-preview-title"><strong></strong><small></small></div><div class="oi-preview-actions"><button type="button" data-oi-reload><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7"/><path d="M21 4v5h-5"/></svg>Muat ulang</button><a href="#" target="_blank" rel="noopener" data-oi-newtab><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>Buka di tab baru</a><button type="button" class="oi-preview-close" data-oi-close aria-label="Tutup pratinjau">\u00d7</button></div></header><iframe title="Pratinjau tur" allow="autoplay; fullscreen; gyroscope; accelerometer; magnetometer" allowfullscreen></iframe></div>';
+            document.body.append(modal);
+            frame = modal.querySelector('iframe'); titleBox = modal.querySelector('.oi-preview-title strong'); noteBox = modal.querySelector('.oi-preview-title small');
+            modal.addEventListener('click', event => { if (event.target === modal || event.target.closest('[data-oi-close]')) close(); });
+            modal.querySelector('[data-oi-reload]').addEventListener('click', () => { const next = buildUrl(); openUrl = next.href; frame.src = next.href; modal.querySelector('[data-oi-newtab]').href = next.href; });
+            document.addEventListener('keydown', event => { if (event.key === 'Escape' && modal.classList.contains('open')) close(); });
+            return modal;
+        };
+        button.addEventListener('click', async () => {
+            if (!objectPanoReady) return setPanoramaStatus('Tunggu panorama selesai dimuat.');
+            // tur hanya membaca data tersimpan: simpan dulu perubahan yang belum tersimpan supaya pratinjau sesuai dengan editor
+            button.disabled = true; button.classList.add('is-busy');
+            try {
+                for (let wait = 0; savingObjects && wait < 50; wait++) await new Promise(resolve => setTimeout(resolve, 100));
+                if (objectsDirty()) await saveObjectData(true);
+            } finally { button.disabled = false; button.classList.remove('is-busy'); }
+            const target = buildUrl(), unsaved = objectsDirty();
+            ensureModal(); openUrl = target.href; frame.src = target.href;
+            const option = panoramaSelect.selectedOptions[0];
+            titleBox.textContent = 'Pratinjau tur \u00b7 ' + (option ? option.textContent : panoramaSelect.value);
+            noteBox.textContent = unsaved ? 'Ada perubahan yang gagal tersimpan: pratinjau menampilkan versi tersimpan terakhir.' : (target.element ? 'Langsung menghadap ' + target.element.targetID + ' \u00b7 data yang tampil sudah tersimpan.' : 'Data yang tampil sudah tersimpan.');
+            noteBox.classList.toggle('is-warn', unsaved);
+            modal.querySelector('[data-oi-newtab]').href = target.href;
+            modal.classList.add('open'); modal.setAttribute('aria-hidden', 'false'); document.body.classList.add('oi-preview-open');
+        });
+    })();
     renderObjectList();
+    // Editor dibuka langsung di object aktif paling atas: panorama-nya dipilih dan pandangan menghadap pin-nya begitu panorama siap.
+    { const first = objectRecords[selectedObject], firstOption = objectPanoramaOption(first); if (firstOption) panoramaSelect.value = firstOption.value; if (first) focusObjectPin(first); }
     ensureObjectPanoPlayer().catch(error=>{document.getElementById('objectPanoramaLoading')?.setAttribute('hidden','');setPanoramaStatus('Gagal memuat editor panorama: '+error.message);});
 }
 
 const voiceLocation = document.getElementById('voiceLocation');
 
+// ---- Pemutar suara gaya "now playing": pil terang saat diam → pil kaca abu saat diputar, gelombang beresonansi,
+// dan kotak teks berubah jadi lirik karaoke (kata yang dibaca terisi bertahap, baris aktif di tengah) seperti Apple Music.
+let voAudioContext = null, voSubtitleOn = true;
+const voPlayers = new Set(), VO_BARS = 56;
+const voContext = () => { if (!voAudioContext) { const Context = window.AudioContext || window.webkitAudioContext; if (Context) voAudioContext = new Context(); } return voAudioContext; };
+const voFormat = seconds => { const total = Math.max(0, Math.floor(Number(seconds) || 0)); return Math.floor(total / 60) + ':' + String(total % 60).padStart(2, '0'); };
+const voSentences = text => (String(text || '').replace(/\s+/g, ' ').match(/[^.!?\u3002\uff01\uff1f\u061f\u2026]+[.!?\u3002\uff01\uff1f\u061f\u2026]*/g) || []).map(part => part.trim()).filter(Boolean);
+const VO_ICON_PLAY = '<svg class="vo-i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13a1 1 0 0 0 1.53.85l10-6.5a1 1 0 0 0 0-1.7l-10-6.5A1 1 0 0 0 8 5.5z"/></svg>';
+const VO_ICON_PAUSE = '<svg class="vo-i-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="5" width="4" height="14" rx="1.2"/><rect x="13.5" y="5" width="4" height="14" rx="1.2"/></svg>';
+const VO_ICON_UP = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>';
+
+function mountVoicePlayer(root, url, textarea) {
+    root.innerHTML = '<div class="vo-pill"><button type="button" class="vo-play" aria-label="Putar audio">' + VO_ICON_PLAY + VO_ICON_PAUSE + '</button>'
+        + '<div class="vo-wave" role="slider" aria-label="Posisi audio" tabindex="0">' + '<i></i>'.repeat(VO_BARS) + '</div>'
+        + '<span class="vo-time">0:00</span>'
+        + '<button type="button" class="vo-sub is-on" aria-label="Tampilkan / sembunyikan lirik" title="Tampilkan / sembunyikan lirik">' + VO_ICON_UP + '</button></div>';
+    const wrap = textarea.closest('.vo-text-wrap');
+    let lyrics = wrap.querySelector('.vo-lyrics');
+    if (!lyrics) { lyrics = document.createElement('div'); lyrics.className = 'vo-lyrics'; lyrics.setAttribute('aria-hidden', 'true'); lyrics.innerHTML = '<div class="vo-lyrics-clip"><div class="vo-lyrics-track"></div></div>'; wrap.append(lyrics); }
+    const track = lyrics.querySelector('.vo-lyrics-track');
+    const audio = new Audio(); audio.preload = 'metadata'; audio.src = url;
+    const playButton = root.querySelector('.vo-play'), wave = root.querySelector('.vo-wave'), bars = Array.from(wave.children);
+    const timeLabel = root.querySelector('.vo-time'), subButton = root.querySelector('.vo-sub');
+    let frame = 0, lastIndex = -1, analyser = null, levelData = null, peaks = null;
+    let lines = [], lineEnds = [], activeLine = -1;
+
+    // ---- gelombang
+    const heightOf = index => peaks ? 4 + peaks[index] * 26 : 5 + (Math.sin(index * 1.7) + 1) * 3;
+    const paintBars = () => bars.forEach((bar, index) => bar.style.setProperty('--h', heightOf(index).toFixed(1) + 'px'));
+    paintBars();
+    const idle = () => { timeLabel.textContent = voFormat(audio.duration); };
+    audio.addEventListener('loadedmetadata', idle);
+    fetch(url).then(response => response.ok ? response.arrayBuffer() : Promise.reject()).then(buffer => { const context = voContext(); return context ? context.decodeAudioData(buffer) : Promise.reject(); }).then(decoded => {
+        const channel = decoded.getChannelData(0), step = Math.max(1, Math.floor(channel.length / VO_BARS)), values = [];
+        for (let index = 0; index < VO_BARS; index++) { let peak = 0; for (let i = index * step, end = Math.min(channel.length, i + step); i < end; i += 8) peak = Math.max(peak, Math.abs(channel[i])); values.push(peak); }
+        const max = Math.max(...values, .001); peaks = values.map(value => Math.pow(value / max, .7)); paintBars();
+    }).catch(() => {});
+
+    // ---- lirik karaoke: tiap kalimat satu baris; isian warna bergerak MULUS (satu gradien per baris, bukan per kata) mengikuti waktu audio
+    const buildLyrics = () => {
+        const text = textarea.value, rtl = /[\u0600-\u06FF]/.test(text), sentences = voSentences(text);
+        lyrics.dir = rtl ? 'rtl' : 'ltr'; lyrics.style.setProperty('--fill-dir', rtl ? '270deg' : '90deg');
+        track.innerHTML = ''; lines = []; activeLine = -1;
+        sentences.forEach(sentence => {
+            const line = document.createElement('p'), span = document.createElement('span');
+            line.className = 'vo-line'; span.className = 'vo-text'; span.textContent = sentence; line.append(span);
+            line.style.setProperty('--p', '0%'); track.append(line); lines.push(line);
+        });
+        const total = sentences.reduce((sum, sentence) => sum + sentence.length + 1, 0) || 1; let run = 0;
+        lineEnds = sentences.map(sentence => (run += sentence.length + 1) / total);   // batas akhir tiap baris (pecahan 0..1 dari durasi)
+    };
+    const centerLine = index => {
+        const line = lines[index]; if (!line) return;
+        track.style.transform = 'translate3d(0,' + Math.round(lyrics.clientHeight / 2 - (line.offsetTop + line.offsetHeight / 2)) + 'px,0)';
+    };
+    const paintLyrics = progress => {
+        if (!lines.length) return;
+        let index = lineEnds.findIndex(end => progress <= end); if (index < 0) index = lines.length - 1;
+        if (index !== activeLine) {
+            lines.forEach((line, i) => { line.classList.toggle('is-active', i === index); line.classList.toggle('is-past', i < index); line.style.setProperty('--p', i < index ? '100%' : '0%'); });
+            activeLine = index; centerLine(index);
+        }
+        const start = index > 0 ? lineEnds[index - 1] : 0, span = lineEnds[index] - start || 1;
+        lines[index].style.setProperty('--p', (Math.max(0, Math.min(1, (progress - start) / span)) * 100).toFixed(2) + '%');
+    };
+    const syncLyrics = () => wrap.classList.toggle('is-lyrics', root.classList.contains('is-playing') && voSubtitleOn);
+    root._voSync = syncLyrics;
+
+    // ---- pemutaran
+    const tick = () => {
+        const duration = audio.duration || 0, progress = duration ? audio.currentTime / duration : 0, index = Math.min(VO_BARS, Math.floor(progress * VO_BARS));
+        if (index !== lastIndex) { bars.forEach((bar, i) => bar.classList.toggle('played', i < index)); lastIndex = index; }
+        timeLabel.textContent = voFormat(audio.currentTime);
+        let level = 0;
+        if (analyser) { analyser.getByteFrequencyData(levelData); let sum = 0; for (let i = 0; i < levelData.length; i++) sum += levelData[i]; level = sum / levelData.length / 255; }
+        else level = .35 + Math.abs(Math.sin(audio.currentTime * 7)) * .3;
+        root.style.setProperty('--lvl', Math.min(1, level * 1.6).toFixed(3));
+        bars.forEach((bar, i) => { const near = Math.abs(i - index); bar.style.transform = near <= 4 ? 'scaleY(' + (1 + Math.min(1, level * 1.8) * (1 - near / 5) * .9).toFixed(2) + ')' : ''; });
+        paintLyrics(progress);
+        if (!audio.paused) frame = requestAnimationFrame(tick);
+    };
+    const stop = () => { if (!audio.paused) audio.pause(); };
+    const connectAnalyser = () => {
+        if (analyser || audio._voConnected) return; audio._voConnected = true;
+        try {
+            const context = voContext(); if (!context) return;
+            const source = context.createMediaElementSource(audio); analyser = context.createAnalyser(); analyser.fftSize = 128; levelData = new Uint8Array(analyser.frequencyBinCount);
+            source.connect(analyser); analyser.connect(context.destination);
+        } catch (_) { analyser = null; }
+    };
+    playButton.addEventListener('click', async () => {
+        if (!audio.paused) { audio.pause(); return; }
+        voPlayers.forEach(other => { if (other !== stop) other(); });
+        const context = voContext(); if (context && context.state === 'suspended') { try { await context.resume(); } catch (_) {} }
+        connectAnalyser(); buildLyrics();
+        try { await audio.play(); } catch (error) { timeLabel.textContent = 'gagal'; }
+    });
+    audio.addEventListener('play', () => { root.classList.add('is-playing'); subButton.classList.toggle('is-on', voSubtitleOn); syncLyrics(); requestAnimationFrame(() => { centerLine(Math.max(0, activeLine)); }); cancelAnimationFrame(frame); frame = requestAnimationFrame(tick); });
+    const settle = reset => { cancelAnimationFrame(frame); root.classList.remove('is-playing'); syncLyrics(); root.style.setProperty('--lvl', '0'); bars.forEach(bar => { bar.style.transform = ''; }); if (reset) { audio.currentTime = 0; lastIndex = -1; bars.forEach(bar => bar.classList.remove('played')); } idle(); };
+    audio.addEventListener('pause', () => settle(false));
+    audio.addEventListener('ended', () => settle(true));
+    const seekTo = clientX => { const box = wave.getBoundingClientRect(); if (audio.duration) { audio.currentTime = Math.max(0, Math.min(1, (clientX - box.left) / box.width)) * audio.duration; lastIndex = -1; tick(); if (audio.paused) cancelAnimationFrame(frame); } };
+    wave.addEventListener('click', event => seekTo(event.clientX));
+    wave.addEventListener('keydown', event => { if (!audio.duration) return; if (event.key === 'ArrowRight') audio.currentTime = Math.min(audio.duration, audio.currentTime + 3); else if (event.key === 'ArrowLeft') audio.currentTime = Math.max(0, audio.currentTime - 3); else return; event.preventDefault(); lastIndex = -1; tick(); });
+    subButton.addEventListener('click', () => { voSubtitleOn = !voSubtitleOn; document.querySelectorAll('.vo-player').forEach(player => { player.querySelector('.vo-sub')?.classList.toggle('is-on', voSubtitleOn); player._voSync?.(); }); });
+    voPlayers.add(stop);
+}
+
 function renderVoiceTexts() {
     if (!voiceLocation) return;
     const data = voiceDatabase[voiceLocation.value];
     const container = document.getElementById('voiceLanguages');
+    voPlayers.forEach(function (stop) { stop(); }); voPlayers.clear();   // hentikan pemutar lama sebelum kartu dibuat ulang
     container.innerHTML = '';
     Object.entries(voiceCodes).forEach(function ([code, fileCode]) {
         const item = document.createElement('article');
@@ -2079,11 +3145,12 @@ function renderVoiceTexts() {
         const hasText = Boolean(text.trim());
         const audioUrl = activeProjectBaseUrl + encodeURIComponent(activeAssetsDirectory) + '/audio/' + encodeURIComponent(voiceLocation.value) + '/' + fileCode + '.mp3?v=' + Date.now();
         item.innerHTML = '<div class="voice-language-head"><span>' + voiceLabels[code] + ' → ' + fileCode + '.mp3</span><em class="voice-audio-status '+(exists?'exists':'')+'">'+(exists?'Tersedia':'Belum ada')+'</em></div>' +
-            '<textarea rows="4" data-voice-code="' + code + '"></textarea>' +
+            '<div class="vo-text-wrap"><textarea rows="4" data-voice-code="' + code + '"></textarea></div>' +
             '<div class="voice-language-actions">'+(!hasText?'<button type="button" class="translate" data-add-welcome="'+code+'" '+(code==='id'?'disabled title="Isi melalui editor lokasi"':'')+'>Tambah Welcome Text</button>':'<button type="button" class="save" data-generate-voice="'+code+'">'+(exists?'Generate Ulang':'Generate VO')+'</button>')+'</div>' +
-            '<audio controls preload="metadata" '+(exists?'src="'+audioUrl+'"':'')+'></audio>';
+            '<div class="vo-player'+(exists?'':' is-empty')+'">'+(exists?'':'<div class="vo-pill"><span class="vo-empty">Belum ada audio — buat dengan tombol Generate</span></div>')+'</div>';
         item.querySelector('textarea').value = text;
         container.appendChild(item);
+        if (exists) mountVoicePlayer(item.querySelector('.vo-player'), audioUrl, item.querySelector('textarea'));
     });
 }
 
@@ -2150,6 +3217,82 @@ if (voiceLocation) {
     });
 }
 
+// ---- Pemutar video gaya YouTube berwarna hijau: tombol play besar, bilah kontrol (progres, volume, kecepatan, layar penuh), kontrol menyembunyi otomatis
+function mountVideoPlayer(video) {
+    const I = {
+        play: '<svg viewBox="0 0 24 24"><path d="M8 5.5v13a1 1 0 0 0 1.53.85l10-6.5a1 1 0 0 0 0-1.7l-10-6.5A1 1 0 0 0 8 5.5z"/></svg>',
+        pause: '<svg viewBox="0 0 24 24"><rect x="6.5" y="5" width="4" height="14" rx="1.2"/><rect x="13.5" y="5" width="4" height="14" rx="1.2"/></svg>',
+        replay: '<svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.6-5.9"/><path d="M4 4v5h5"/></svg>',
+        vol: '<svg viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 19V5L7.5 9.5z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8.5 8.5 0 0 1 0 12"/></svg>',
+        mute: '<svg viewBox="0 0 24 24"><path d="M4 9.5v5h3.5L12 19V5L7.5 9.5z"/><path d="m16 9 5 6M21 9l-5 6"/></svg>',
+        full: '<svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
+        exit: '<svg viewBox="0 0 24 24"><path d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5"/></svg>'
+    };
+    video.controls = false; video.removeAttribute('controls'); video.playsInline = true; video.preload = 'metadata';
+    const shell = document.createElement('div'); shell.className = 'gv-player is-paused'; shell.tabIndex = 0; shell.hidden = true;
+    video.parentNode.insertBefore(shell, video); shell.append(video);
+    shell.insertAdjacentHTML('beforeend',
+        '<button type="button" class="gv-big" aria-label="Putar video"><span class="gv-big-btn">' + I.play + '</span></button><div class="gv-spinner" aria-hidden="true"></div><div class="gv-toast" aria-live="polite"></div>'
+        + '<div class="gv-bar"><div class="gv-progress" role="slider" tabindex="0" aria-label="Posisi video"><i class="gv-buf"></i><i class="gv-played"></i><i class="gv-knob"></i><span class="gv-tip">0:00</span></div>'
+        + '<div class="gv-row"><button type="button" class="gv-btn gv-play" aria-label="Putar">' + I.play + '</button>'
+        + '<div class="gv-vol"><button type="button" class="gv-btn gv-mute" aria-label="Bisukan">' + I.vol + '</button><input type="range" class="gv-vol-range" min="0" max="1" step="0.05" value="1" aria-label="Volume"></div>'
+        + '<span class="gv-time">0:00 / 0:00</span><span class="gv-spacer"></span>'
+        + '<button type="button" class="gv-btn gv-speed" aria-label="Kecepatan putar">1x</button><button type="button" class="gv-btn gv-full" aria-label="Layar penuh">' + I.full + '</button></div></div>');
+    const q = selector => shell.querySelector(selector);
+    const playBtn = q('.gv-play'), bigBtn = q('.gv-big'), progress = q('.gv-progress'), played = q('.gv-played'), buf = q('.gv-buf'), knob = q('.gv-knob'), tip = q('.gv-tip');
+    const timeLabel = q('.gv-time'), muteBtn = q('.gv-mute'), volRange = q('.gv-vol-range'), speedBtn = q('.gv-speed'), fullBtn = q('.gv-full'), toast = q('.gv-toast');
+    const fmt = seconds => { const total = Math.max(0, Math.floor(Number(seconds) || 0)); return Math.floor(total / 60) + ':' + String(total % 60).padStart(2, '0'); };
+    let frame = 0, hideTimer = 0, toastTimer = 0, dragging = false; const speeds = [1, 1.25, 1.5, 2, 0.5];
+
+    const sync = () => { shell.hidden = !video.getAttribute('src') || video.style.display === 'none'; };
+    new MutationObserver(sync).observe(video, {attributes: true, attributeFilter: ['src', 'style']}); sync();
+    const say = text => { toast.textContent = text; toast.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('show'), 900); };
+    const paint = () => {
+        const duration = video.duration || 0, ratio = duration ? video.currentTime / duration : 0;
+        played.style.width = (ratio * 100) + '%'; knob.style.left = (ratio * 100) + '%'; timeLabel.textContent = fmt(video.currentTime) + ' / ' + fmt(duration);
+        if (video.buffered.length) buf.style.width = (Math.min(1, video.buffered.end(video.buffered.length - 1) / (duration || 1)) * 100) + '%';
+        if (!video.paused && !dragging) frame = requestAnimationFrame(paint);
+    };
+    const toggle = () => { if (video.ended) video.currentTime = 0; video.paused ? video.play().catch(() => {}) : video.pause(); };
+    const wake = () => { shell.classList.remove('idle'); clearTimeout(hideTimer); if (!video.paused) hideTimer = setTimeout(() => shell.classList.add('idle'), 2600); };
+
+    video.addEventListener('loadedmetadata', () => { if (!video.currentTime) video.currentTime = 0.05; paint(); });   // tampilkan bingkai pertama sebagai poster
+    video.addEventListener('play', () => { shell.classList.remove('is-paused', 'is-ended'); playBtn.innerHTML = I.pause; playBtn.setAttribute('aria-label', 'Jeda'); cancelAnimationFrame(frame); frame = requestAnimationFrame(paint); wake(); });
+    video.addEventListener('pause', () => { shell.classList.add('is-paused'); playBtn.innerHTML = video.ended ? I.replay : I.play; playBtn.setAttribute('aria-label', 'Putar'); shell.classList.remove('idle'); paint(); });
+    video.addEventListener('ended', () => { shell.classList.add('is-ended'); playBtn.innerHTML = I.replay; paint(); });
+    video.addEventListener('waiting', () => shell.classList.add('is-loading')); video.addEventListener('playing', () => shell.classList.remove('is-loading')); video.addEventListener('canplay', () => shell.classList.remove('is-loading'));
+    video.addEventListener('progress', paint); video.addEventListener('timeupdate', () => { if (video.paused) paint(); });
+    video.addEventListener('volumechange', () => { muteBtn.innerHTML = video.muted || video.volume === 0 ? I.mute : I.vol; volRange.value = video.muted ? 0 : video.volume; });
+
+    bigBtn.addEventListener('click', toggle); playBtn.addEventListener('click', toggle);
+    video.addEventListener('click', toggle); video.addEventListener('dblclick', () => fullBtn.click());
+    muteBtn.addEventListener('click', () => { video.muted = !video.muted; });
+    volRange.addEventListener('input', () => { video.muted = false; video.volume = Number(volRange.value); });
+    speedBtn.addEventListener('click', () => { const next = speeds[(speeds.indexOf(video.playbackRate) + 1) % speeds.length]; video.playbackRate = next; speedBtn.textContent = next + 'x'; say('Kecepatan ' + next + 'x'); });
+    const fullState = () => { fullBtn.innerHTML = document.fullscreenElement === shell ? I.exit : I.full; shell.classList.toggle('is-full', document.fullscreenElement === shell); };
+    fullBtn.addEventListener('click', () => { if (document.fullscreenElement) document.exitFullscreen(); else shell.requestFullscreen?.().catch(() => {}); });
+    document.addEventListener('fullscreenchange', fullState);
+
+    // progres: klik / geser untuk lompat, tooltip waktu saat disorot
+    const seekFrom = clientX => { const box = progress.getBoundingClientRect(), ratio = Math.max(0, Math.min(1, (clientX - box.left) / box.width)); if (video.duration) { video.currentTime = ratio * video.duration; paint(); } };
+    progress.addEventListener('pointerdown', event => { dragging = true; progress.setPointerCapture(event.pointerId); shell.classList.add('scrubbing'); seekFrom(event.clientX); });
+    progress.addEventListener('pointermove', event => { const box = progress.getBoundingClientRect(), ratio = Math.max(0, Math.min(1, (event.clientX - box.left) / box.width)); tip.textContent = fmt(ratio * (video.duration || 0)); tip.style.left = (ratio * 100) + '%'; if (dragging) seekFrom(event.clientX); });
+    const endDrag = () => { if (!dragging) return; dragging = false; shell.classList.remove('scrubbing'); if (!video.paused) frame = requestAnimationFrame(paint); };
+    progress.addEventListener('pointerup', endDrag); progress.addEventListener('pointercancel', endDrag);
+
+    shell.addEventListener('pointermove', wake); shell.addEventListener('pointerleave', () => { if (!video.paused) shell.classList.add('idle'); });
+    shell.addEventListener('keydown', event => {
+        if (event.target.matches('input')) return;
+        const key = event.key.toLowerCase();
+        if (key === ' ' || key === 'k') { event.preventDefault(); toggle(); say(video.paused ? 'Putar' : 'Jeda'); }
+        else if (key === 'arrowright') { event.preventDefault(); video.currentTime = Math.min(video.duration || 0, video.currentTime + 5); say('+5 detik'); }
+        else if (key === 'arrowleft') { event.preventDefault(); video.currentTime = Math.max(0, video.currentTime - 5); say('\u22125 detik'); }
+        else if (key === 'm') { event.preventDefault(); video.muted = !video.muted; say(video.muted ? 'Senyap' : 'Suara menyala'); }
+        else if (key === 'f') { event.preventDefault(); fullBtn.click(); }
+        wake();
+    });
+}
+
 const videoLocation = document.getElementById('videoLocation');
 function refreshVideoStatus() {
     if (!videoLocation || !videoLocation.value) return;
@@ -2164,7 +3307,13 @@ function refreshVideoStatus() {
             videoUrl.searchParams.set('v', Date.now());
             return videoUrl.href;
         };
-        const missing = function () { status.textContent = 'Belum ada'; status.className = 'media-status missing'; preview.removeAttribute('src'); preview.style.display = 'none'; if (fileName) fileName.textContent = 'video/' + type + '.webm / .mp4'; };
+        const card = status.closest('.video-card'), note = document.getElementById(type + 'Note');
+        const missing = function () {
+            const optional = type === 'mobile';   // mobile opsional: kuning (perhatian), desktop wajib: merah
+            status.textContent = optional ? 'Belum ada \u00b7 opsional' : 'Belum ada'; status.className = 'media-status ' + (optional ? 'warn' : 'missing');
+            card?.classList.toggle('is-warn', optional); card?.classList.toggle('is-missing', !optional); if (note) note.hidden = !optional;
+            preview.removeAttribute('src'); preview.style.display = 'none'; if (fileName) fileName.textContent = 'video/' + type + '.webm / .mp4';
+        };
         // WebM diprioritaskan (sama dengan urutan di tur), lalu MP4.
         const probe = function (extensions) {
             if (!extensions.length) { missing(); return; }
@@ -2172,6 +3321,7 @@ function refreshVideoStatus() {
             fetch(url, { method: 'HEAD', cache: 'no-store' }).then(function (response) {
                 if (!response.ok) { probe(extensions.slice(1)); return; }
                 status.textContent = 'Tersedia (' + extensions[0].toUpperCase() + ')'; status.className = 'media-status exists'; preview.src = url; preview.style.display = 'block';
+                card?.classList.remove('is-warn', 'is-missing'); if (note) note.hidden = true;
                 if (fileName) fileName.textContent = 'video/' + type + '.' + extensions[0];
             }).catch(function () { probe(extensions.slice(1)); });
         };
@@ -2180,7 +3330,24 @@ function refreshVideoStatus() {
 }
 if (videoLocation) {
     videoLocation.addEventListener('change', refreshVideoStatus);
+    ['mobilePreview', 'desktopPreview'].forEach(function (id) { const element = document.getElementById(id); if (element) mountVideoPlayer(element); });
     refreshVideoStatus();
+    // file yang baru dipilih langsung dipratinjau di pemutar yang sama (belum diunggah); batal pilih = kembali ke video di server
+    ['mobile', 'desktop'].forEach(function (type) {
+        const input = document.getElementById(type + 'File'), preview = document.getElementById(type + 'Preview'), status = document.getElementById(type + 'Status'), fileName = document.getElementById(type + 'FileName');
+        let objectUrl = '';
+        input?.addEventListener('change', function () {
+            if (objectUrl) { URL.revokeObjectURL(objectUrl); objectUrl = ''; }
+            const file = input.files[0];
+            if (!file) { refreshVideoStatus(); return; }
+            objectUrl = URL.createObjectURL(file);
+            preview.src = objectUrl; preview.style.display = 'block';
+            status.textContent = 'Pratinjau file baru'; status.className = 'media-status pending';
+            if (fileName) fileName.textContent = file.name;
+            const card = status.closest('.video-card'); card?.classList.remove('is-warn', 'is-missing'); const note = document.getElementById(type + 'Note'); if (note) note.hidden = true;
+            document.getElementById('videoProgress').textContent = 'Pratinjau ' + type + ': ' + file.name + ' (belum diunggah). Tekan \u201cUpload & Timpa Video\u201d untuk menerapkan.';
+        });
+    });
     document.getElementById('uploadVideo').addEventListener('click', async function () {
         const mobile = document.getElementById('mobileFile').files[0];
         const desktop = document.getElementById('desktopFile').files[0];

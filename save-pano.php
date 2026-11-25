@@ -4,6 +4,8 @@ require_once __DIR__ . '/includes/bootstrap.php';   // sesi aman + login
 require_once __DIR__ . '/includes/backup-store.php';   // cadangan di folder pusat CMS (data/backups), bukan di folder tur/wilayah
 header('Content-Type: application/json; charset=utf-8');
 require_once __DIR__ . '/project-manager.php';
+require_once __DIR__ . '/language-manager.php';   // languageRegistry() untuk membuat blok terjemahan baru
+require_once __DIR__ . '/includes/pano-memory.php';   // catatan perubahan agar tidak hilang saat pano.xml di-export ulang
 
 function respond(int $status, bool $success, string $message): never
 {
@@ -37,6 +39,7 @@ try {
     if (!$dom->load($panoFile)) respond(422, false, 'pano.xml tidak valid.');
     $xpath = new DOMXPath($dom);
     $customNodeIds = [];
+    $edits = ['translations' => [], 'panoramas' => [], 'hotspots' => []];   // hanya nilai yang benar-benar diubah di CMS
     foreach ((array) ($payload['panoramas'] ?? []) as $item) {
         if (!is_array($item)) continue;
         $nodeId = trim((string) ($item['nodeId'] ?? ''));
@@ -52,10 +55,11 @@ try {
         if ($longitude !== '' && (!is_numeric($longitude) || (float) $longitude < -180 || (float) $longitude > 180)) throw new RuntimeException('Longitude ' . $nodeId . ' tidak valid.');
         $userdata = $xpath->query('//panorama[@id=' . xpathLiteral($nodeId) . ']/userdata')?->item(0);
         if (!$userdata instanceof DOMElement) continue;
-        $userdata->setAttribute('title', $title);
-        $userdata->setAttribute('customnodeid', $customNodeId);
-        $userdata->setAttribute('latitude', $latitude === '' ? '' : number_format((float) $latitude, 7, '.', ''));
-        $userdata->setAttribute('longitude', $longitude === '' ? '' : number_format((float) $longitude, 7, '.', ''));
+        $newUserdata = ['title' => $title, 'customnodeid' => $customNodeId, 'latitude' => $latitude === '' ? '' : number_format((float) $latitude, 7, '.', ''), 'longitude' => $longitude === '' ? '' : number_format((float) $longitude, 7, '.', '')];
+        foreach ($newUserdata as $attribute => $newValue) {
+            if ($userdata->getAttribute($attribute) !== $newValue) $edits['panoramas'][$nodeId][$attribute] = $newValue;
+            $userdata->setAttribute($attribute, $newValue);
+        }
     }
     foreach ((array) ($payload['hotspots'] ?? []) as $item) {
         $nodeId = (string) ($item['nodeId'] ?? ''); $id = (string) ($item['id'] ?? '');
@@ -69,17 +73,30 @@ try {
             $element->parentNode?->removeChild($element);
             continue;
         }
-        foreach (['title', 'url', 'target'] as $field) $element->setAttribute($field, trim((string) ($item[$field] ?? '')));
+        foreach (['title', 'url', 'target'] as $field) {
+            $newValue = trim((string) ($item[$field] ?? ''));
+            if ($element->getAttribute($field) !== $newValue) $edits['hotspots'][$nodeId . '|' . $id][$field] = $newValue;
+            $element->setAttribute($field, $newValue);
+        }
     }
     $jsonNode = $xpath->query('//masternode/translations/json')?->item(0);
+    // Tur yang belum punya blok terjemahan Pano2VR: dibuat otomatis (bahasa mengikuti registry CMS) begitu ada terjemahan yang diisi.
+    if (!$jsonNode instanceof DOMElement && is_array($payload['translations'] ?? null) && translationPayloadHasValues($payload['translations'])) {
+        $jsonNode = createTranslationBlock($dom, $xpath, $root);
+    }
     if ($jsonNode instanceof DOMElement && is_array($payload['translations'] ?? null)) {
         $data = json_decode($jsonNode->textContent, true, 512, JSON_THROW_ON_ERROR);
-        $languageCount = count((array) ($data['languages'] ?? []));
+        $languageCodes = array_values((array) ($data['languages'] ?? []));
+        $languageCount = count($languageCodes);
         $existingTranslations = (array) ($data['translations'] ?? []);
         foreach ($payload['translations'] as $source => $submittedValues) {
             if (!is_string($source) || !is_array($submittedValues)) continue;
             $values = array_values(array_map(static fn(mixed $value): string => trim((string) $value), $submittedValues));
             $values = array_slice(array_pad($values, $languageCount, ''), 0, $languageCount);
+            foreach ($values as $languageIndex => $newValue) {
+                $oldValue = trim((string) (((array) ($existingTranslations[$source] ?? []))[$languageIndex] ?? ''));
+                if ($oldValue !== $newValue && isset($languageCodes[$languageIndex])) $edits['translations'][$source][(string) $languageCodes[$languageIndex]] = $newValue;
+            }
             $values[] = (string) (($existingTranslations[$source][$languageCount] ?? ''));
             $existingTranslations[$source] = $values;
         }
@@ -91,6 +108,8 @@ try {
     if (!is_dir($backupDirectory) && !mkdir($backupDirectory, 0775, true) && !is_dir($backupDirectory)) throw new RuntimeException('Folder backup gagal dibuat.');
     if (!copy($panoFile, $backupDirectory . '/pano-before-audit-editor-' . date('Ymd-His') . '.xml')) throw new RuntimeException('Backup pano.xml gagal dibuat.');
     if ($dom->save($panoFile) === false) respond(500, false, 'Gagal menyimpan pano.xml.');
+    // Catat perubahan ke memori (data/pano-memory) supaya bisa diterapkan ulang bila tur di-export ulang dari Pano2VR.
+    try { panoMemoryRecord(dirname($panoFile), $edits); } catch (Throwable $memoryError) { /* gagal mencatat tidak membatalkan simpan */ }
     // Template dengan setup.json (mis. badung): naikkan ?ts= di index.html tiap simpan, supaya browser
     // pengunjung tidak memakai pano.xml lama dari cache. Gagal di sini tidak membatalkan simpan.
     $setupNote = '';

@@ -9,3 +9,5 @@ templates/
 node_modules/
 .skin-backups/
 .history/
+.claude/
+graphify-out/

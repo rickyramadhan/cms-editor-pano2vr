@@ -44,6 +44,7 @@
     const serverUrl = (slug) => S.settings.url + '/#/r/' + encodeURIComponent(S.project.id) + (slug ? '/t/' + encodeURIComponent(slug) : '');
 
     function toast(msg, bad = false) {
+        if (window.cmsToast) return window.cmsToast(msg, bad ? 'error' : undefined);
         const t = $('#ivToast');
         t.textContent = msg; t.hidden = false; t.className = 'iv-toast' + (bad ? ' is-bad' : '');
         clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, bad ? 8000 : 3500);

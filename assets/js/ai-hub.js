@@ -44,6 +44,7 @@
     const stepsFor = (r) => NEXT[r.stage] || NEXT.none;
 
     function toast(msg, bad = false) {
+        if (window.cmsToast) return window.cmsToast(msg, bad ? 'error' : undefined);
         const t = $('#ahToast');
         t.textContent = msg; t.hidden = false; t.className = 'ah-toast' + (bad ? ' is-bad' : '');
         clearTimeout(toast.t); toast.t = setTimeout(() => { t.hidden = true; }, bad ? 8000 : 3500);

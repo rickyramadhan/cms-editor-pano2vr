@@ -511,6 +511,9 @@ function shApply(array $st, array $tour, bool $on): string
     $html = (string) file_get_contents($index);
     $re = '~[ \t]*<script\b[^>]*smart-kit/boot\.js[^>]*>\s*</script>\s*\n?~i';
     $clean = (string) preg_replace($re, '', $html);
+    // Tag yang sudah terpasang menentukan ke mana tur memuat Smart Kit (mis. ../smart-kit/ = salinan deploy di folder proyek).
+    // Menerapkan ulang tidak boleh memindahkannya ke alamat bawaan CMS (/smart-kit/); untuk mengganti alamat, Lepas dulu lalu Terapkan.
+    if (preg_match('~<script\b[^>]*\bsrc=["\']([^"\']*smart-kit/)boot\.js~i', $html, $existingTag)) $st['url'] = $existingTag[1];
     if ($on) {
         if (!is_file($st['path'] . '/packs/' . $st['wilayah'] . '/' . $tour['id'] . '/scenes.js')) throw new RuntimeException('Paket belum dibangun; jalankan "Bangun paket" dulu.');
         $pos = strripos($clean, '</body>');
@@ -650,6 +653,184 @@ function shSyncJakartaRuntime(array $project, string $location, array $runtime):
     cmsReplaceJsObject($file, 'GLOBAL_DATABASE', $database);
 }
 
+/* ------------------------------ pin tertaut Object Info & salinan Smart Kit di folder proyek ------------------------------ */
+
+/**
+ * Folder smart-kit hasil deploy di dalam folder proyek (mis. badung/smart-kit). Halaman tur memuatnya lewat ../smart-kit/boot.js,
+ * sedangkan CMS menulis ke folder sumber (smart-kit di samping CMS). null bila salinan itu tidak ada atau sama dengan sumber.
+ */
+function shDeployedKitDir(array $project, array $st): ?string
+{
+    $dir = rtrim(str_replace('\\', '/', (string) ($project['path'] ?? '')), '/') . '/smart-kit';
+    if (!is_file($dir . '/boot.js')) return null;
+    $deployed = realpath($dir); $source = realpath($st['path']);
+    if ($deployed === false || ($source !== false && strcasecmp($deployed, $source) === 0)) return null;
+    return str_replace('\\', '/', $deployed);
+}
+
+/**
+ * Salin berkas paket lokasi yang baru ditulis CMS (mis. pins.js) ke salinan deploy supaya tur sungguhan ikut berubah.
+ * Hanya berkas yang disebut yang disalin; berkas lain di salinan deploy tidak disentuh (paket di sana bisa saja lebih baru).
+ * Mengembalikan jumlah berkas yang benar-benar berubah.
+ */
+function shPublishPackFiles(array $project, array $st, string $slug, array $names): int
+{
+    $dest = shDeployedKitDir($project, $st);
+    if ($dest === null) return 0;
+    $from = $st['path'] . '/packs/' . $st['wilayah'] . '/' . $slug; $to = $dest . '/packs/' . $st['wilayah'] . '/' . $slug;
+    if (!is_dir($to)) return 0;   // lokasi ini belum ada di salinan deploy: jangan membuat paket setengah jadi
+    $copied = 0; $files = [];
+    foreach ($names as $name) {
+        $name = trim(str_replace('\\', '/', (string) $name), '/');
+        if ($name === '' || !preg_match('~^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$~', $name) || str_contains($name, '..')) continue;
+        $src = $from . '/' . $name;
+        if (is_dir($src)) { foreach (scandir($src) ?: [] as $entry) if ($entry !== '.' && $entry !== '..' && is_file($src . '/' . $entry)) $files[] = $name . '/' . $entry; }
+        elseif (is_file($src)) $files[] = $name;
+    }
+    foreach ($files as $name) {
+        $src = $from . '/' . $name; $dst = $to . '/' . $name;
+        if (is_file($dst) && hash_file('sha1', $src) === hash_file('sha1', $dst)) continue;
+        if (!is_dir(dirname($dst)) && !@mkdir(dirname($dst), 0775, true) && !is_dir(dirname($dst))) throw new RuntimeException('Folder ' . dirname($name) . ' gagal dibuat di salinan tur.');
+        if (!@copy($src, $dst)) throw new RuntimeException('Gagal menyalin ' . $name . ' ke ' . $to . ' (izin folder?).');
+        $copied++;
+    }
+    return $copied;
+}
+
+/** Titik (u,v) pada thumbnail 720x450 -> (pan,tilt) panorama. Padanan uv_to_pt() di tools/build-pack.py (satuan: lebar sisi kubus = 1). */
+function shUvToPt(float $pan0, float $u, float $v): array
+{
+    $wrap = static fn(float $x, float $m): float => fmod(fmod($x, $m) + $m, $m);
+    $cx = $wrap(-$pan0, 360) / 90.0 + 0.5;
+    $xs = $wrap($cx + ($u / 720.0 - 0.5) * 1.45, 4.0);
+    $face = (int) floor($xs); $local = $xs - $face - 0.5;
+    $pan = -(90 * $face + rad2deg(atan2($local, 0.5)));
+    $tilt = -rad2deg(atan2(($v / 450.0 - 0.5) * 0.90625, hypot(0.5, $local)));
+    return [round($wrap($pan + 180, 360) - 180, 2), round($tilt, 2)];
+}
+
+/** Kebalikan shUvToPt: (pan,tilt) panorama -> (u,v) pada thumbnail 720x450, dijepit ke batas gambar. */
+function shPtToUv(float $pan0, float $pan, float $tilt): array
+{
+    $wrap = static fn(float $x, float $m): float => fmod(fmod($x, $m) + $m, $m);
+    $cx = $wrap(-$pan0, 360) / 90.0 + 0.5;
+    $a = $wrap(-$pan, 360); $step = round($a / 90.0);
+    $face = ((int) $step) % 4; $theta = $a - 90 * $step;
+    $local = 0.5 * tan(deg2rad($theta));
+    $dx = $wrap($face + 0.5 + $local - $cx, 4.0); if ($dx >= 2) $dx -= 4;
+    $u = ($dx / 1.45 + 0.5) * 720.0;
+    $v = (0.5 - tan(deg2rad($tilt)) * hypot(0.5, $local) / 0.90625) * 450.0;
+    return [round(max(0.0, min(720.0, $u)), 1), round(max(0.0, min(450.0, $v)), 1)];
+}
+
+/** WebElement di pano.xml: 'idpanorama|idelemen' (huruf kecil; juga lewat customnodeid) => ['pano','target','pan','tilt']. */
+function shTourWebElements(string $tourDir): array
+{
+    $file = rtrim($tourDir, '/\\') . '/pano.xml'; $out = [];
+    $dom = new DOMDocument();
+    if (!is_file($file) || !@$dom->load($file)) return [];
+    $xp = new DOMXPath($dom);
+    foreach ($xp->query('/tour/panorama') ?: [] as $pano) {
+        if (!$pano instanceof DOMElement) continue;
+        $pid = $pano->getAttribute('id'); $ud = $xp->query('./userdata', $pano)?->item(0);
+        $custom = $ud instanceof DOMElement ? trim($ud->getAttribute('customnodeid')) : '';
+        foreach ($xp->query('./media/webelement', $pano) ?: [] as $we) {
+            if (!$we instanceof DOMElement) continue;
+            $row = ['pano' => $pid, 'target' => $we->getAttribute('id'), 'pan' => (float) $we->getAttribute('pan'), 'tilt' => (float) $we->getAttribute('tilt')];
+            foreach (array_filter([$pid, $custom]) as $key) $out[strtolower($key . '|' . $row['target'])] = $row;
+        }
+    }
+    return $out;
+}
+
+/**
+ * Pin Smart Kit yang tertaut ke Object Informasi (record oi-database dengan konten.meta.pin). Di tur, pin tertaut disembunyikan
+ * (pinlayer.js) dan yang tampil adalah WebElement Object Info di pano.xml, jadi posisi sebenarnya pin itu = posisi WebElement.
+ * Mengembalikan: idPin => ['pano' => idPanorama, 'target' => 'Element0N', 'pan' => ..., 'tilt' => ...].
+ */
+function shPinLinks(array $project, string $slug, array $tour): array
+{
+    $oiFile = projectRuntimeDirectory($project) . '/oi-database.js';
+    if (!is_file($oiFile)) return [];
+    $records = (array) (cmsReadJsObject($oiFile, 'TourDatabase')[$slug] ?? []);
+    $webElements = shTourWebElements((string) ($tour['dir'] ?? ''));
+    $links = [];
+    foreach ($records as $record) {
+        if (!is_array($record)) continue;
+        $pin = (string) ($record['konten']['meta']['pin'] ?? '');
+        if ($pin === '') continue;
+        $node = trim((string) ($record['nodeID'] ?? ''), "{} \t"); $target = trim((string) ($record['targetID'] ?? ''));
+        $element = $webElements[strtolower($node . '|' . $target)] ?? null;
+        if ($element !== null) $links[$pin] = $element;
+    }
+    return $links;
+}
+
+/** Pindahkan WebElement di pano.xml: $moves = [['pano' => id panorama, 'target' => 'Element0N', 'pan' => ..., 'tilt' => ...], ...]. Mengembalikan jumlah yang dipindah. */
+function shMoveWebElements(array $tour, array $moves): int
+{
+    $tourDir = rtrim((string) ($tour['dir'] ?? ''), '/\\'); $file = $tourDir . '/pano.xml';
+    $dom = new DOMDocument('1.0', 'UTF-8'); $dom->preserveWhiteSpace = true;
+    if (!is_file($file) || !@$dom->load($file)) throw new RuntimeException('pano.xml tidak dapat dibaca.');
+    $xp = new DOMXPath($dom); $moved = 0;
+    foreach ($moves as $move) {
+        foreach ($xp->query('/tour/panorama') ?: [] as $pano) {
+            if (!$pano instanceof DOMElement || $pano->getAttribute('id') !== (string) $move['pano']) continue;
+            foreach ($xp->query('./media/webelement', $pano) ?: [] as $we) {
+                if (!$we instanceof DOMElement || $we->getAttribute('id') !== (string) $move['target']) continue;
+                $we->setAttribute('pan', number_format((float) $move['pan'], 3, '.', '')); $we->setAttribute('tilt', number_format((float) $move['tilt'], 3, '.', ''));
+                $moved++; break 2;
+            }
+        }
+    }
+    if ($moved === 0) return 0;
+    require_once __DIR__ . '/includes/backup-store.php';
+    $backup = cmsBackupEnsure($tourDir, 'media');
+    if (!is_dir($backup) && !mkdir($backup, 0775, true) && !is_dir($backup)) throw new RuntimeException('Folder backup pano.xml gagal dibuat.');
+    if (!copy($file, $backup . '/pano-before-smart-pin-' . date('Ymd-His') . '.xml')) throw new RuntimeException('Backup pano.xml gagal dibuat.');
+    if ($dom->save($file) === false) throw new RuntimeException('Gagal menyimpan pano.xml.');
+    return $moved;
+}
+
+/**
+ * Satu klik untuk satu lokasi: ① terapkan template skin project (skin.js + merapikan index.html + setup), ② bangun paket Smart Kit dan
+ * terapkan, ③ salin berkas hasil bangun (scenes, pin, thumbnail) ke salinan smart-kit di folder proyek bila ada.
+ * Tiap langkah berdiri sendiri: gagal di satu langkah tidak membatalkan yang lain, dan semuanya dilaporkan.
+ * content.json (konten sunting tim) tidak pernah disalin ke salinan tur.
+ */
+function shUpdateSkinAndKit(array $project, array $st, string $id, array $tour): array
+{
+    require_once __DIR__ . '/skin-templates.php';
+    $lines = []; $ok = true; $steps = ['skin' => 'skip', 'kit' => 'fail', 'copy' => 0];
+    try {   // ① skin
+        $templateId = projectSkinTemplateId($project, skinTemplateList());
+        if ($templateId === '') {
+            $lines[] = '① Skin: dilewati. Template skin belum dipilih untuk project ini (pilih di tab Template Skin).';
+        } else {
+            $template = skinTemplateGet($templateId);
+            $applied = applySkinTemplate($template, (string) $project['path'], (string) $tour['dir'], $id);
+            $setup = skinTemplateSetup($templateId); $setupMessages = $setup !== null ? skinRunSetup($setup, (string) $tour['dir']) : [];
+            $lines[] = '① Skin ' . $template['name'] . ': skin.js diterapkan' . ($applied['index'] ? ', index.html dirapikan' : '') . ($setupMessages ? ' · ' . implode('; ', $setupMessages) : '') . '.';
+            $steps['skin'] = 'ok';
+        }
+    } catch (Throwable $e) { $ok = false; $steps['skin'] = 'fail'; $lines[] = '① Skin GAGAL: ' . $e->getMessage(); }
+    try {   // ② Smart Kit (sama dengan "Aktifkan Smart Kit")
+        shBuildPack($st, $tour); $appliedKit = shApply($st, $tour, true);
+        $packDir = $st['path'] . '/packs/' . $st['wilayah'] . '/' . $id;
+        $content = is_file($packDir . '/content.json') ? json_decode((string) file_get_contents($packDir . '/content.json'), true) : null;
+        $pinsFile = shPinsFile($st, $id);
+        $readiness = shReadiness(is_array($content) ? $content : null, 0, is_file($pinsFile) ? count((array) json_decode((string) file_get_contents($pinsFile), true)) : 0);
+        $lines[] = '② Smart Kit: ' . $appliedKit . '. Kesiapan konten ' . $readiness['score'] . '%' . ($readiness['todo'] ? ' (masih perlu: ' . implode('; ', array_slice($readiness['todo'], 0, 3)) . ')' : '') . '.';
+        $steps['kit'] = 'ok';
+        try {   // ③ salinan tur
+            $hasCopy = shDeployedKitDir($project, $st) !== null;
+            $steps['copy'] = shPublishPackFiles($project, $st, $id, ['scenes.js', 'pins.js', 'pins.json', 'img/scenes']);
+            if ($hasCopy) $lines[] = '③ Salinan tur (smart-kit di folder proyek): ' . ($steps['copy'] > 0 ? $steps['copy'] . ' berkas diperbarui' : 'sudah sama') . '.';
+        } catch (Throwable $e) { $ok = false; $lines[] = '③ Salinan tur GAGAL: ' . $e->getMessage(); }
+    } catch (Throwable $e) { $ok = false; $lines[] = '② Smart Kit GAGAL: ' . $e->getMessage(); }
+    return ['id' => $id, 'ok' => $ok, 'message' => implode("\n", $lines), 'steps' => $steps];
+}
+
 /** Bersihkan data dari GUI: tanpa tag HTML, tanpa skema berbahaya, batas ukuran & kedalaman. */
 function shClean(mixed $v, int $depth = 0): mixed
 {
@@ -752,7 +933,7 @@ if (!defined('SMART_HUB_INCLUDE_ONLY')) {
         $project = activeProject();
         $op = (string) ($payload['op'] ?? 'state');
         if ($op === 'state') cmsJsonResponse(['success' => true, 'state' => shState($project)]);
-        if (in_array($op, ['save_settings', 'apply', 'unapply', 'upload_logo', 'activate'], true)) cmsRequireAdmin('Pengaturan Smart Kit, logo, Terapkan, dan Lepas');
+        if (in_array($op, ['save_settings', 'apply', 'unapply', 'upload_logo', 'activate', 'update_skin_kit'], true)) cmsRequireAdmin('Pengaturan Smart Kit, logo, Terapkan, dan Lepas');
         if ($op === 'save_settings') { shSaveSettings((string) $project['id'], (array) ($payload['settings'] ?? [])); cmsJsonResponse(['success' => true, 'message' => 'Pengaturan Smart Kit project disimpan.', 'state' => shState(activeProject())]); }
         $st = shSettings($project);
         if (!is_file($st['path'] . '/hub-catalog.json')) throw new RuntimeException('Smart Kit belum terhubung: atur folder Smart Kit di Pengaturan.');
@@ -855,12 +1036,24 @@ if (!defined('SMART_HUB_INCLUDE_ONLY')) {
                 foreach ($sc as &$scene) $scene['hotspots'] = $hotspots[$scene['id']] ?? [];
                 unset($scene);
                 $orphans = array_values(array_map(static fn($p) => (string) ($p['id'] ?? '?'), array_filter($pins, static fn($p) => !in_array($p['scene'] ?? '', $ids, true))));
+                // pin tertaut Object Info: yang tampil di tur adalah WebElement di pano.xml, jadi editor menampilkan posisi WebElement itu
+                try {
+                    $links = shPinLinks($project, $id, $tours[$id]); $startPan = [];
+                    foreach ($sc as $scene) $startPan[(string) $scene['id']] = (float) ($scene['start']['pan'] ?? 0);
+                    foreach ($pins as &$pin) {
+                        $link = is_array($pin) ? ($links[(string) ($pin['id'] ?? '')] ?? null) : null;
+                        if ($link === null || $link['pano'] !== (string) ($pin['scene'] ?? '')) continue;
+                        [$pin['u'], $pin['v']] = shPtToUv($startPan[$link['pano']] ?? 0.0, $link['pan'], $link['tilt']);
+                        $pin['linked'] = $link['target'];
+                    }
+                    unset($pin);
+                } catch (Throwable) { /* tampilan posisi asli pin saja; tidak fatal */ }
                 cmsJsonResponse(['success' => true, 'pins' => $pins, 'scenes' => $sc, 'orphans' => $orphans]);
             case 'pins_save':
                 $id = cmsCleanKey((string) ($payload['location'] ?? '')); if (!isset($tours[$id])) throw new RuntimeException('Lokasi tidak ditemukan.');
                 $ids = array_column(shScenes($st, $id), 'id'); $out = []; $seen = [];
                 foreach ((array) ($payload['pins'] ?? []) as $p) {
-                    $p = (array) shClean($p); $pid = (string) ($p['id'] ?? '');
+                    $p = (array) shClean($p); $pid = (string) ($p['id'] ?? ''); unset($p['linked']);
                     if (!preg_match('~^[A-Za-z0-9_-]{1,60}$~', $pid) || isset($seen[$pid])) throw new RuntimeException('ID pin tidak valid atau ganda: ' . $pid);
                     if (!in_array($p['scene'] ?? '', $ids, true)) throw new RuntimeException('Pin ' . $pid . ': scene tidak ada di tur.');
                     if (!in_array($p['type'] ?? '', ['info', 'fact', 'safety', 'service', 'photo', 'stamp', 'run', 'etiquette', 'seat', 'landmark', 'reel'], true)) throw new RuntimeException('Pin ' . $pid . ': jenis tidak dikenal.');
@@ -868,11 +1061,29 @@ if (!defined('SMART_HUB_INCLUDE_ONLY')) {
                     if (($p['title'] ?? '') === '') throw new RuntimeException('Pin ' . $pid . ': judul wajib diisi.');
                     $seen[$pid] = 1; $out[] = $p;
                 }
+                // pin tertaut Object Info yang digeser di editor: pindahkan juga WebElement-nya di pano.xml (itulah yang tampil di tur)
+                $moves = [];
+                try {
+                    $links = shPinLinks($project, $id, $tours[$id]); $startPan = [];
+                    foreach (shScenes($st, $id) as $scene) $startPan[(string) $scene['id']] = (float) ($scene['start']['pan'] ?? 0);
+                    foreach ($out as $p) {
+                        $link = $links[(string) $p['id']] ?? null;
+                        if ($link === null || $link['pano'] !== (string) $p['scene']) continue;
+                        $pan0 = $startPan[$link['pano']] ?? 0.0; [$u0, $v0] = shPtToUv($pan0, $link['pan'], $link['tilt']);
+                        if (abs((float) $p['u'] - $u0) <= 0.75 && abs((float) $p['v'] - $v0) <= 0.75) continue;   // tidak digeser (selisih pembulatan saja)
+                        [$pan, $tilt] = shUvToPt($pan0, (float) $p['u'], (float) $p['v']);
+                        $moves[] = ['pano' => $link['pano'], 'target' => $link['target'], 'pan' => $pan, 'tilt' => $tilt];
+                    }
+                } catch (Throwable) { $moves = []; }
                 shWriteJson(shPinsFile($st, $id), $out);
                 $msg = shBuildPack($st, $tours[$id]);
+                $movedElements = $moves ? shMoveWebElements($tours[$id], $moves) : 0;
+                $published = shPublishPackFiles($project, $st, $id, ['pins.json', 'pins.js']);
                 ivMarkStale((string) $project['id'], [$id], 'pin diubah');
-                cmsAudit('pin.simpan', ['pack' => $st['wilayah'] . '/' . $id, 'jumlah' => count($out)]);
-                cmsJsonResponse(['success' => true, 'message' => count($out) . ' pin disimpan dan dibangun ke pins.js.', 'log' => $msg, 'pins' => $out]);
+                cmsAudit('pin.simpan', ['pack' => $st['wilayah'] . '/' . $id, 'jumlah' => count($out), 'webelement' => $movedElements, 'salinan' => $published]);
+                cmsJsonResponse(['success' => true, 'message' => count($out) . ' pin disimpan dan dibangun ke pins.js.'
+                    . ($movedElements > 0 ? ' ' . $movedElements . ' pin Object Info juga dipindahkan di pano.xml (WebElement).' : '')
+                    . ($published > 0 ? ' Disalin ke smart-kit proyek (' . $published . ' berkas) agar tur ikut berubah.' : ''), 'log' => $msg, 'pins' => $out]);
             case 'activate':
                 $results = [];
                 foreach ($pick((array) ($payload['locations'] ?? [])) as $id => $t) {
@@ -887,6 +1098,13 @@ if (!defined('SMART_HUB_INCLUDE_ONLY')) {
                 ivMarkStale((string) $project['id'], array_column(array_filter($results, static fn($r) => $r['ok']), 'id'), 'Smart Kit diaktifkan');
                 $okN = count(array_filter($results, static fn($r) => $r['ok']));
                 cmsJsonResponse(['success' => $okN > 0, 'message' => $okN . ' dari ' . count($results) . ' lokasi diaktifkan.', 'results' => $results, 'state' => shState($project)]);
+            case 'update_skin_kit':
+                $results = [];
+                foreach ($pick((array) ($payload['locations'] ?? [])) as $id => $t) $results[] = shUpdateSkinAndKit($project, $st, (string) $id, $t);
+                cmsAudit('smartkit.update_skin_kit', ['lokasi' => array_column($results, 'id'), 'gagal' => array_column(array_filter($results, static fn($r) => !$r['ok']), 'id')]);
+                ivMarkStale((string) $project['id'], array_column(array_filter($results, static fn($r) => $r['ok']), 'id'), 'skin + Smart Kit diperbarui');
+                $okN = count(array_filter($results, static fn($r) => $r['ok']));
+                cmsJsonResponse(['success' => $okN > 0, 'message' => $okN . ' dari ' . count($results) . ' lokasi diperbarui (skin + Smart Kit).', 'results' => $results, 'state' => shState($project)]);
             case 'build':
             case 'apply':
             case 'unapply':
