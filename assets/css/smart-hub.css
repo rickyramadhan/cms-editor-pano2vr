@@ -346,3 +346,40 @@ html, body, button, input, select, textarea { font-family: "Plus Jakarta Sans", 
 .sv-card.is-open .sv-body, .sv-card.is-open .sv-actions { grid-column: 2; }
 .sv-card.is-open .sv-edit { grid-column: 1 / -1; grid-row: 3; }
 @media (max-width: 760px) { .sv-card.is-open { display: flex; } .sv-card.is-open .sv-thumb { min-height: 0; aspect-ratio: 16 / 10; } }
+
+/* ===== Progres proses panjang (Update Skin + Smart Kit): bar + lokasi + langkah + perkiraan sisa waktu ===== */
+.sh-job { display: grid; gap: 11px; padding: 15px 17px; border: 1px solid var(--ui-line, var(--sh-line)); border-radius: var(--sh-r); background: var(--ui-accent-soft, var(--sh-accent-soft)); }
+.sh-job__top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.sh-job__top b { font-size: 13.5px; }
+.sh-job__pct { font-size: 24px; font-weight: 800; letter-spacing: -.02em; line-height: 1; color: var(--ui-accent-strong, var(--sh-accent)); font-variant-numeric: tabular-nums; }
+.sh-job__bar { height: 10px; border-radius: 999px; background: rgba(47, 127, 116, .17); overflow: hidden; }
+.sh-job__bar > i { position: relative; display: block; width: 0; height: 100%; border-radius: inherit; overflow: hidden; background: var(--ui-accent, var(--sh-accent)); transition: width .45s ease; }
+.sh-job.is-running .sh-job__bar > i::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .5), transparent); transform: translateX(-100%); animation: sh-job-shine 1.5s linear infinite; }
+.sh-job__meta { display: flex; justify-content: space-between; gap: 6px 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--ui-muted, var(--sh-muted)); }
+.sh-job__where { color: var(--ui-text, var(--sh-ink)); font-weight: 650; }
+.sh-job__time { font-variant-numeric: tabular-nums; }
+.sh-job__steps { display: flex; flex-wrap: wrap; gap: 7px; }
+.sh-job__step { display: inline-flex; align-items: center; gap: 7px; padding: 6px 11px; border: 1px solid var(--ui-line, var(--sh-line)); border-radius: 999px; background: #fff; color: var(--ui-muted, var(--sh-muted)); font-size: 12px; font-weight: 600; }
+.sh-job__step::before { content: ""; box-sizing: border-box; width: 9px; height: 9px; border-radius: 50%; background: #c9d1dc; }
+.sh-job__step.is-active { color: var(--ui-text, var(--sh-ink)); border-color: var(--ui-accent, var(--sh-accent)); }
+.sh-job__step.is-active::before { width: 11px; height: 11px; background: transparent; border: 2px solid var(--ui-accent, var(--sh-accent)); border-top-color: transparent; animation: sh-job-spin .8s linear infinite; }
+.sh-job__step.is-ok { color: var(--ui-accent-strong, var(--sh-accent)); }
+.sh-job__step.is-ok::before { background: var(--ui-accent, var(--sh-accent)); }
+.sh-job__step.is-fail { color: #b42318; border-color: #fecdca; }
+.sh-job__step.is-fail::before { background: #d92d20; }
+.sh-job__what { min-height: 1.4em; font-size: 12.5px; color: var(--ui-muted, var(--sh-muted)); }
+.sh-job__dots { display: flex; flex-wrap: wrap; gap: 4px; }
+.sh-job__dots i { width: 11px; height: 11px; border-radius: 3px; background: rgba(47, 127, 116, .2); }
+.sh-job__dots i.is-ok { background: var(--ui-accent, var(--sh-accent)); }
+.sh-job__dots i.is-bad { background: #d92d20; }
+.sh-job__dots i.is-active { background: var(--ui-accent, var(--sh-accent)); animation: sh-job-pulse 1s ease-in-out infinite; }
+.sh-job__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 0; }
+.sh-job__note { color: var(--ui-muted, var(--sh-muted)); font-size: 11.5px; }
+.sh-job .sh-job__x { min-height: 32px; padding: 5px 12px; margin-left: auto; }
+.sh-job .sh-job__x[hidden] { display: none; }
+.sh-job__what:empty, .sh-job__note:empty { display: none; }
+.sh-job.is-done .sh-job__bar > i { background: var(--ui-accent-strong, var(--sh-accent)); }
+@keyframes sh-job-shine { to { transform: translateX(100%); } }
+@keyframes sh-job-spin { to { transform: rotate(360deg); } }
+@keyframes sh-job-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .sh-job__bar > i { transition: none; } .sh-job.is-running .sh-job__bar > i::after, .sh-job__step.is-active::before, .sh-job__dots i.is-active { animation: none; } }

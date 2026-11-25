@@ -798,37 +798,94 @@ function shMoveWebElements(array $tour, array $moves): int
  * Tiap langkah berdiri sendiri: gagal di satu langkah tidak membatalkan yang lain, dan semuanya dilaporkan.
  * content.json (konten sunting tim) tidak pernah disalin ke salinan tur.
  */
-function shUpdateSkinAndKit(array $project, array $st, string $id, array $tour): array
+/** Langkah ① "Update Skin + Smart Kit" untuk satu lokasi: terapkan template skin project. */
+function shUpdateSkinStep(array $project, string $id, array $tour): array
 {
     require_once __DIR__ . '/skin-templates.php';
-    $lines = []; $ok = true; $steps = ['skin' => 'skip', 'kit' => 'fail', 'copy' => 0];
-    try {   // ① skin
+    try {
         $templateId = projectSkinTemplateId($project, skinTemplateList());
-        if ($templateId === '') {
-            $lines[] = '① Skin: dilewati. Template skin belum dipilih untuk project ini (pilih di tab Template Skin).';
-        } else {
-            $template = skinTemplateGet($templateId);
-            $applied = applySkinTemplate($template, (string) $project['path'], (string) $tour['dir'], $id);
-            $setup = skinTemplateSetup($templateId); $setupMessages = $setup !== null ? skinRunSetup($setup, (string) $tour['dir']) : [];
-            $lines[] = '① Skin ' . $template['name'] . ': skin.js diterapkan' . ($applied['index'] ? ', index.html dirapikan' : '') . ($setupMessages ? ' · ' . implode('; ', $setupMessages) : '') . '.';
-            $steps['skin'] = 'ok';
-        }
-    } catch (Throwable $e) { $ok = false; $steps['skin'] = 'fail'; $lines[] = '① Skin GAGAL: ' . $e->getMessage(); }
-    try {   // ② Smart Kit (sama dengan "Aktifkan Smart Kit")
+        if ($templateId === '') return ['ok' => true, 'state' => 'skip', 'message' => '① Skin: dilewati. Template skin belum dipilih untuk project ini (pilih di tab Template Skin).'];
+        $template = skinTemplateGet($templateId);
+        $applied = applySkinTemplate($template, (string) $project['path'], (string) $tour['dir'], $id);
+        $setup = skinTemplateSetup($templateId); $setupMessages = $setup !== null ? skinRunSetup($setup, (string) $tour['dir']) : [];
+        return ['ok' => true, 'state' => 'ok', 'message' => '① Skin ' . $template['name'] . ': skin.js diterapkan' . ($applied['index'] ? ', index.html dirapikan' : '') . ($setupMessages ? ' · ' . implode('; ', $setupMessages) : '') . '.'];
+    } catch (Throwable $e) { return ['ok' => false, 'state' => 'fail', 'message' => '① Skin GAGAL: ' . $e->getMessage()]; }
+}
+
+/** Langkah ② : bangun paket Smart Kit + terapkan HUD (sama dengan "Aktifkan Smart Kit"). Langkah terlama (Python membuat thumbnail). */
+function shUpdateKitStep(array $st, string $id, array $tour): array
+{
+    try {
         shBuildPack($st, $tour); $appliedKit = shApply($st, $tour, true);
         $packDir = $st['path'] . '/packs/' . $st['wilayah'] . '/' . $id;
         $content = is_file($packDir . '/content.json') ? json_decode((string) file_get_contents($packDir . '/content.json'), true) : null;
         $pinsFile = shPinsFile($st, $id);
         $readiness = shReadiness(is_array($content) ? $content : null, 0, is_file($pinsFile) ? count((array) json_decode((string) file_get_contents($pinsFile), true)) : 0);
-        $lines[] = '② Smart Kit: ' . $appliedKit . '. Kesiapan konten ' . $readiness['score'] . '%' . ($readiness['todo'] ? ' (masih perlu: ' . implode('; ', array_slice($readiness['todo'], 0, 3)) . ')' : '') . '.';
-        $steps['kit'] = 'ok';
-        try {   // ③ salinan tur
-            $hasCopy = shDeployedKitDir($project, $st) !== null;
-            $steps['copy'] = shPublishPackFiles($project, $st, $id, ['scenes.js', 'pins.js', 'pins.json', 'img/scenes']);
-            if ($hasCopy) $lines[] = '③ Salinan tur (smart-kit di folder proyek): ' . ($steps['copy'] > 0 ? $steps['copy'] . ' berkas diperbarui' : 'sudah sama') . '.';
-        } catch (Throwable $e) { $ok = false; $lines[] = '③ Salinan tur GAGAL: ' . $e->getMessage(); }
-    } catch (Throwable $e) { $ok = false; $lines[] = '② Smart Kit GAGAL: ' . $e->getMessage(); }
+        return ['ok' => true, 'state' => 'ok', 'message' => '② Smart Kit: ' . $appliedKit . '. Kesiapan konten ' . $readiness['score'] . '%' . ($readiness['todo'] ? ' (masih perlu: ' . implode('; ', array_slice($readiness['todo'], 0, 3)) . ')' : '') . '.'];
+    } catch (Throwable $e) { return ['ok' => false, 'state' => 'fail', 'message' => '② Smart Kit GAGAL: ' . $e->getMessage()]; }
+}
+
+/** Langkah ③ : salin hasil build ke smart-kit di folder proyek (salinan yang dimuat tur). */
+function shUpdateCopyStep(array $project, array $st, string $id): array
+{
+    try {
+        $hasCopy = shDeployedKitDir($project, $st) !== null;
+        $n = shPublishPackFiles($project, $st, $id, ['scenes.js', 'pins.js', 'pins.json', 'img/scenes']);
+        return ['ok' => true, 'state' => $hasCopy ? 'ok' : 'skip', 'count' => $n, 'message' => $hasCopy ? '③ Salinan tur (smart-kit di folder proyek): ' . ($n > 0 ? $n . ' berkas diperbarui' : 'sudah sama') . '.' : ''];
+    } catch (Throwable $e) { return ['ok' => false, 'state' => 'fail', 'count' => 0, 'message' => '③ Salinan tur GAGAL: ' . $e->getMessage()]; }
+}
+
+/** Ketiga langkah sekaligus untuk satu lokasi (dipakai bila klien tidak mengirim `step`). Tombol di CMS memanggil langkah satu per satu agar progresnya terlihat. */
+function shUpdateSkinAndKit(array $project, array $st, string $id, array $tour): array
+{
+    $lines = []; $ok = true; $steps = ['skin' => 'skip', 'kit' => 'fail', 'copy' => 0];
+    $s = shUpdateSkinStep($project, $id, $tour); $lines[] = $s['message']; $steps['skin'] = $s['state']; if (!$s['ok']) $ok = false;
+    $k = shUpdateKitStep($st, $id, $tour); $lines[] = $k['message']; if (!$k['ok']) $ok = false; else $steps['kit'] = 'ok';
+    if ($k['ok']) {
+        $c = shUpdateCopyStep($project, $st, $id); $steps['copy'] = $c['count']; if ($c['message'] !== '') $lines[] = $c['message']; if (!$c['ok']) $ok = false;
+    }
     return ['id' => $id, 'ok' => $ok, 'message' => implode("\n", $lines), 'steps' => $steps];
+}
+
+/** Satu langkah untuk satu lokasi pada proses bertahap (panel progres tab Lokasi). Kegagalan dikembalikan sebagai ok=false, bukan exception. */
+function shStepRun(string $op, string $step, array $project, array $st, string $id, array $tour): array
+{
+    $ok = static fn(string $message = '') => ['ok' => true, 'state' => 'ok', 'message' => $message];
+    switch ($op . ':' . $step) {
+        case 'update_skin_kit:skin': return shUpdateSkinStep($project, $id, $tour);
+        case 'update_skin_kit:kit': return shUpdateKitStep($st, $id, $tour);
+        case 'update_skin_kit:copy': return shUpdateCopyStep($project, $st, $id);
+    }
+    try {
+        switch ($op . ':' . $step) {
+            case 'activate:build': shBuildPack($st, $tour); return $ok();
+            case 'activate:apply':
+                $a = shApply($st, $tour, true);
+                $packDir = $st['path'] . '/packs/' . $st['wilayah'] . '/' . $id; $c = is_file($packDir . '/content.json') ? json_decode((string) file_get_contents($packDir . '/content.json'), true) : null;
+                $pj = shPinsFile($st, $id); $r = shReadiness(is_array($c) ? $c : null, 0, is_file($pj) ? count((array) json_decode((string) file_get_contents($pj), true)) : 0);
+                return $ok($a . '. Kesiapan konten ' . $r['score'] . '%' . ($r['todo'] ? "\nMasih perlu:\n- " . implode("\n- ", $r['todo']) : ''));
+            case 'build:pack': return $ok(trim(shBuildPack($st, $tour)));
+            case 'build:runtime': return $ok(trim(shInstallSharedRuntime($project, $tour)));
+            case 'apply:run': return $ok(shApply($st, $tour, true));
+            case 'unapply:run': return $ok(shApply($st, $tour, false));
+        }
+    } catch (Throwable $e) { return ['ok' => false, 'state' => 'fail', 'message' => $e->getMessage()]; }
+    throw new RuntimeException('Langkah tidak dikenal: ' . $op . '/' . $step);
+}
+
+/** Penutup proses bertahap: audit + tandai hasil Inspector basi (sama dengan yang dilakukan op saat dijalankan sekaligus). */
+function shStepFinish(string $op, array $project, array $doneIds, array $failedIds): void
+{
+    $pid = (string) $project['id'];
+    if ($op === 'update_skin_kit') {
+        cmsAudit('smartkit.update_skin_kit', ['lokasi' => array_merge($doneIds, $failedIds), 'gagal' => $failedIds]);
+        ivMarkStale($pid, $doneIds, 'skin + Smart Kit diperbarui');
+    } elseif ($op === 'activate') {
+        cmsAudit('smartkit.aktifkan', ['lokasi' => array_merge($doneIds, $failedIds)]);
+        ivMarkStale($pid, $doneIds, 'Smart Kit diaktifkan');
+    } else {
+        ivMarkStale($pid, $doneIds, 'Smart Kit ' . $op);
+    }
 }
 
 /** Bersihkan data dari GUI: tanpa tag HTML, tanpa skema berbahaya, batas ukuran & kedalaman. */
@@ -939,6 +996,22 @@ if (!defined('SMART_HUB_INCLUDE_ONLY')) {
         if (!is_file($st['path'] . '/hub-catalog.json')) throw new RuntimeException('Smart Kit belum terhubung: atur folder Smart Kit di Pengaturan.');
         $tours = shTours((string) $project['path']);
         $pick = static function (array $ids) use ($tours): array { $out = []; foreach ($ids as $id) { $id = cmsCleanKey((string) $id); if (!isset($tours[$id])) throw new RuntimeException('Lokasi tidak ditemukan: ' . $id); $out[$id] = $tours[$id]; } if (!$out) throw new RuntimeException('Pilih minimal satu lokasi.'); return $out; };
+        /* Proses bertahap (panel progres di tab Lokasi): satu langkah untuk satu lokasi per permintaan; `step=finish` menutup proses.
+           Kegagalan langkah dilaporkan lewat `ok:false` (HTTP 200) agar klien lanjut ke lokasi berikutnya. Tanpa `step`, op berjalan seperti semula (semua langkah sekaligus). */
+        $stepOps = ['update_skin_kit' => ['skin', 'kit', 'copy'], 'activate' => ['build', 'apply'], 'build' => ['pack', 'runtime'], 'apply' => ['run'], 'unapply' => ['run']];
+        $step = (string) ($payload['step'] ?? '');
+        if ($step !== '' && isset($stepOps[$op])) {
+            if ($step === 'finish') {
+                $known = static fn(array $ids): array => array_values(array_filter(array_map(static fn($x) => cmsCleanKey((string) $x), $ids), static fn($x) => isset($tours[$x])));
+                shStepFinish($op, $project, $known((array) ($payload['done'] ?? [])), $known((array) ($payload['failed'] ?? [])));
+                cmsJsonResponse(['success' => true, 'state' => shState($project)]);
+            }
+            if (!in_array($step, $stepOps[$op], true)) throw new RuntimeException('Langkah tidak dikenal: ' . $step);
+            $one = array_slice(array_values((array) ($payload['locations'] ?? [])), 0, 1);
+            if (!$one) throw new RuntimeException('Pilih satu lokasi.');
+            $oneId = (string) array_key_first($pick($one));
+            cmsJsonResponse(['success' => true, 'id' => $oneId, 'step' => $step] + shStepRun($op, $step, $project, $st, $oneId, $tours[$oneId]));
+        }
         switch ($op) {
             case 'save_hub':
                 $in = (array) ($payload['hub'] ?? []);

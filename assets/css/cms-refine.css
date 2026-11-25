@@ -1302,3 +1302,73 @@ body.oi-preview-open { overflow:hidden; }
 /* ===== Panorama awal (tab Data): satu baris penuh di bawah ID lokasi + Drone, tampilan sama dengan blok Drone ===== */
 .location-editor .loc-data .start-block { grid-column:1 / -1;height:auto; }
 .start-block .drone-input-readonly,.start-block .drone-node input[readonly] { color:#475467;background:#f4f6f9;cursor:default; }
+
+/* ===== Object Informasi aktif vs tidak aktif (kartu dashboard, kolom tabel, halaman inventaris) ===== */
+.dashboard-summary .oi-sub { margin-left:4px;padding:1px 8px;border-radius:999px;color:#157a50;background:#e3f6ec;font-size:10px;font-style:normal;font-weight:700;vertical-align:1px; }
+.dashboard-summary small.oi-off-line { display:flex;align-items:center;gap:5px;margin-bottom:2px;color:#6b7686;font-size:12px; }
+.dashboard-summary small.oi-off-line b { color:#475467;font-size:12.5px;font-variant-numeric:tabular-nums; }
+.oi-info { display:inline-grid;place-items:center;width:20px;height:20px;margin:0 0 0 3px;padding:0;border:0;border-radius:50%;color:#6b7686;background:#eceff3;cursor:pointer;vertical-align:middle;transition:color .15s ease,background-color .15s ease; }
+.oi-info:hover,.oi-info:focus-visible { color:#fff;background:var(--ui-accent,#2f7f74);outline:0; }
+.oi-info svg,.oi-info [data-lucide] { width:12px;height:12px; }
+.dashboard-table .oi-off-inline { display:block;margin-top:2px;color:#8a94a3;font-size:10.5px;white-space:nowrap; }
+.oi-status-filter { display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:2px 0 12px; }
+.oi-status-filter a { display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;color:#4b5666;background:#eef1f4;font-size:12px;font-weight:650;text-decoration:none; }
+.oi-status-filter a span { color:#6b7686;font-weight:800;font-variant-numeric:tabular-nums; }
+.oi-status-filter a:hover { background:#e4e8ed; }
+.oi-status-filter a.active { color:#fff;background:var(--ui-accent,#2f7f74); }
+.oi-status-filter a.active span { color:rgba(255,255,255,.85); }
+.oi-badge { display:inline-block;padding:2px 10px;border-radius:999px;font-size:11px;font-weight:700; }
+.oi-badge.is-on { color:#157a50;background:#e3f6ec; }
+.oi-badge.is-off { color:#6b7686;background:#e3e6eb; }
+.dashboard-table tr.oi-row-off td { color:#7b8594; }
+
+/* ===== Hotspot sama (beberapa Object Info untuk pin yang sama): warna per kelompok, status satu kesatuan, toggle saring ===== */
+.object-item.is-dup { box-shadow:inset 5px 0 0 var(--dup); }
+.object-item .oi-dup { display:flex;flex-wrap:wrap;align-items:center;gap:2px 6px;margin:6px 34px 0 0;padding:3px 8px 3px 7px;border-radius:8px;color:var(--dup);background:color-mix(in srgb,var(--dup) 13%,#fff);font-size:10px;font-style:normal;font-weight:700;line-height:1.35;white-space:normal; }   /* margin kanan 34px = ruang ikon sampah (absolut di pojok kanan bawah kartu) */
+.object-item .oi-dup i { flex:none;width:7px;height:7px;border-radius:50%;background:var(--dup); }
+.oi-dup em,.oi-dup-note b.ok { font-style:normal;color:#157a50; }
+.oi-dup em.warn,.oi-dup-note b.warn { font-style:normal;color:#b45309; }
+.oi-dupe-toggle { display:flex;align-items:center;gap:8px;width:100%;margin:8px 0 0;padding:7px 10px;border:1px solid #dfe3e9;border-radius:10px;color:#4b5666;background:#fff;font:650 12px var(--ui-font,inherit);cursor:pointer;text-align:left; }
+.oi-dupe-toggle[hidden] { display:none; }
+.oi-dupe-toggle .sw { position:relative;flex:none;width:28px;height:16px;border-radius:999px;background:#cfd5de;transition:background-color .18s ease; }
+.oi-dupe-toggle .sw::after { content:"";position:absolute;top:2px;left:2px;width:12px;height:12px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(20,28,40,.25);transition:transform .18s ease; }
+.oi-dupe-toggle b { margin-left:auto;padding:1px 8px;border-radius:999px;color:#b45309;background:#fdf0dc;font-size:11px;font-variant-numeric:tabular-nums; }
+.oi-dupe-toggle[aria-pressed="true"] { border-color:var(--ui-accent,#2f7f74);color:var(--ui-accent-strong,#256a61);background:var(--ui-accent-soft,#ecf3f1); }
+.oi-dupe-toggle[aria-pressed="true"] .sw { background:var(--ui-accent,#2f7f74); }
+.oi-dupe-toggle[aria-pressed="true"] .sw::after { transform:translateX(12px); }
+.oi-dup-note { display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 12px;padding:10px 12px;border:1px solid color-mix(in srgb,var(--dup) 35%,#fff);border-left:5px solid var(--dup);border-radius:10px;background:color-mix(in srgb,var(--dup) 8%,#fff);color:#344054;font-size:12.5px;line-height:1.5; }
+.oi-dup-note[hidden] { display:none; }
+.oi-dup-note .translate { flex:none;min-height:34px;padding:6px 12px;font-size:12px; }
+@media (max-width:760px) { .oi-dup-note { flex-direction:column;align-items:stretch; } }
+
+/* ===== Pilihan panorama dengan thumbnail saat disorot (assets/js/pano-thumb-select.js) ===== */
+.pts { position:relative;min-width:0; }
+.pts-native { position:absolute !important;width:1px !important;height:1px !important;margin:0 !important;padding:0 !important;border:0 !important;opacity:0 !important;pointer-events:none !important;overflow:hidden !important; }
+.pts-btn { display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;min-height:36px;padding:7px 10px;border:1px solid var(--ui-line,#dfe3e9);border-radius:10px;color:var(--ui-text,#1c2530);background:#fff;font:inherit;text-align:left;cursor:pointer;transition:border-color .15s ease,box-shadow .15s ease; }
+.pts .pts-btn.pts-btn { display:flex;justify-content:space-between;gap:8px;font-weight:inherit;text-align:left; }   /* kelas ganda: kalahkan `.oi-studio .object-panorama-toolbar button` yang memusatkan teks */
+.pts .pts-btn.pts-btn svg { width:14px;height:14px;stroke-width:2.2; }
+.pts-btn:hover { border-color:#c3cad4; }
+.pts-btn:focus-visible,.pts.is-open .pts-btn { outline:0;border-color:var(--ui-accent,#2f7f74);box-shadow:0 0 0 3px rgba(47,127,116,.18); }
+.pts-label { display:flex;align-items:baseline;gap:8px;min-width:0; }
+.pts-name { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.pts-sub { flex:none;color:#8a94a3;font-size:.82em;font-weight:500; }
+.pts-btn svg { flex:none;width:14px;height:14px;color:#6b7686;transition:transform .15s ease; }
+.pts.is-open .pts-btn svg { transform:rotate(180deg); }
+.pts-list { position:fixed;z-index:10050;max-width:min(460px,92vw);margin:0;padding:4px;list-style:none;overflow:auto;border:1px solid #dfe3e9;border-radius:12px;background:#fff;box-shadow:0 14px 34px rgba(16,24,40,.18);scrollbar-width:thin; }
+.pts-list[hidden],.pts-preview[hidden] { display:none; }
+.pts-opt { display:flex;align-items:baseline;gap:12px;padding:8px 10px;border-radius:8px;color:#1b2430;font-size:13px;line-height:1.3;white-space:nowrap;cursor:pointer; }
+.pts-opt.is-active { background:var(--ui-accent-soft,#ecf3f1); }
+.pts-opt[aria-selected="true"] { color:var(--ui-accent-strong,#256a61);font-weight:700; }
+.pts-opt .pts-name { flex:1 1 auto; }
+.pts-opt .pts-sub { margin-left:auto; }
+.pts-opt[aria-selected="true"]::after { content:"\2713";flex:none;padding-left:2px; }
+.pts-preview { position:fixed;z-index:10060;width:232px;padding:6px;border-radius:14px;background:#fff;box-shadow:0 16px 40px rgba(16,24,40,.3);pointer-events:none;animation:ptsIn .14s ease; }
+.pts-img { position:relative;width:100%;aspect-ratio:16 / 10;overflow:hidden;border-radius:9px;background:#e9edf2; }
+.pts-img img { position:absolute;inset:0;width:100%;height:100%;object-fit:cover; }
+.pts-img img[hidden],.pts-ph[hidden] { display:none; }
+.pts-ph { position:absolute;inset:0;display:grid;place-items:center;padding:8px;color:#6b7686;font-size:11px;text-align:center; }
+.pts-cap { display:block;padding:6px 4px 0;overflow:hidden;color:#1b2430;font-size:12.5px;line-height:1.3;text-overflow:ellipsis;white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical; }
+.pts-capsub { display:block;padding:1px 4px 2px;color:#8a94a3;font-size:11px; }
+.pts-capsub[hidden] { display:none; }
+@keyframes ptsIn { from { opacity:0;transform:translateY(3px); } }
+@media (prefers-reduced-motion:reduce) { .pts-preview { animation:none; } .pts-btn svg { transition:none; } }

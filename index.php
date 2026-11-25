@@ -1088,6 +1088,26 @@ foreach ($detectedTours as $id => $tour) {
 }
 uksort($sidebarLocations, 'strnatcasecmp');
 $selectedPanoramas = isset($detectedTours[$selectedId]) ? readPanoramaNodes($projectRoot, $detectedTours[$selectedId]) : [];
+// Nama panorama untuk pilihan/pratinjau: judul di pano.xml bila bermakna; bila kosong atau placeholder Pano2VR ("default1"), pakai "Nama scene" dari Smart Kit
+// (packs/<wilayah>/<lokasi>/content.json › SCENE_NAMES, diisi di Smart Hub); bila tetap kosong, tampilan jatuh ke node ID. Hasilnya di kunci 'name'.
+$smartSceneNames = [];
+if ($selectedPanoramas !== [] && $activeTab === 'object') {
+    try {
+        if (!defined('SMART_HUB_INCLUDE_ONLY')) define('SMART_HUB_INCLUDE_ONLY', true);
+        require_once __DIR__ . '/smart-hub.php';
+        $kit = shSettings($activeProject);
+        $kitContentFile = $kit['path'] . '/packs/' . $kit['wilayah'] . '/' . $selectedId . '/content.json';
+        $kitContent = is_file($kitContentFile) ? json_decode((string) file_get_contents($kitContentFile), true) : null;
+        foreach ((array) (is_array($kitContent) ? ($kitContent['SCENE_NAMES'] ?? []) : []) as $sceneKey => $sceneName) {
+            if (is_string($sceneName) && trim($sceneName) !== '') $smartSceneNames[(string) $sceneKey] = trim($sceneName);
+        }
+    } catch (Throwable) { /* Smart Kit belum terhubung: nama jatuh ke node ID */ }
+}
+foreach ($selectedPanoramas as &$namedPanorama) {
+    $panoTitle = trim((string) ($namedPanorama['title'] ?? ''));
+    $namedPanorama['name'] = ($panoTitle !== '' && !preg_match('/^default\d*$/i', $panoTitle)) ? $panoTitle : (string) ($smartSceneNames[(string) $namedPanorama['nodeId']] ?? '');
+}
+unset($namedPanorama);
 $selectedWebElements = isset($detectedTours[$selectedId]) ? readTourWebElements($projectRoot, $detectedTours[$selectedId]) : [];
 $selectedHotspots = isset($detectedTours[$selectedId]) ? readTourHotspotPositions($projectRoot, $detectedTours[$selectedId]) : [];
 $oiConfigContent = is_file($assetsRoot . '/oi-config.js') ? (string) file_get_contents($assetsRoot . '/oi-config.js') : '';
@@ -1125,6 +1145,7 @@ if (in_array($activeTab, ['dashboard', 'inventaris'], true)) {
         'nodeID' => (string) ($record['nodeID'] ?? ''),
         'targetID' => (string) ($record['targetID'] ?? ''),
         'title' => (string) ($record['title'] ?? ''),
+        'active' => !(array_key_exists('isActive', $record) && !$record['isActive']),   // sama dengan tur & matchObjectForElement: nonaktif hanya bila isActive ada dan salah
       ];
     }
     $tourDir = $projectRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, (string) $tour['path']);
@@ -1181,10 +1202,12 @@ if ($activeTab === 'dashboard') {
         $dashboardTours[] = smartKitDashboardTour($status, $detectedTours[$id] ?? [], $dashboardSettings);
     }
     // Jumlah Object Informasi & Video 360 per lokasi untuk kolom dashboard.
-    $oiCounts = []; foreach ($inventoryObjects as $row) $oiCounts[$row['tour']] = ($oiCounts[$row['tour']] ?? 0) + 1;
+    $oiCounts = []; $oiOffCounts = [];   // hanya Object Informasi AKTIF yang dihitung sebagai "dipakai"; yang nonaktif dihitung terpisah
+    foreach ($inventoryObjects as $row) { if ($row['active']) $oiCounts[$row['tour']] = ($oiCounts[$row['tour']] ?? 0) + 1; else $oiOffCounts[$row['tour']] = ($oiOffCounts[$row['tour']] ?? 0) + 1; }
     $videoCounts = []; foreach ($inventoryVideos as $row) if ($row['tour'] !== '') $videoCounts[$row['tour']] = ($videoCounts[$row['tour']] ?? 0) + 1;
     foreach ($dashboardTours as &$dashboardTour) {
         $dashboardTour['oi_count'] = $oiCounts[$dashboardTour['id']] ?? 0;
+        $dashboardTour['oi_off_count'] = $oiOffCounts[$dashboardTour['id']] ?? 0;
         $dashboardTour['video360_count'] = $videoCounts[$dashboardTour['id']] ?? 0;
     }
     unset($dashboardTour);

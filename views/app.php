@@ -32,6 +32,8 @@
     <link rel="stylesheet" href="assets/css/cms-refine.css?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/css/cms-refine.css')) ?>">
     <link rel="stylesheet" href="assets/css/cms-toast.css?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/css/cms-toast.css')) ?>">
     <script src="assets/js/cms-toast.js?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/js/cms-toast.js')) ?>"></script>
+    <script src="assets/js/pano-thumb-select.js?v=<?= e((string) filemtime(dirname(__DIR__) . '/assets/js/pano-thumb-select.js')) ?>" defer></script>
+    <script>document.addEventListener('click', (event) => { const b = event.target.closest?.('[data-oi-note]'); if (!b) return; event.preventDefault(); window.cmsToast?.(b.dataset.oiNote, 'info'); });</script>
     <script src="assets/vendor/lucide.min.js" defer></script>
     <script defer>document.addEventListener('DOMContentLoaded',()=>window.lucide?.createIcons());</script>
 </head>
@@ -108,6 +110,9 @@
                             $value = $tourStatus['scores'][$part] ?? null;
                             if ($value !== null) $statusAttrs .= ' data-' . $part . '="' . (int) $value . '"';
                         }
+                        // Object Informasi tanpa pin/objek aktif (skor null) ditandai "belum ada" oleh chip kartu (locationTopicStatus): filter "Object Informasi belum lengkap"
+                        // harus ikut menyaringnya, jadi dituliskan sebagai 0 (kosong). Komponen lain yang null memang "tidak berlaku" dan tetap tidak ditulis.
+                        if (($tourStatus['scores']['objects'] ?? null) === null) $statusAttrs .= ' data-objects="0" data-objects-empty="1"';
                         $issues = array_merge($tourStatus['missing'], $suspects);
                         $statusAttrs .= ' data-issues="' . e(implode("\n", $issues)) . '"';
                     }
@@ -159,7 +164,8 @@
             <div class="dashboard-summary">
                 <article class="card"><i aria-hidden="true"><span data-lucide="map-pin"></span></i><div><span>Total lokasi</span><strong><?= count($dashboardTours) ?></strong><small>Folder tur terdeteksi</small></div></article>
                 <article class="card"><i aria-hidden="true"><span data-lucide="image"></span></i><div><span>Total panorama</span><strong><?= $totalPanorama ?></strong><small><?= $builtPanorama ?> panorama sudah dibangun</small></div></article>
-                <article class="card"><i aria-hidden="true"><span data-lucide="info"></span></i><div><span>Object Informasi</span><strong><?= count($inventoryObjects ?? []) ?></strong><small><a href="?tab=inventaris">Lihat daftar</a></small></div></article>
+                <?php $oiOffNote = 'Tidak aktif: tidak dipakai di tur, hanya data pendukung untuk AI Guide Node.'; $oiActiveTotal = count(array_filter($inventoryObjects ?? [], static fn(array $r): bool => !empty($r['active']))); $oiOffTotal = count($inventoryObjects ?? []) - $oiActiveTotal; ?>
+                <article class="card"><i aria-hidden="true"><span data-lucide="info"></span></i><div><span>Object Informasi <em class="oi-sub">aktif</em></span><strong><?= $oiActiveTotal ?></strong><?php if ($oiOffTotal > 0): ?><small class="oi-off-line"><b><?= $oiOffTotal ?></b> tidak aktif<button type="button" class="oi-info" data-oi-note="<?= e($oiOffNote) ?>" title="<?= e($oiOffNote) ?>" aria-label="Info: <?= e($oiOffNote) ?>"><span data-lucide="info"></span></button></small><?php endif; ?><small><a href="?tab=inventaris">Lihat daftar</a></small></div></article>
                 <article class="card"><i aria-hidden="true"><span data-lucide="circle-play"></span></i><div><span>Video 360</span><strong><?= count($inventoryVideos ?? []) ?></strong><small><a href="?tab=inventaris&jenis=video360">Lihat daftar</a></small></div></article>
                 <article class="card"><i aria-hidden="true"><span data-lucide="package-check"></span></i><div><span>Panorama dibangun</span><strong><?= $builtPanorama ?></strong><small><?= $builtTours ?> lokasi bundle · <?= $implementedTours ?> implementasi</small></div></article>
                 <article class="card"><i aria-hidden="true"><span data-lucide="circle-check"></span></i><div><span>Data lengkap</span><strong><?= $completeTours ?></strong><small>Profil Smart Kit lengkap</small></div></article>
@@ -178,7 +184,7 @@
                 <div class="bulk-production-results" id="bulkProductionResults" hidden aria-live="polite"></div>
                 <div class="dashboard-table-wrap"><table class="dashboard-table"><thead><tr><th class="select-column"></th><th>Lokasi</th><th>Kategori Smart Kit</th><th>Panorama</th><th>OI</th><th>Video 360</th><th>Kelengkapan data</th><th>Bundle</th><th>Implementasi</th><th>URL Local</th><th>URL Deploy</th><th class="dashboard-actions-column">Aksi</th></tr></thead><tbody id="tourStatusList">
                     <?php foreach ($dashboardTours as $tour): ?><tr class="tour-status-card" data-href="?tab=lokasi&lokasi=<?= e($tour['id']) ?>" title="Buka halaman <?= e($tour['name']) ?>" data-location-id="<?= e($tour['id']) ?>" data-dashboard-category-row="<?= e($tour['category']) ?>" data-dashboard-name="<?= e($tour['search_text']) ?>" data-dashboard-score="<?= $tour['score'] ?>">
-                        <td class="select-column"><input type="checkbox" class="bulk-location" value="<?= e($tour['id']) ?>" aria-label="Pilih <?= e($tour['name']) ?>"></td><td><a class="dashboard-tour-link" href="?tab=lokasi&lokasi=<?= e($tour['id']) ?>"><strong><?= e($tour['name']) ?></strong><small><?= e($tour['id']) ?></small></a></td><td><span class="smartkit-category"><?= e($tour['category_label']) ?></span></td><td><b class="dashboard-count"><?= (int) ($tour['panoramas'] ?? 0) ?></b></td><td><b class="dashboard-count"><?= (int) ($tour['oi_count'] ?? 0) ?></b></td><td><b class="dashboard-count"><?= (int) ($tour['video360_count'] ?? 0) ?></b></td><td><span class="table-progress"><i style="--progress:<?= $tour['score'] ?>%"></i><b><?= $tour['score'] ?>%</b></span></td>
+                        <td class="select-column"><input type="checkbox" class="bulk-location" value="<?= e($tour['id']) ?>" aria-label="Pilih <?= e($tour['name']) ?>"></td><td><a class="dashboard-tour-link" href="?tab=lokasi&lokasi=<?= e($tour['id']) ?>"><strong><?= e($tour['name']) ?></strong><small><?= e($tour['id']) ?></small></a></td><td><span class="smartkit-category"><?= e($tour['category_label']) ?></span></td><td><b class="dashboard-count"><?= (int) ($tour['panoramas'] ?? 0) ?></b></td><td><b class="dashboard-count"><?= (int) ($tour['oi_count'] ?? 0) ?></b><?php if ((int) ($tour['oi_off_count'] ?? 0) > 0): ?><small class="oi-off-inline" title="<?= e('Tidak aktif: tidak dipakai di tur, hanya data pendukung untuk AI Guide Node.') ?>">+<?= (int) $tour['oi_off_count'] ?> tidak aktif</small><?php endif; ?></td><td><b class="dashboard-count"><?= (int) ($tour['video360_count'] ?? 0) ?></b></td><td><span class="table-progress"><i style="--progress:<?= $tour['score'] ?>%"></i><b><?= $tour['score'] ?>%</b></span></td>
                         <td><span class="readiness-indicator <?= $tour['bundle_built'] ? 'is-ready' : 'is-pending' ?>" title="<?= $tour['bundle_built'] ? 'Bundle Smart Kit sudah dibuat' : 'Bundle Smart Kit belum dibuat' ?>"><i data-lucide="<?= $tour['bundle_built'] ? 'check' : 'minus' ?>" aria-hidden="true"></i></span></td><td><span class="readiness-indicator <?= $tour['implemented'] ? 'is-ready' : 'is-pending' ?>" title="<?= $tour['implemented'] ? 'Smart Kit sudah diterapkan' : 'Smart Kit belum diterapkan' ?>"><i data-lucide="<?= $tour['implemented'] ? 'check' : 'minus' ?>" aria-hidden="true"></i></span></td>
                         <td><div class="dashboard-preview-links"><button type="button" data-tour-preview="<?= e($tour['local_url']) ?>" data-preview-title="<?= e($tour['name']) ?> · Local">Preview</button></div></td><td><div class="dashboard-preview-links"><button type="button" data-tour-preview="<?= e($tour['deploy_url']) ?>" data-preview-title="<?= e($tour['name']) ?> · Deploy">Preview</button></div></td><td class="dashboard-actions-column"><div class="dashboard-row-actions"><button type="button" data-open-location="<?= e($tour['path']) ?>" title="Buka folder di File Explorer"><i data-lucide="folder-open" aria-hidden="true"></i></button><button type="button" data-zip-location="<?= e($tour['id']) ?>" data-zip-path="<?= e($tour['path']) ?>" data-zip-score="<?= e($tour['score']) ?>" title="ZIP semua isi lokasi"><span>ZIP</span></button><a class="dashboard-manage" href="?tab=lokasi&lokasi=<?= e($tour['id']) ?>">Kelola</a></div></td>
                     </tr><?php endforeach; ?>
@@ -720,7 +726,7 @@
                 <div class="object-panorama-toolbar">
                     <div><strong>Editor Panorama</strong><small>Pilih object di kiri, geser panorama, lalu tarik pin WebElement untuk mengubah posisinya.</small>
                         <div class="oi-legend" aria-label="Keterangan ikon pin"><span class="oi-legend-item"><i class="pin-info"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5"/><circle cx="12" cy="7.8" r=".6" fill="currentColor"/></svg></i>Objek Info</span><span class="oi-legend-item"><i class="pin-land"><svg viewBox="0 0 24 24"><path d="M12 3l7 17-7-4-7 4z" fill="currentColor" fill-opacity=".28"/></svg></i>Hotspot</span><span class="oi-legend-item"><i class="pin-drone"><svg viewBox="0 0 24 24"><path d="M8 8l8 8M16 8l-8 8"/><circle cx="6" cy="6" r="2.6"/><circle cx="18" cy="6" r="2.6"/><circle cx="6" cy="18" r="2.6"/><circle cx="18" cy="18" r="2.6"/><rect x="9.5" y="9.5" width="5" height="5" rx="1.4"/></svg></i>Drone</span></div></div>
-                    <label><span>Panorama</span><select id="objectPanoramaNode"><?php foreach ($selectedPanoramas as $panorama): ?><option value="<?= e($panorama['nodeId']) ?>" data-public-node="<?= e($panorama['value']) ?>"><?= e($panorama['title'] ?: $panorama['value']) ?></option><?php endforeach; ?></select></label>
+                    <label><span>Panorama</span><select id="objectPanoramaNode" data-pano-thumbs><?php foreach ($selectedPanoramas as $panorama): $panoLabel = (string) (($panorama['name'] ?? '') !== '' ? $panorama['name'] : $panorama['value']); ?><option value="<?= e($panorama['nodeId']) ?>" data-public-node="<?= e($panorama['value']) ?>" data-thumb="<?= e((string) ($panorama['thumbnail'] ?? '')) ?>" data-sub="<?= e($panorama['nodeId']) ?>"><?= e($panoLabel) ?></option><?php endforeach; ?></select></label>
                     <div class="oi-history" role="group" aria-label="Riwayat perubahan"><button type="button" class="translate" id="oiUndo" disabled title="Tidak ada yang bisa diurungkan"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg><span>Urungkan</span></button><button type="button" class="translate" id="oiRedo" disabled title="Tidak ada yang bisa diulang"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 14 5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg><span>Ulangi</span></button></div>
                     <button type="button" class="translate" id="addWebElement" title="Tambah pin Objek Info di tengah pandangan panorama"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg><span>Objek Info</span></button>
                     <button type="button" class="oi-preview-btn" id="previewInTour" title="Buka tur sungguhan langsung di panorama ini, lengkap dengan skin dan Object Info, menghadap objek yang dipilih"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span>Pratinjau di tur</span></button>
@@ -728,7 +734,7 @@
                 <div class="oi-stage-wrap<?= empty($oiDatabase[$selectedId] ?? []) ? ' oi-empty' : '' ?>" id="oiStageWrap">
                     <div class="object-panorama-stage" id="objectPanoramaStage"><div id="objectPanoramaHost"></div><div class="object-panorama-loading" id="objectPanoramaLoading">Memuat panorama editor…</div></div>
                     <div class="oi-overlay">
-                        <aside class="object-list-panel"><input id="objectSearch" type="search" placeholder="Cari object…"><div id="objectList"></div></aside>
+                        <aside class="object-list-panel"><input id="objectSearch" type="search" placeholder="Cari object…"><button type="button" class="oi-dupe-toggle" id="objectDupeToggle" aria-pressed="false" hidden title="Tampilkan hanya Object Info yang memakai hotspot (pin) yang sama, dikelompokkan per pin, untuk divalidasi"><span class="sw" aria-hidden="true"></span><span>Hotspot sama</span><b>0</b></button><div id="objectList"></div></aside>
                         <button type="button" class="oi-collapse oi-collapse-left" data-oi-collapse="left" aria-label="Sembunyikan daftar object" title="Sembunyikan / tampilkan daftar">‹</button>
                         <button type="button" class="oi-collapse oi-collapse-right" data-oi-collapse="right" aria-label="Sembunyikan form object" title="Sembunyikan / tampilkan form">›</button>
                         <div id="objectForm" class="object-form"><div class="object-empty">Pilih atau tambahkan object informasi.</div></div>
@@ -739,7 +745,7 @@
             </div>
             <?php else: ?>
             <div class="skin-notice"><strong>WebElement pano.xml</strong><span><?= count($selectedWebElements) ?> elemen terdeteksi. OI hanya dinilai jika lokasi memiliki WebElement. Data memakai <code>assets/oi-database.js</code> dan <code>assets/oi-config.js</code>.</span></div>
-            <div class="object-layout"><aside class="object-list-panel"><input id="objectSearch" type="search" placeholder="Cari object…"><div id="objectCount"></div><div id="objectList"></div></aside><div id="objectForm" class="object-form"><div class="object-empty">Pilih atau tambahkan object informasi.</div></div></div>
+            <div class="object-layout"><aside class="object-list-panel"><input id="objectSearch" type="search" placeholder="Cari object…"><div id="objectCount"></div><button type="button" class="oi-dupe-toggle" id="objectDupeToggle" aria-pressed="false" hidden title="Tampilkan hanya Object Info yang memakai hotspot (pin) yang sama, dikelompokkan per pin, untuk divalidasi"><span class="sw" aria-hidden="true"></span><span>Hotspot sama</span><b>0</b></button><div id="objectList"></div></aside><div id="objectForm" class="object-form"><div class="object-empty">Pilih atau tambahkan object informasi.</div></div></div>
             <div class="voice-progress" id="objectProgress" data-cms-toast="only">Data tersimpan ke assets/oi-database.js.</div>
             <?php endif; ?>
         </section>
@@ -771,19 +777,31 @@
             <div class="voice-progress" id="videoProgress" data-cms-toast>Pilih satu atau dua video (WebM atau MP4) untuk diunggah.</div>
             <div class="actions"><button type="button" class="save" id="uploadVideo">Upload & Timpa Video</button></div>
         </section>
-    <?php elseif ($activeTab === 'inventaris'): $jenis = ($_GET['jenis'] ?? '') === 'video360' ? 'video360' : 'oi'; ?>
+    <?php elseif ($activeTab === 'inventaris'): $jenis = ($_GET['jenis'] ?? '') === 'video360' ? 'video360' : 'oi';
+        $oiOffNote = 'Tidak aktif: tidak dipakai di tur, hanya data pendukung untuk AI Guide Node.';
+        $oiActiveTotal = count(array_filter($inventoryObjects, static fn(array $r): bool => !empty($r['active']))); $oiOffTotal = count($inventoryObjects) - $oiActiveTotal;
+        $oiStatus = in_array($_GET['status'] ?? '', ['aktif', 'nonaktif'], true) ? (string) $_GET['status'] : '';
+        $oiRows = $oiStatus === '' ? $inventoryObjects : array_values(array_filter($inventoryObjects, static fn(array $r): bool => !empty($r['active']) === ($oiStatus === 'aktif'))); ?>
         <section class="card section inventaris-editor">
-            <div class="section-heading"><div><span class="step">IV</span><div><h2>Inventaris OI & Video 360</h2><p>Daftar semua Object Informasi dan Video 360 beserta tur dan nomornya. Video 360 dibaca dari panorama tur yang memuat video pada <code>pano.xml</code>.</p></div></div><div class="config-heading-actions"><span><?= count($inventoryObjects) ?> OI · <?= count($inventoryVideos) ?> video</span></div></div>
+            <div class="section-heading"><div><span class="step">IV</span><div><h2>Inventaris OI & Video 360</h2><p>Daftar semua Object Informasi dan Video 360 beserta tur dan nomornya. Video 360 dibaca dari panorama tur yang memuat video pada <code>pano.xml</code>.</p></div></div><div class="config-heading-actions"><span><?= $oiActiveTotal ?> OI aktif · <?= $oiOffTotal ?> tidak aktif · <?= count($inventoryVideos) ?> video</span></div></div>
             <nav class="language-section-tabs" aria-label="Jenis inventaris">
-                <a class="<?= $jenis === 'oi' ? 'active' : '' ?>" href="?tab=inventaris&jenis=oi">Object Informasi <span><?= count($inventoryObjects) ?></span></a>
+                <a class="<?= $jenis === 'oi' ? 'active' : '' ?>" href="?tab=inventaris&jenis=oi">Object Informasi <span><?= $oiActiveTotal ?></span></a>
                 <a class="<?= $jenis === 'video360' ? 'active' : '' ?>" href="?tab=inventaris&jenis=video360">Video 360 <span><?= count($inventoryVideos) ?></span></a>
             </nav>
-            <div class="dashboard-table-wrap"><table class="dashboard-table"><thead><tr><th>#</th><th>Tur</th><?php if ($jenis === 'oi'): ?><th>Info ID</th><th>Judul</th><th>Node</th><th>WebElement</th><?php else: ?><th>Panorama</th><th>Berkas video</th><th>Status</th><?php endif; ?></tr></thead><tbody>
             <?php if ($jenis === 'oi'): ?>
-                <?php foreach ($inventoryObjects as $row): ?>
-                <tr><td><?= (int) $row['no'] ?></td><td><a class="dashboard-tour-link" href="?tab=lokasi&lokasi=<?= e($row['tour']) ?>"><strong><?= e($row['tour_name']) ?></strong><small><?= e($row['tour']) ?></small></a></td><td><code><?= e($row['infoID']) ?></code></td><td><?= e($row['title']) ?></td><td><small><?= e($row['nodeID']) ?></small></td><td><small><?= e($row['targetID']) ?></small></td></tr>
+            <nav class="oi-status-filter" aria-label="Status Object Informasi">
+                <a class="<?= $oiStatus === '' ? 'active' : '' ?>" href="?tab=inventaris&jenis=oi">Semua <span><?= count($inventoryObjects) ?></span></a>
+                <a class="<?= $oiStatus === 'aktif' ? 'active' : '' ?>" href="?tab=inventaris&jenis=oi&status=aktif">Aktif <span><?= $oiActiveTotal ?></span></a>
+                <a class="<?= $oiStatus === 'nonaktif' ? 'active' : '' ?>" href="?tab=inventaris&jenis=oi&status=nonaktif">Tidak aktif <span><?= $oiOffTotal ?></span></a>
+                <button type="button" class="oi-info" data-oi-note="<?= e($oiOffNote) ?>" title="<?= e($oiOffNote) ?>" aria-label="Info: <?= e($oiOffNote) ?>"><span data-lucide="info"></span></button>
+            </nav>
+            <?php endif; ?>
+            <div class="dashboard-table-wrap"><table class="dashboard-table"><thead><tr><th>#</th><th>Tur</th><?php if ($jenis === 'oi'): ?><th>Info ID</th><th>Judul</th><th>Node</th><th>WebElement</th><th>Status</th><?php else: ?><th>Panorama</th><th>Berkas video</th><th>Status</th><?php endif; ?></tr></thead><tbody>
+            <?php if ($jenis === 'oi'): ?>
+                <?php foreach ($oiRows as $row): ?>
+                <tr class="<?= empty($row['active']) ? 'oi-row-off' : '' ?>"><td><?= (int) $row['no'] ?></td><td><a class="dashboard-tour-link" href="?tab=lokasi&lokasi=<?= e($row['tour']) ?>"><strong><?= e($row['tour_name']) ?></strong><small><?= e($row['tour']) ?></small></a></td><td><code><?= e($row['infoID']) ?></code></td><td><?= e($row['title']) ?></td><td><small><?= e($row['nodeID']) ?></small></td><td><small><?= e($row['targetID']) ?></small></td><td><?php if (!empty($row['active'])): ?><span class="oi-badge is-on">Aktif</span><?php else: ?><span class="oi-badge is-off">Tidak aktif</span><button type="button" class="oi-info" data-oi-note="<?= e($oiOffNote) ?>" title="<?= e($oiOffNote) ?>" aria-label="Info: <?= e($oiOffNote) ?>"><span data-lucide="info"></span></button><?php endif; ?></td></tr>
                 <?php endforeach; ?>
-                <?php if ($inventoryObjects === []): ?><tr><td colspan="6" class="dashboard-empty">Belum ada Object Informasi.</td></tr><?php endif; ?>
+                <?php if ($oiRows === []): ?><tr><td colspan="7" class="dashboard-empty"><?= $inventoryObjects === [] ? 'Belum ada Object Informasi.' : 'Tidak ada Object Informasi dengan status ini.' ?></td></tr><?php endif; ?>
             <?php else: ?>
                 <?php foreach ($inventoryVideos as $row): ?>
                 <tr><td><?= (int) $row['no'] ?></td><td><a class="dashboard-tour-link" href="?tab=lokasi&lokasi=<?= e($row['tour']) ?>"><strong><?= e($row['tour_name']) ?></strong><small><?= e($row['tour']) ?></small></a></td><td><code><?= e($row['node']) ?></code></td><td><small><?= e($row['video']) ?></small></td><td><?= !empty($row['exists']) ? 'Berkas ada' : 'Berkas tidak ditemukan' ?></td></tr>
@@ -2453,17 +2471,47 @@ if (objectList) {
         return (parts.length > 1 ? parts[parts.length - 1].trim() : '') || text || String(record.title || '').trim() || 'Tanpa judul';
     };
     // Daftar: object aktif di atas, nonaktif di bawah (urutan asli dipertahankan di tiap kelompok). Hanya tampilan; urutan data tidak berubah.
+    // Hotspot sama = beberapa record Object Info untuk node + target yang sama (pin yang sama di satu panorama). Tur hanya memakai yang AKTIF pertama,
+    // jadi satu kelompok dianggap valid bila tepat 1 yang aktif ("status satu kesatuan"). Warna kartu = kelompoknya.
+    const DUP_COLORS = ['#d97706', '#7c3aed', '#db2777', '#0891b2', '#ea580c', '#65a30d'];
+    let objectDupeOnly = false;
+    const dupKey = record => String(record.nodeID || '').replace(/[{}\s]/g, '').toLowerCase() + '|' + String(record.targetID || '').trim().toLowerCase();
+    function objectDupGroups() {
+        const byKey = new Map(), byIndex = new Map(), list = [];
+        objectRecords.forEach((record, index) => { const key = dupKey(record); if (key.startsWith('|')) return; if (!byKey.has(key)) byKey.set(key, []); byKey.get(key).push(index); });
+        for (const members of byKey.values()) {
+            if (members.length < 2) continue;
+            const group = {no: list.length, size: members.length, members, color: DUP_COLORS[list.length % DUP_COLORS.length], active: members.filter(i => objectRecords[i].isActive).length};
+            list.push(group); members.forEach(i => byIndex.set(i, group));
+        }
+        return {byIndex, list};
+    }
+    const dupStatusHtml = group => group.active === 1 ? '<em class="ok">1 aktif \u2713</em>' : group.active === 0 ? '<em class="warn">belum ada aktif</em>' : '<em class="warn">' + group.active + ' aktif \u26a0</em>';
+    function renderDupNote() {
+        const note = document.getElementById('oiDupNote'); if (!note) return;
+        const group = objectDupGroups().byIndex.get(selectedObject);
+        if (!group) { note.hidden = true; note.innerHTML = ''; return; }
+        const others = group.members.filter(i => i !== selectedObject).map(i => '<b>' + escapeObjectHtml(objectDisplayName(objectRecords[i])) + '</b> (' + (objectRecords[i].isActive ? 'aktif' : 'nonaktif') + ')');
+        const solo = objectRecords[selectedObject].isActive && group.active === 1;
+        note.style.setProperty('--dup', group.color); note.hidden = false;
+        note.innerHTML = '<span>Hotspot sama dengan ' + others.join(', ') + '. Status satu kesatuan: ' + dupStatusHtml(group) + (group.active > 1 ? ' (tur memakai yang aktif pertama)' : '') + '</span>' + (solo ? '' : '<button type="button" class="translate" data-dup-unify>Jadikan ini satu-satunya yang aktif</button>');
+    }
     function renderObjectItems(animate = false) {
         // FLIP: catat posisi lama tiap item, render ulang, lalu animasikan dari posisi lama ke posisi baru.
         const before = new Map();
         if (animate) objectList.querySelectorAll('[data-object]').forEach(item => before.set(item.dataset.object, item.getBoundingClientRect().top));
         const query = objectSearch.value.trim().toLowerCase();
         const visible = objectRecords.map((record,index)=>({record,index})).filter(({record}) => !query || [record.route_key,record.nodeID,record.labelTeks?.id,objectDisplayName(record)].some(value=>String(value||'').toLowerCase().includes(query)));
-        visible.sort((a,b) => (b.record.isActive ? 1 : 0) - (a.record.isActive ? 1 : 0) || a.index - b.index);
+        const dups = objectDupGroups(), dupOf = index => dups.byIndex.get(index);
+        const dupeBtn = document.getElementById('objectDupeToggle');
+        if (dupeBtn) { if (!dups.list.length) objectDupeOnly = false; dupeBtn.hidden = !dups.list.length; dupeBtn.setAttribute('aria-pressed', String(objectDupeOnly)); dupeBtn.querySelector('b').textContent = dups.list.length; }
+        const shown = objectDupeOnly ? visible.filter(({index}) => dupOf(index)) : visible;   // mode "Hotspot sama": hanya yang kembar, dikelompokkan per pin
+        if (objectDupeOnly) shown.sort((a,b) => dupOf(a.index).no - dupOf(b.index).no || (b.record.isActive ? 1 : 0) - (a.record.isActive ? 1 : 0) || a.index - b.index);
+        else shown.sort((a,b) => (b.record.isActive ? 1 : 0) - (a.record.isActive ? 1 : 0) || a.index - b.index);
         const activeTotal = objectRecords.filter(record => record.isActive).length, offTotal = objectRecords.length - activeTotal;
         const counter = document.getElementById('objectCount');
-        if (counter) counter.innerHTML = '<span class="oi-chip oi-chip-on' + (animate ? ' pop' : '') + '"><i></i><b>' + activeTotal + '</b> Aktif</span><span class="oi-chip oi-chip-off' + (animate ? ' pop' : '') + '"><i></i><b>' + offTotal + '</b> Nonaktif</span>' + (visible.length !== objectRecords.length ? '<span class="oi-chip">' + visible.length + ' dari ' + objectRecords.length + '</span>' : '');
-        objectList.innerHTML = visible.map(({record,index}) => '<button type="button" class="object-item '+(record.isActive?'is-on':'is-off')+(index===selectedObject?' active':'')+'" data-object="'+index+'"><span class="oi-row"><strong>'+escapeObjectHtml(objectDisplayName(record))+'</strong><em class="oi-state">'+(record.isActive?'Aktif':'Nonaktif')+'</em></span><small>'+escapeObjectHtml(record.route_key)+' \u00b7 '+escapeObjectHtml(record.nodeID||'Tanpa node')+'</small><span class="oi-trash" role="button" tabindex="0" data-trash="'+index+'" title="Hapus Objek Info ini beserta pin-nya" aria-label="Hapus Objek Info '+escapeObjectHtml(objectDisplayName(record))+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg></span></button>').join('');
+        if (counter) counter.innerHTML = '<span class="oi-chip oi-chip-on' + (animate ? ' pop' : '') + '"><i></i><b>' + activeTotal + '</b> Aktif</span><span class="oi-chip oi-chip-off' + (animate ? ' pop' : '') + '"><i></i><b>' + offTotal + '</b> Nonaktif</span>' + (shown.length !== objectRecords.length ? '<span class="oi-chip">' + shown.length + ' dari ' + objectRecords.length + '</span>' : '');
+        objectList.innerHTML = shown.map(({record,index}) => '<button type="button" class="object-item '+(record.isActive?'is-on':'is-off')+(index===selectedObject?' active':'')+(dupOf(index)?' is-dup':'')+'"'+(dupOf(index)?' style="--dup:'+dupOf(index).color+'"':'')+' data-object="'+index+'"><span class="oi-row"><strong>'+escapeObjectHtml(objectDisplayName(record))+'</strong><em class="oi-state">'+(record.isActive?'Aktif':'Nonaktif')+'</em></span><small>'+escapeObjectHtml(record.route_key)+' \u00b7 '+escapeObjectHtml(record.nodeID||'Tanpa node')+'</small>'+(dupOf(index)?'<span class="oi-dup"><i></i><span>Hotspot sama \u00d7'+dupOf(index).size+'</span>'+dupStatusHtml(dupOf(index))+'</span>':'')+'<span class="oi-trash" role="button" tabindex="0" data-trash="'+index+'" title="Hapus Objek Info ini beserta pin-nya" aria-label="Hapus Objek Info '+escapeObjectHtml(objectDisplayName(record))+'"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg></span></button>').join('');
         if (animate && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
             objectList.querySelectorAll('[data-object]').forEach(item => {
                 const from = before.get(item.dataset.object); if (from === undefined) return;
@@ -2613,7 +2661,8 @@ if (objectList) {
         const select=(field,label,values)=>'<label><span>'+label+'</span><select data-object-field="'+field+'">'+values.map(value=>'<option '+(record[field]===value?'selected':'')+'>'+value+'</option>').join('')+'</select></label>';
         const translations=Object.entries(voiceLabels).map(([code,label])=>'<label><span>'+label+'</span><textarea rows="3" data-object-lang="'+code+'">'+escapeObjectHtml(record.labelTeks?.[code]||'')+'</textarea></label>').join('');
         const previewUrl=record.infoID ? oiPreviewBaseUrl+'?info='+encodeURIComponent(record.infoID)+'&lang=id' : '';
-        objectForm.innerHTML='<div class="object-form-head"><label class="object-active-toggle"><span>Object</span><span class="toggle-control"><input type="checkbox" data-object-active aria-label="Aktifkan object" '+(record.isActive?'checked':'')+'><i aria-hidden="true"></i></span></label><div class="object-form-actions"><button type="button" class="translate" data-translate-object>✦ Auto Translate</button></div></div><div class="object-detail-layout"><div><div class="object-fields">'+input('route_key','Route Key','span2')+input('title','Title')+input('nodeID','Node ID')+select('targetID','Target ID',Array.from({length:10},(_,index)=>'Element'+String(index+1).padStart(2,'0')))+input('infoID','Info ID')+select('arah','Arah',['luruskanan','luruskiri','kanan','kiri'])+input('ukuran','Ukuran')+'</div><div class="object-translations">'+translations+'</div></div><aside class="object-preview"><header><strong>Preview Info</strong><a href="'+escapeObjectHtml(previewUrl)+'" target="_blank" rel="noopener">Buka ↗</a></header>'+(previewUrl?'<iframe src="'+escapeObjectHtml(previewUrl)+'" title="Preview Object Informasi"></iframe>':'<div>Isi Info ID untuk melihat preview.</div>')+'</aside></div>';
+        objectForm.innerHTML='<div class="object-form-head"><label class="object-active-toggle"><span>Object</span><span class="toggle-control"><input type="checkbox" data-object-active aria-label="Aktifkan object" '+(record.isActive?'checked':'')+'><i aria-hidden="true"></i></span></label><div class="object-form-actions"><button type="button" class="translate" data-translate-object>✦ Auto Translate</button></div></div><div class="oi-dup-note" id="oiDupNote" hidden></div><div class="object-detail-layout"><div><div class="object-fields">'+input('route_key','Route Key','span2')+input('title','Title')+input('nodeID','Node ID')+select('targetID','Target ID',Array.from({length:10},(_,index)=>'Element'+String(index+1).padStart(2,'0')))+input('infoID','Info ID')+select('arah','Arah',['luruskanan','luruskiri','kanan','kiri'])+input('ukuran','Ukuran')+'</div><div class="object-translations">'+translations+'</div></div><aside class="object-preview"><header><strong>Preview Info</strong><a href="'+escapeObjectHtml(previewUrl)+'" target="_blank" rel="noopener">Buka ↗</a></header>'+(previewUrl?'<iframe src="'+escapeObjectHtml(previewUrl)+'" title="Preview Object Informasi"></iframe>':'<div>Isi Info ID untuk melihat preview.</div>')+'</aside></div>';
+        renderDupNote();
     }
     // Pusat area panorama yang benar-benar terlihat (di antara panel daftar kiri dan form kanan) relatif terhadap pusat panggung, dalam piksel.
     // Memakai posisi tata letak akhir (bukan posisi saat animasi buka/tutup panel), supaya hasilnya tetap tepat walau panel baru dibuka.
@@ -2770,7 +2819,17 @@ if (objectList) {
         const field = objectForm.querySelector('[data-object-field="infoID"]'); if (field) field.value = next;
     }
     objectSearch.addEventListener('input',renderObjectList);
-    objectForm.addEventListener('input',event=>{const record=objectRecords[selectedObject];if(!record)return;if(event.target.dataset.objectField||event.target.dataset.objectLang||event.target.hasAttribute('data-object-active'))trackTyping(event.target.hasAttribute('data-object-active')?'Ubah status object':'Edit object');if(event.target.dataset.objectField){const previousTitle=record.title;record[event.target.dataset.objectField]=event.target.value;if(event.target.dataset.objectField==='title'){autoFillObjectLabels(record,previousTitle);autoFillInfoId(record,previousTitle);}}if(event.target.dataset.objectLang)record.labelTeks[event.target.dataset.objectLang]=event.target.value;if(event.target.hasAttribute('data-object-active'))record.isActive=event.target.checked;if(event.target.hasAttribute('data-object-active')){renderObjectItems(true);return;}const item=objectList.querySelector('[data-object="'+selectedObject+'"]');if(item){item.querySelector('strong').textContent=objectDisplayName(record);item.querySelector('small').textContent=(record.route_key||'')+' · '+(record.nodeID||'Tanpa node');}});
+    document.getElementById('objectDupeToggle')?.addEventListener('click',()=>{objectDupeOnly=!objectDupeOnly;renderObjectItems(true);});
+    objectForm.addEventListener('click',event=>{
+        if(!event.target.closest('[data-dup-unify]'))return;
+        const group=objectDupGroups().byIndex.get(selectedObject); if(!group)return;
+        group.members.forEach(i=>{objectRecords[i].isActive=i===selectedObject;});   // satu kesatuan: hanya object terpilih yang aktif
+        trackTyping('Samakan status hotspot');
+        const toggle=objectForm.querySelector('[data-object-active]'); if(toggle)toggle.checked=true;
+        renderObjectItems(true); renderDupNote();
+        cmsToast('Hotspot ' + String(objectRecords[selectedObject].targetID||'') + ': hanya object ini yang aktif sekarang. Simpan untuk menerapkan.');
+    });
+    objectForm.addEventListener('input',event=>{const record=objectRecords[selectedObject];if(!record)return;if(event.target.dataset.objectField||event.target.dataset.objectLang||event.target.hasAttribute('data-object-active'))trackTyping(event.target.hasAttribute('data-object-active')?'Ubah status object':'Edit object');if(event.target.dataset.objectField){const previousTitle=record.title;record[event.target.dataset.objectField]=event.target.value;if(event.target.dataset.objectField==='title'){autoFillObjectLabels(record,previousTitle);autoFillInfoId(record,previousTitle);}}if(event.target.dataset.objectLang)record.labelTeks[event.target.dataset.objectLang]=event.target.value;if(event.target.hasAttribute('data-object-active'))record.isActive=event.target.checked;if(event.target.hasAttribute('data-object-active')){renderObjectItems(true);renderDupNote();return;}const item=objectList.querySelector('[data-object="'+selectedObject+'"]');if(item){item.querySelector('strong').textContent=objectDisplayName(record);item.querySelector('small').textContent=(record.route_key||'')+' · '+(record.nodeID||'Tanpa node');}if(event.target.dataset.objectField==='nodeID'||event.target.dataset.objectField==='targetID'){renderObjectItems();renderDupNote();}});
     objectForm.addEventListener('click',async event=>{
         const translate = event.target.closest('[data-translate-object]');
         if (translate) {

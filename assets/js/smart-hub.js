@@ -9,6 +9,7 @@
   let hub = null, saved = '';            // salinan kerja _hub.json
   let tab = (location.hash.match(/sh=([a-z]+)/) || [])[1] || 'lokasi';
   let selAction = null, selFeed = null, previewKit = null, previewLoc = '', scenesCache = {};
+  let job = null;                        // proses panjang tombol Lokasi (Update Skin + Smart Kit, Aktifkan, Bangun, Terapkan, Lepas; tetap hidup walau pindah tab; panel progres digambar ulang saat tab Lokasi dibuka lagi)
   const main = document.getElementById('shMain');
 
   /* ---------- util ---------- */
@@ -54,7 +55,7 @@
 
   /* ---------- tab bar ---------- */
   document.querySelectorAll('[data-sh-tab]').forEach((b) => b.addEventListener('click', () => { if (window.__shContentDirty?.() && !confirm('Ada perubahan konten yang belum disimpan. Pindah tab tanpa menyimpan?')) return; if (window.__shContentDirty?.()) window.SmartHubContent?.reset(); tab = b.dataset.shTab; history.replaceState(null, '', '#sh=' + tab); render(); }));
-  addEventListener('beforeunload', (e) => { if (dirty() || window.__shContentDirty?.()) { e.preventDefault(); e.returnValue = ''; } });
+  addEventListener('beforeunload', (e) => { if (dirty() || window.__shContentDirty?.() || job?.running) { e.preventDefault(); e.returnValue = ''; } });
   document.getElementById('shSave').addEventListener('click', saveHub);
   document.getElementById('shDiscard').addEventListener('click', () => { loadHub(); render(); toast('Perubahan dibatalkan'); });
 
@@ -102,17 +103,17 @@
         h('td', { class: 'sh-actions sh-rowactions' }, h('button', { type: 'button', class: 'translate', disabled: !l.applied || null, title: l.applied ? 'Tampilkan di panel pratinjau' : 'Terapkan Smart Kit terlebih dahulu untuk mengaktifkan pratinjau', onclick: () => setPreview(l.id) }, ico('panel-right-open'), 'Pratinjau'), l.url ? h('a', { class: 'translate sh-iconbtn', href: l.url, target: '_blank', rel: 'noopener', title: 'Buka tur di tab baru', 'aria-label': 'Buka ' + l.name + ' di tab baru' }, ico('external-link')) : null));
     });
     const run = async (op, label) => {
+      if (job?.running) return toast(job.cfg.title + ' masih berjalan. Tunggu sampai selesai.', true);
       if (!chosen.size) return toast('Centang minimal satu lokasi.', true);
       if (op !== 'build' && !confirm(`${label} untuk ${chosen.size} lokasi? index.html dicadangkan otomatis ke .skin-backups.`)) return;
-      main.querySelectorAll('button').forEach((b) => (b.disabled = true));
-      try { const j = await post(op, { locations: [...chosen] }); S = j.state; window.SmartHubContent?.reset(); render(); showResults(j); }
-      catch (e) { toast(e.message, true); render(); }
+      runJob(op, [...chosen]);   // semua tombol di bawah tabel memakai panel progres yang sama
     };
     main.append(h('div', { class: 'card sh-card' },
       h('div', { class: 'sh-card__h' }, h('div', null, h('h3', null, 'Lokasi di project ini'), h('p', null, `${S.locations.length} tur terdeteksi di ${S.project.path}. Paket konten dibuat dari pano.xml (tur tidak diubah); "Terapkan" memasang HUD Smart Kit ke index.html.`)),
         h('label', { class: 'sh-selall' }, h('input', { type: 'checkbox', onchange: (e) => { main.querySelectorAll('tbody input[type=checkbox]').forEach((x) => { x.checked = e.target.checked; x.dispatchEvent(new Event('change')); }); } }), 'Pilih semua')),
       S.locations.length ? h('div', { class: 'sh-tablewrap' }, h('table', { class: 'sh-table' }, h('thead', null, h('tr', null, h('th', null, ''), h('th', null, 'Lokasi'), h('th', null, 'Paket'), h('th', null, 'Konten'), h('th', null, 'Kesiapan'), h('th', null, 'Inspector'), h('th', null, 'Tampilan'), h('th', null, ''))), h('tbody', null, rows)))
         : h('div', { class: 'sh-empty' }, 'Belum ada folder tur (berisi pano.xml) di project ini.'),
+      job ? jobPanel() : null,
       h('div', { class: 'sh-bar' },
         h('button', { type: 'button', class: 'save', title: 'Terapkan template skin project (skin.js), bangun paket Smart Kit, terapkan, dan salin hasilnya ke smart-kit di folder proyek, sekaligus', onclick: () => run('update_skin_kit', 'Update Skin + Smart Kit (template skin, bangun paket, terapkan)') }, ico('refresh-cw'), 'Update Skin + Smart Kit (satu klik)'),
         h('button', { type: 'button', class: 'save', onclick: () => run('activate', 'Aktifkan Smart Kit (bangun paket + terapkan)') }, ico('zap'), 'Aktifkan Smart Kit (satu klik)'),
@@ -121,7 +122,92 @@
         h('button', { type: 'button', class: 'translate', onclick: () => run('unapply', 'Lepas Smart Kit') }, ico('undo-2'), 'Lepas Smart Kit')),
       h('div', { class: 'sh-note' }, h('b', null, 'Alur per lokasi: '), '① Bangun paket (scenes, thumbnail, content.json, serta memasang custom.css + main-loader.js dengan preload teaser; skin.js tidak ditimpa) → ② isi konten di tab 2–3 → ③ atur aksi, menu & data di tab 4–6 → ④ Terapkan Smart Kit. Sebelum index.html diubah, backup otomatis dibuat di ', h('code', null, '.skin-backups'), '. Konten lokasi tetap di ', h('code', null, `smart-kit/packs/${S.settings.wilayah}/<lokasi>/content.json`), '.')));
     const res = h('div', { id: 'shResults' }); main.append(res);
+    if (job?.running) main.querySelectorAll('.sh-bar button').forEach((b) => (b.disabled = true));
+    paintJob();
+    if (job && !job.running && job.summary) showResults(job.summary, true);
     syncCard().then((c) => { if (tab === 'lokasi') main.append(c); });
+  }
+
+  /* ---------- progres proses (Update Skin + Smart Kit, Aktifkan, Bangun, Terapkan, Lepas) ----------
+   * Server menjalankan tiap langkah per lokasi lewat permintaan terpisah (op + step; lihat $stepOps di smart-hub.php), sehingga posisi proses
+   * benar-benar diketahui. Persen dihitung dari bobot rata-rata durasi langkah yang sudah terukur (perkiraan awal `ms` dipakai sampai tiap jenis
+   * langkah selesai sekali); langkah yang sedang berjalan maju pelan-pelan (maks 90%) sampai respons server datang.
+   * Langkah ber-`dep` dilewati bila langkah yang disebut gagal. */
+  const JOBS = {
+    update_skin_kit: { title: 'Update Skin + Smart Kit', done: 'diperbarui (skin + Smart Kit)', steps: [
+      { k: 'skin', label: '① Template skin', what: 'Menerapkan skin.js dan merapikan index.html', ms: 1500 },
+      { k: 'kit', label: '② Paket Smart Kit', what: 'Membangun paket (scene, thumbnail, konten) dan menerapkan HUD. Langkah terlama', ms: 9000 },
+      { k: 'copy', label: '③ Salinan tur', what: 'Menyalin hasil ke smart-kit di folder proyek', ms: 1500, dep: 'kit' }] },
+    activate: { title: 'Aktifkan Smart Kit', done: 'diaktifkan', steps: [
+      { k: 'build', label: '① Bangun paket', what: 'Membangun paket (scene, thumbnail, konten). Langkah terlama', ms: 8000 },
+      { k: 'apply', label: '② Terapkan HUD', what: 'Memasang HUD Smart Kit ke index.html (dicadangkan ke .skin-backups)', ms: 1000, dep: 'build' }] },
+    build: { title: 'Bangun / perbarui paket', done: 'berhasil dibangun', steps: [
+      { k: 'pack', label: '① Paket konten', what: 'Membangun paket (scene, thumbnail, konten)', ms: 8000 },
+      { k: 'runtime', label: '② Runtime bersama', what: 'Memasang custom.css dan main-loader.js', ms: 1200, dep: 'pack' }] },
+    apply: { title: 'Terapkan Smart Kit', done: 'berhasil diterapkan', steps: [{ k: 'run', label: '① Terapkan HUD', what: 'Memasang HUD Smart Kit ke index.html (dicadangkan ke .skin-backups)', ms: 1000 }] },
+    unapply: { title: 'Lepas Smart Kit', done: 'berhasil dilepas', steps: [{ k: 'run', label: '① Lepas HUD', what: 'Melepas HUD Smart Kit dari index.html', ms: 1000 }] },
+  };
+  const fmtDur = (ms) => { const s = Math.max(0, Math.round(ms / 1000)); return s >= 60 ? Math.floor(s / 60) + ' mnt ' + String(s % 60).padStart(2, '0') + ' dtk' : s + ' dtk'; };
+  const jobWeight = (k) => { const a = job.dur[k]; return a.length ? a.reduce((x, y) => x + y, 0) / a.length : job.cfg.steps.find((x) => x.k === k).ms; };
+  function jobProgress() {
+    const steps = job.cfg.steps, total = job.ids.length * steps.reduce((s, x) => s + jobWeight(x.k), 0);
+    let done = 0; for (const st of job.stat) for (const x of steps) if (st[x.k]) done += jobWeight(x.k);
+    const part = job.running && job.cur ? Math.min(0.9, (Date.now() - job.cur.t0) / jobWeight(job.cur.key)) * jobWeight(job.cur.key) : 0;
+    return { pct: job.running ? Math.min(99, Math.floor((done + part) / total * 100)) : 100, remain: Math.max(0, total - done - part), measured: steps.every((x) => job.dur[x.k].length) };
+  }
+  function jobPanel() {
+    return h('div', { id: 'shJob', class: 'sh-job', role: 'status', 'aria-live': 'polite' },
+      h('div', { class: 'sh-job__top' }, h('b', null, job.cfg.title), h('span', { class: 'sh-job__pct' }, '0%')),
+      h('div', { class: 'sh-job__bar', role: 'progressbar', 'aria-label': 'Progres ' + job.cfg.title, 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': '0' }, h('i')),
+      h('div', { class: 'sh-job__meta' }, h('span', { class: 'sh-job__where' }), h('span', { class: 'sh-job__time' })),
+      h('div', { class: 'sh-job__steps' }, job.cfg.steps.map((x) => h('span', { class: 'sh-job__step', 'data-k': x.k }, x.label))),
+      h('div', { class: 'sh-job__what' }),
+      h('div', { class: 'sh-job__dots', 'aria-hidden': 'true' }, job.ids.map((id, i) => h('i', { 'data-i': i, title: job.names[i] }))),
+      h('div', { class: 'sh-job__foot' }, h('small', { class: 'sh-job__note' }), h('button', { type: 'button', class: 'translate sh-job__x', onclick: () => { job = null; render(); } }, 'Tutup')));
+  }
+  function paintJob() {
+    const el = main.querySelector('#shJob'); if (!el || !job) return;
+    const q = (s) => el.querySelector(s), n = job.ids.length, p = jobProgress(), cur = job.cur, i = cur ? cur.i : n - 1;
+    el.classList.toggle('is-running', job.running); el.classList.toggle('is-done', !job.running);
+    q('.sh-job__pct').textContent = p.pct + '%'; q('.sh-job__bar > i').style.width = p.pct + '%'; q('.sh-job__bar').setAttribute('aria-valuenow', String(p.pct));
+    const took = (job.end || Date.now()) - job.t0;
+    q('.sh-job__time').textContent = job.running ? 'Berjalan ' + fmtDur(took) + (p.measured ? ' · sisa ± ' + fmtDur(p.remain) : ' · memperkirakan sisa waktu…') : 'Selesai dalam ' + fmtDur(took);
+    const failN = job.results.filter((r) => !r.ok).length;
+    q('.sh-job__where').textContent = job.running ? `Lokasi ${i + 1} dari ${n} · ${job.names[i]}` : `${n - failN} dari ${n} lokasi berhasil${failN ? ` · ${failN} gagal (lihat rincian di bawah)` : ''}`;
+    const stat = job.stat[Math.min(i, n - 1)] || {};
+    el.querySelectorAll('.sh-job__step').forEach((c) => { const k = c.dataset.k, s = stat[k]; c.className = 'sh-job__step' + (job.running && cur && cur.key === k && !s ? ' is-active' : s ? ' is-' + s : ''); });
+    q('.sh-job__what').textContent = job.running && cur ? job.cfg.steps.find((x) => x.k === cur.key).what + '…' : '';
+    el.querySelectorAll('.sh-job__dots i').forEach((d) => { const x = Number(d.dataset.i), r = job.results[x]; d.className = r ? (r.ok ? 'is-ok' : 'is-bad') : (job.running && cur && cur.i === x ? 'is-active' : ''); });
+    q('.sh-job__note').textContent = job.running ? 'Jangan tutup atau muat ulang halaman ini sampai selesai.' : '';
+    q('.sh-job__x').hidden = job.running;
+  }
+  async function runJob(op, ids) {
+    const cfg = JOBS[op], steps = cfg.steps;
+    job = { op, cfg, running: true, ids, names: ids.map((id) => (S.locations.find((l) => l.id === id) || {}).name || id), t0: Date.now(), end: 0, cur: { i: 0, key: steps[0].k, t0: Date.now() }, dur: Object.fromEntries(steps.map((x) => [x.k, []])), stat: ids.map(() => ({})), results: [] };
+    render();   // memunculkan panel progres (tombol bar ikut dinonaktifkan)
+    job.timer = setInterval(paintJob, 400);
+    const ok = [], bad = [];
+    for (let i = 0; i < ids.length; i++) {
+      const lines = []; let good = true;
+      for (const x of steps) {
+        if (x.dep && job.stat[i][x.dep] !== 'ok') { job.stat[i][x.k] = 'skip'; continue; }   // langkah sebelumnya gagal: tidak ada yang dilanjutkan
+        job.cur = { i, key: x.k, t0: Date.now() }; paintJob();
+        let r; try { r = await post(op, { locations: [ids[i]], step: x.k }); } catch (e) { r = { ok: false, state: 'fail', message: 'Langkah ' + x.label + ' GAGAL: ' + e.message }; }
+        job.dur[x.k].push(Date.now() - job.cur.t0);
+        job.stat[i][x.k] = r.ok ? (r.state === 'skip' ? 'skip' : 'ok') : 'fail';
+        if (r.message) lines.push(r.message);
+        if (!r.ok) good = false;
+        paintJob();
+      }
+      (good ? ok : bad).push(ids[i]); job.results.push({ id: ids[i], ok: good, message: lines.join('\n') });
+      paintJob();
+    }
+    clearInterval(job.timer); job.running = false; job.cur = null; job.end = Date.now();
+    try { const fin = await post(op, { locations: ids, step: 'finish', done: ok, failed: bad }); if (fin.state) S = fin.state; } catch (e) { toast('Proses selesai, tetapi status terbaru gagal dimuat: ' + e.message, true); }
+    job.summary = { message: `${ok.length} dari ${ids.length} lokasi ${cfg.done} dalam ${fmtDur(job.end - job.t0)}.`, success: ok.length > 0, results: job.results };
+    window.SmartHubContent?.reset(); render();   // tab Lokasi menampilkan rincian hasil lewat job.summary (juga bila pengguna sempat pindah tab lalu kembali)
+    if (bad.length && ok.length && window.cmsToast) window.cmsToast(job.summary.message, 'warn');   // sebagian gagal: jangan tampil hijau "Berhasil"
+    else toast(job.summary.message, !job.summary.success);
   }
 
   /* ---------- sinkron dari pilot ---------- */
@@ -144,10 +230,10 @@
       sy.last ? h('div', { class: 'sh-note' }, 'Sinkron terakhir: ' + sy.last.at) : null);
     return box;
   }
-  function showResults(j) {
-    const box = document.getElementById('shResults'); if (!box) return toast(j.message);
+  function showResults(j, quiet) {
+    const box = document.getElementById('shResults'); if (!box) return quiet ? undefined : toast(j.message);
     box.replaceChildren(h('div', { class: 'card sh-card' }, h('h3', null, j.message), h('ul', { class: 'sh-results' }, (j.results || []).map((r) => h('li', { class: r.ok ? 'is-ok' : 'is-bad' }, h('b', null, r.id), h('pre', null, r.message))))));
-    toast(j.message, !j.success);
+    if (!quiet) toast(j.message, !j.success);
   }
 
   /* ---------- 2. Aksi ---------- */
