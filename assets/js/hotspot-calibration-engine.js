@@ -339,7 +339,10 @@
   let navBlocked = false;
   function blockNav() {
     if (navBlocked) return; navBlocked = true;
-    document.addEventListener('click', (e) => { const a = e.target && e.target.closest && e.target.closest('#bdg-locs a'); if (a) { e.preventDefault(); e.stopPropagation(); } }, true);
+    document.addEventListener('click', (e) => {   // hotspot lokasi terdekat dan logo Beranda (#logoHome di Shadow DOM shell: lewat composedPath) membuka tur/peta lain
+      const path = e.composedPath ? e.composedPath() : [];
+      if (path.some((n) => n && n.matches && (n.matches('#bdg-locs a') || n.id === 'logoHome'))) { e.preventDefault(); e.stopPropagation(); }
+    }, true);
   }
 
   /* pratinjau di tur: buka panorama sceneId, pasang posisi 'before' (awal) atau 'after' (hasil kalibrasi) untuk perpindahan di panorama itu, lalu arahkan kamera ke yang pertama */
