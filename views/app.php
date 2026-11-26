@@ -775,16 +775,18 @@
     <?php elseif ($activeTab === 'video'): ?>
         <section class="card section video-editor">
             <div class="section-heading"><div><span class="step">VD</span><h2>Video Mobile & Desktop</h2></div><p>Upload baru akan menimpa video lama. Jika video mobile kosong, tur memakai video desktop dan memotongnya otomatis agar memenuhi layar ponsel.</p></div>
-            <select id="videoLocation" hidden><option value="<?= e($selectedId) ?>" data-path="<?= e($detectedTours[$selectedId]['path'] ?? '') ?>" selected><?= e($selectedId) ?></option></select>
+            <select id="videoLocation" hidden><option value="<?= e($selectedId) ?>" data-path="<?= e($detectedTours[$selectedId]['path'] ?? '') ?>" data-online="<?= e(json_encode($videoOnlineBases, JSON_UNESCAPED_SLASHES)) ?>" selected><?= e($selectedId) ?></option></select>
             <div class="video-grid">
                 <article class="video-card">
                     <div class="video-card-head"><div><strong>Mobile</strong><small id="mobileFileName">video/mobile.webm / .mp4</small></div><span id="mobileStatus" class="media-status">Memeriksa…</span></div>
+                    <p class="video-card-note is-online" id="mobileOnline" hidden><b>↗</b><span></span></p>
                     <p class="video-card-note" id="mobileNote" hidden><b>i</b>Versi mobile belum ada. Tur memakai video desktop yang dipotong otomatis agar memenuhi layar ponsel; unggah video mobile bila ingin hasil yang pas.</p>
                     <video id="mobilePreview" controls playsinline></video>
                     <label class="upload-box"><span>Pilih video mobile (WebM/MP4)</span><input type="file" id="mobileFile" accept="video/webm,video/mp4,.webm,.mp4"></label>
                 </article>
                 <article class="video-card">
                     <div class="video-card-head"><div><strong>Desktop</strong><small id="desktopFileName">video/desktop.webm / .mp4</small></div><span id="desktopStatus" class="media-status">Memeriksa…</span></div>
+                    <p class="video-card-note is-online" id="desktopOnline" hidden><b>↗</b><span></span></p>
                     <video id="desktopPreview" controls playsinline></video>
                     <label class="upload-box"><span>Pilih video desktop (WebM/MP4)</span><input type="file" id="desktopFile" accept="video/webm,video/mp4,.webm,.mp4"></label>
                 </article>
@@ -3403,13 +3405,18 @@ function mountVideoPlayer(video) {
 }
 
 const videoLocation = document.getElementById('videoLocation');
+const videoProbeToken = { mobile: 0, desktop: 0 };
 function refreshVideoStatus() {
     if (!videoLocation || !videoLocation.value) return;
-    const path = videoLocation.selectedOptions[0].dataset.path;
+    const option = videoLocation.selectedOptions[0], path = option.dataset.path;
+    let onlineBases = [];   // alamat tur online (Daftar URL): cadangan bila video tidak ada di komputer ini
+    try { onlineBases = JSON.parse(option.dataset.online || '[]').filter(function (url) { return /^https?:\/\//i.test(url); }); } catch (error) { onlineBases = []; }
     ['mobile', 'desktop'].forEach(function (type) {
+        const token = ++videoProbeToken[type], stale = function () { return token !== videoProbeToken[type]; };   // hasil pemeriksaan lama diabaikan bila lokasi berganti
         const preview = document.getElementById(type + 'Preview');
         const status = document.getElementById(type + 'Status');
         const fileName = document.getElementById(type + 'FileName');
+        const onlineHint = document.getElementById(type + 'Online');
         const urlFor = function (extension) {
             const relativeVideoPath = path.split('/').filter(Boolean).map(encodeURIComponent).join('/') + '/video/' + type + '.' + extension;
             const videoUrl = new URL(relativeVideoPath, activeProjectBaseUrl);
@@ -3421,17 +3428,47 @@ function refreshVideoStatus() {
             const optional = type === 'mobile';   // mobile opsional: kuning (perhatian), desktop wajib: merah
             status.textContent = optional ? 'Belum ada \u00b7 opsional' : 'Belum ada'; status.className = 'media-status ' + (optional ? 'warn' : 'missing');
             card?.classList.toggle('is-warn', optional); card?.classList.toggle('is-missing', !optional); if (note) note.hidden = !optional;
+            if (onlineHint) onlineHint.hidden = true;
             preview.removeAttribute('src'); preview.style.display = 'none'; if (fileName) fileName.textContent = 'video/' + type + '.webm / .mp4';
         };
-        // WebM diprioritaskan (sama dengan urutan di tur), lalu MP4.
+        const found = function (url, extension, online) {
+            status.textContent = (online ? 'Tersedia online (' : 'Tersedia (') + extension.toUpperCase() + ')'; status.className = 'media-status exists' + (online ? ' online' : '');
+            preview.src = url; preview.style.display = 'block';
+            card?.classList.remove('is-warn', 'is-missing'); if (note) note.hidden = true;
+            if (fileName) fileName.textContent = online ? url.replace(/^https?:\/\//i, '') : 'video/' + type + '.' + extension;
+            if (onlineHint) {
+                onlineHint.hidden = !online;
+                if (online) onlineHint.querySelector('span').textContent = 'Berkas belum ada di komputer ini, jadi pratinjau diambil dari tur online (' + new URL(url).host + '). Hanya dibaca: Upload tetap menyimpan ke folder lokal.';
+            }
+        };
+        // Tur online: <video> dimuat sebagai uji (fetch lintas-origin butuh CORS, pemutaran tidak). WebM dulu, lalu MP4, per alamat.
+        const candidates = [];
+        onlineBases.forEach(function (base) { ['webm', 'mp4'].forEach(function (extension) { candidates.push([base + '/video/' + type + '.' + extension, extension]); }); });
+        const probeOnline = function (index) {
+            if (stale()) return;
+            if (index >= candidates.length) { missing(); return; }
+            const url = candidates[index][0], extension = candidates[index][1], test = document.createElement('video');
+            let finished = false, timer = 0;
+            const finish = function (ok) {
+                if (finished) return; finished = true; clearTimeout(timer);
+                test.removeAttribute('src'); test.load();
+                if (stale()) return;
+                if (ok) found(url, extension, true); else probeOnline(index + 1);
+            };
+            timer = setTimeout(function () { finish(false); }, 8000);
+            test.preload = 'metadata'; test.muted = true;
+            test.onloadedmetadata = function () { finish(true); }; test.onerror = function () { finish(false); };
+            test.src = url;
+        };
+        // Komputer ini lebih dulu: WebM diprioritaskan (sama dengan urutan di tur), lalu MP4; baru tur online.
         const probe = function (extensions) {
-            if (!extensions.length) { missing(); return; }
+            if (stale()) return;
+            if (!extensions.length) { probeOnline(0); return; }
             const url = urlFor(extensions[0]);
             fetch(url, { method: 'HEAD', cache: 'no-store' }).then(function (response) {
+                if (stale()) return;
                 if (!response.ok) { probe(extensions.slice(1)); return; }
-                status.textContent = 'Tersedia (' + extensions[0].toUpperCase() + ')'; status.className = 'media-status exists'; preview.src = url; preview.style.display = 'block';
-                card?.classList.remove('is-warn', 'is-missing'); if (note) note.hidden = true;
-                if (fileName) fileName.textContent = 'video/' + type + '.' + extensions[0];
+                found(url, extensions[0], false);
             }).catch(function () { probe(extensions.slice(1)); });
         };
         probe(['webm', 'mp4']);

@@ -29,15 +29,27 @@ function lokasiDbFile(string $assetsRoot): string
 
 function lokasiDbRead(string $file): array
 {
-    $empty = ['version' => 1, 'locations' => [], 'links' => []];
+    $empty = ['version' => 1, 'base' => '', 'locations' => [], 'links' => []];
     if (!is_file($file)) return $empty;
     try { $data = cmsReadJsObject($file, LOKASI_DB_VAR); } catch (Throwable) { return $empty; }
-    return ['version' => 1, 'locations' => is_array($data['locations'] ?? null) ? $data['locations'] : [], 'links' => is_array($data['links'] ?? null) ? $data['links'] : []];
+    return ['version' => 1, 'base' => is_string($data['base'] ?? null) ? $data['base'] : '', 'locations' => is_array($data['locations'] ?? null) ? $data['locations'] : [], 'links' => is_array($data['links'] ?? null) ? $data['links'] : []];
+}
+
+/** URL lokasi: alamat lengkap (host/jalur, skema opsional) atau jalur di server yang sama, mis. /kawasan-luar-pura-puncak-tedung (semua tur satu server; "//host" ditolak). */
+function lokasiUrlValid(string $url): bool
+{
+    if (str_starts_with($url, '/')) return !str_starts_with($url, '//') && (bool) preg_match('#^/[A-Za-z0-9._~%!$&\'()*+,;=:@/-]*$#', $url);
+    return (bool) preg_match('~^(https?://)?[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9-]+)+(?::\d{2,5})?(?:[/?#][^\s<>"\'\\\\]*)?$~', $url);
 }
 
 /** Rapikan + validasi kiriman dari editor; melempar RuntimeException berpesan Indonesia bila ada yang tidak valid. */
 function lokasiDbNormalize(array $in): array
 {
+    $base = trim((string) ($in['base'] ?? ''));   // alamat server tur online, mis. https://badung.govirtual.id (untuk pratinjau video di CMS yang tidak punya filenya)
+    if ($base !== '') {
+        if (!preg_match('~^https?://[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9-]+)+(?::\d{2,5})?/?$~', $base)) throw new RuntimeException('Alamat server tur online tidak valid: ' . mb_substr($base, 0, 80) . ' (contoh: https://badung.govirtual.id)');
+        $base = rtrim($base, '/');
+    }
     $locations = [];
     foreach ((array) ($in['locations'] ?? []) as $id => $row) {
         $id = lokasiCleanId($id);
@@ -46,9 +58,7 @@ function lokasiDbNormalize(array $in): array
         $url = trim((string) ($row['url'] ?? ''));
         if ($name === '') throw new RuntimeException('Judul lokasi "' . $id . '" tidak boleh kosong.');
         if (mb_strlen($name) > 120) throw new RuntimeException('Judul "' . mb_substr($name, 0, 30) . '…" terlalu panjang (maksimal 120 karakter).');
-        if ($url !== '' && !preg_match('~^(https?://)?[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9-]+)+(?::\d{2,5})?(?:[/?#][^\s<>"\'\\\\]*)?$~', $url)) {
-            throw new RuntimeException('URL untuk "' . $name . '" tidak valid: ' . mb_substr($url, 0, 80));
-        }
+        if ($url !== '' && !lokasiUrlValid($url)) throw new RuntimeException('URL untuk "' . $name . '" tidak valid: ' . mb_substr($url, 0, 80) . ' (contoh: /nama-lokasi)');
         $locations[$id] = ['name' => $name, 'url' => $url];
     }
     $links = [];
@@ -72,13 +82,13 @@ function lokasiDbNormalize(array $in): array
         }
         $links[$source] = $out;
     }
-    return ['version' => 1, 'locations' => $locations, 'links' => $links];
+    return ($base !== '' ? ['version' => 1, 'base' => $base] : ['version' => 1]) + ['locations' => $locations, 'links' => $links];
 }
 
 function lokasiDbWrite(string $file, array $data): void
 {
     $header = "// lokasi-database.js — DIKELOLA CMS (tab \"URL Lokasi\"): daftar URL lokasi Badung + hotspot \"lokasi terdekat\" di panorama drone.\n"
-        . "// locations: <id lokasi> -> { name: judul (sumber terjemahan Pano2VR), url }.  links: <id sumber> -> [{ to, min (menit), km (teks jarak), pan, tilt }].\n";
+        . "// base: alamat server tur online.  locations: <id lokasi> -> { name: judul (sumber terjemahan Pano2VR), url: /id-lokasi (server yang sama) atau alamat lengkap }.  links: <id sumber> -> [{ to, min (menit), km (teks jarak), pan, tilt }].\n";
     $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
     if (is_file($file)) {
         $backup = cmsBackupEnsure(dirname($file), 'lokasi-url');
@@ -86,6 +96,36 @@ function lokasiDbWrite(string $file, array $data): void
     }
     if (file_put_contents($file, $header . 'window.' . LOKASI_DB_VAR . ' = ' . $json . ";\n", LOCK_EX) === false) throw new RuntimeException('lokasi-database.js gagal disimpan.');
     try { lokasiMemoryWrite(dirname($file), $data); } catch (Throwable) { /* memori hanya cadangan pemulihan; gagal mencatat tidak membatalkan simpan */ }
+}
+
+/**
+ * Alamat tur ONLINE sebuah lokasi (https, tanpa garis miring akhir), dipakai tab Video CMS: file video besar tidak ikut git, jadi CMS di komputer lain
+ * mengambil pratinjaunya dari tur online. Urutan: (1) "base" (alamat server tur, mis. https://badung.govirtual.id) + id lokasi, karena semua tur satu server
+ * dan URL lokasi cukup /id-lokasi; (2) URL lokasi itu sendiri bila berupa alamat lengkap; (3) host lain di daftar + id (data lama berisi alamat lengkap).
+ */
+function lokasiOnlineTourUrls(array $data, string $id): array
+{
+    $id = lokasiCleanId($id);
+    $origin = static function (string $url): string {   // hanya skema + host (+ port); jalur dibuang
+        $url = trim($url);
+        if ($url === '' || str_starts_with($url, '/')) return '';
+        if (!preg_match('~^https?://~i', $url)) $url = 'https://' . $url;
+        $parts = parse_url($url);
+        if (!is_array($parts) || empty($parts['host']) || !preg_match('~^[A-Za-z0-9.-]+$~', (string) $parts['host'])) return '';
+        return strtolower((string) ($parts['scheme'] ?? 'https')) . '://' . strtolower((string) $parts['host']) . (isset($parts['port']) ? ':' . $parts['port'] : '');
+    };
+    $out = [];
+    $add = static function (string $url) use (&$out): void { $url = rtrim($url, '/'); if ($url !== '' && !in_array($url, $out, true)) $out[] = $url; };
+    if ($id === '') return [];
+    $base = $origin((string) ($data['base'] ?? ''));
+    if ($base !== '') $add($base . '/' . rawurlencode($id));
+    $own = trim((string) ($data['locations'][$id]['url'] ?? ''));
+    if ($own !== '' && !str_starts_with($own, '/') && $origin($own) !== '') $add((preg_match('~^https?://~i', $own) ? '' : 'https://') . $own);
+    foreach ((array) ($data['locations'] ?? []) as $row) {
+        $host = $origin((string) ($row['url'] ?? ''));
+        if ($host !== '') { $add($host . '/' . rawurlencode($id)); break; }
+    }
+    return $out;
 }
 
 /** Folder tur yang punya pano.xml + skin.js: id (nama folder huruf kecil) => jalur pano.xml. */
@@ -290,6 +330,7 @@ function lokasiApplyGaps(array $current, array $reference, array $gaps): array
 {
     $current['locations'] = (array) ($current['locations'] ?? []);
     $current['links'] = (array) ($current['links'] ?? []);
+    if (trim((string) ($current['base'] ?? '')) === '' && trim((string) ($reference['base'] ?? '')) !== '') $current['base'] = (string) $reference['base'];
     foreach ($gaps['locations'] as $id) $current['locations'][$id] = $reference['locations'][$id];
     foreach ($gaps['links'] as [$source, $to]) {
         foreach ((array) $reference['links'][$source] as $link) if ($link['to'] === $to) { $current['links'][$source][] = $link; break; }
@@ -342,7 +383,7 @@ function lokasiRestoreScan(string $projectRoot, string $assetsRoot, string $id, 
     if ($source === null && ($backup = lokasiBackupLatest($assetsRoot)) !== null) $source = ['label' => 'Cadangan lokasi-database.js', 'updated' => $backup['updated'], 'data' => $backup['data']];
     $gaps = $source !== null ? lokasiGaps($current, $source['data']) : ['locations' => [], 'links' => []];
     [$locations, $links] = lokasiDbCounts($current);
-    $dataState = $gaps['locations'] === [] && $gaps['links'] === [] ? ($locations > 0 ? 'ok' : 'lost') : 'gap';
+    $dataState = $gaps['locations'] === [] && $gaps['links'] === [] ? ($locations > 0 ? 'ok' : 'empty') : 'gap';   // empty = belum ada data sama sekali (project belum memakai fitur ini), bukan kehilangan
     $loader = lokasiLoaderStatus($assetsRoot);
     // judul di Terjemahan pano.xml lokasi ini (memakai data setelah celah diisi, supaya judul yang akan kembali ikut dihitung)
     $after = $source !== null && $dataState === 'gap' ? lokasiApplyGaps($current, $source['data'], $gaps) : $current;
@@ -358,9 +399,9 @@ function lokasiRestoreScan(string $projectRoot, string $assetsRoot, string $id, 
             $tr['restorableValues'] = count(lokasiTranslationPlan($dom, $panoFile, $names));
         }
     }
-    $missing = count($gaps['locations']) + count($gaps['links']) + ($loader === 'missing' ? 1 : 0) + $tr['missingKeys'] + $tr['restorableValues'];
+    $missing = count($gaps['locations']) + count($gaps['links']) + ($loader === 'missing' && $dataState !== 'empty' ? 1 : 0) + $tr['missingKeys'] + $tr['restorableValues'];   // tanpa data, pemuat dipasang otomatis saat Simpan pertama
     return [
-        'summary' => ['missing' => $missing, 'unrestorable' => ($dataState === 'lost' ? 1 : 0) + ($loader === 'manual' ? 1 : 0)],
+        'summary' => ['missing' => $missing, 'unrestorable' => ($loader === 'manual' && $dataState !== 'empty' ? 1 : 0)],
         'data' => ['state' => $dataState, 'locations' => $locations, 'links' => $links, 'lostLocations' => count($gaps['locations']), 'lostLinks' => count($gaps['links']), 'source' => $source['label'] ?? null, 'when' => $source['updated'] ?? ''],
         'loader' => ['state' => $loader],
         'translations' => $tr,

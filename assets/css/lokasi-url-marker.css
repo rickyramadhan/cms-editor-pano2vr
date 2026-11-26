@@ -1,0 +1,42 @@
+/* SALINAN badung-nearby.css untuk pratinjau penanda di tab URL Lokasi CMS, dipakai bila project tidak punya smart-kit/frontends/badung-ui/css/badung-nearby.css (mis. Kotabaru).
+   Project Badung memakai berkas aslinya supaya pratinjau selalu sama dengan tur. Bila tampilan hotspot di tur diubah, ubah salinan ini juga. */
+/* badung-nearby.css — hotspot "lokasi terdekat" di panorama drone (js/nearby-locs.js).
+   Bentuk: titik kecil berbingkai siku di panorama, garis putih ke kartu foto bersiku, judul tebal + "est. N mnt | jarak" di atas kartu. */
+#bdg-locs { --lk: 1; position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: hidden; pointer-events: none; z-index: 8; font-family: "Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif; transition: opacity .3s; }
+@media (max-width: 1149px) { #bdg-locs { --lk: .78; } }
+/* ikut aturan lapisan pin: UI disembunyikan, mode fokus Objek Info, navigasi "Arahkan saya", pengalaman penuh */
+body.smt-ui-off #bdg-locs, body.smt-xp #bdg-locs, html.oi-fokus #bdg-locs, html.bdg-ui.bdg-nav #bdg-locs { opacity: 0 !important; pointer-events: none !important; }
+#bdg-locs .bdg-loc-root { position: absolute; left: 0; top: 0; width: 0; height: 0; pointer-events: none; will-change: transform; }
+
+.bdg-loc { position: absolute; left: 0; top: 0; width: 0; height: 0; display: block; color: #fff; text-decoration: none; pointer-events: none; outline: none; -webkit-tap-highlight-color: transparent; }
+.bdg-loc > * { pointer-events: auto; cursor: pointer; }
+
+/* titik di panorama: kotak putih kecil + sudut bingkai */
+.bdg-loc__dot { position: absolute; left: calc(-11px * var(--lk)); top: calc(-11px * var(--lk)); width: calc(22px * var(--lk)); height: calc(22px * var(--lk)); transition: transform .35s cubic-bezier(.34, 1.56, .64, 1); }
+.bdg-loc__dot::before { content: ""; position: absolute; inset: 7px; inset: calc(7px * var(--lk)); border-radius: 2px; background: #fff; box-shadow: 0 1px 6px rgba(0, 0, 0, .35); }
+.bdg-loc__dot::after, .bdg-loc__ph::before { content: ""; position: absolute; inset: 0; box-sizing: border-box; border: calc(2px * var(--lk)) solid #fff; border-radius: calc(5px * var(--lk)); pointer-events: none;
+  -webkit-mask: linear-gradient(90deg, #000 28%, #0000 28% 72%, #000 72%) 0 0 / 100% 40% no-repeat, linear-gradient(90deg, #000 28%, #0000 28% 72%, #000 72%) 0 100% / 100% 40% no-repeat,
+                linear-gradient(#000 28%, #0000 28% 72%, #000 72%) 0 0 / 40% 100% no-repeat, linear-gradient(#000 28%, #0000 28% 72%, #000 72%) 100% 0 / 40% 100% no-repeat;
+          mask: linear-gradient(90deg, #000 28%, #0000 28% 72%, #000 72%) 0 0 / 100% 40% no-repeat, linear-gradient(90deg, #000 28%, #0000 28% 72%, #000 72%) 0 100% / 100% 40% no-repeat,
+                linear-gradient(#000 28%, #0000 28% 72%, #000 72%) 0 0 / 40% 100% no-repeat, linear-gradient(#000 28%, #0000 28% 72%, #000 72%) 100% 0 / 40% 100% no-repeat; }
+
+/* garis dari titik ke sudut kiri-bawah kartu (panjang 60, sudut 48°: ujungnya di x 40, y -45) */
+.bdg-loc__ln { position: absolute; left: 0; top: calc(-1px * var(--lk)); width: calc(60px * var(--lk)); height: calc(2px * var(--lk)); min-height: 1.5px; border-radius: 2px; background: #fff; transform-origin: 0 50%; transform: rotate(-48deg); box-shadow: 0 1px 4px rgba(0, 0, 0, .3); pointer-events: none !important; }
+
+/* kartu: lebar tetap supaya sudut kiri-bawahnya tepat di ujung garis; judul melayang di atasnya, rata tengah */
+.bdg-loc__box { position: absolute; left: calc(40px * var(--lk)); bottom: calc(45px * var(--lk)); width: calc(148px * var(--lk)); transform-origin: 0 100%; transition: transform .35s cubic-bezier(.34, 1.56, .64, 1); animation: bdgLocIn .5s cubic-bezier(.34, 1.56, .64, 1) both; }
+@keyframes bdgLocIn { from { opacity: 0; transform: scale(.82) translateY(6px); } }
+.bdg-loc__t { position: absolute; left: 50%; bottom: calc(100% + 7px * var(--lk)); transform: translateX(-50%); width: max-content; max-width: calc(190px * var(--lk)); white-space: normal; overflow-wrap: anywhere; text-wrap: balance; text-align: center; text-shadow: 0 1px 9px rgba(0, 0, 0, .55), 0 0 2px rgba(0, 0, 0, .45); pointer-events: none; }
+.bdg-loc__t b { display: block; font-size: calc(17px * var(--lk)); line-height: 1.2; font-weight: 700; letter-spacing: .005em; }
+.bdg-loc__t small { display: flex; flex-wrap: wrap; justify-content: center; gap: .5em; margin-top: calc(2px * var(--lk)); font-size: calc(14px * var(--lk)); line-height: 1.25; font-weight: 600; opacity: .96; }
+.bdg-loc__t small i { font-style: normal; opacity: .7; }
+.bdg-loc__ph { position: relative; display: block; padding: calc(6px * var(--lk)); border-radius: calc(14px * var(--lk)); background: rgba(255, 255, 255, .2); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); box-shadow: 0 10px 26px rgba(0, 0, 0, .3); }
+.bdg-loc__ph::before { z-index: 1; border-width: calc(3px * var(--lk)); border-radius: calc(14px * var(--lk)); }
+.bdg-loc__ph img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: calc(9px * var(--lk)); background: linear-gradient(135deg, #2a6dff, #0f3fb8); }
+.bdg-loc.no-img .bdg-loc__ph img { display: none; }
+.bdg-loc.no-img .bdg-loc__ph::after { content: ""; display: block; aspect-ratio: 4 / 3; border-radius: calc(9px * var(--lk)); background: linear-gradient(135deg, #2a6dff, #0f3fb8); }
+
+.bdg-loc:hover .bdg-loc__box, .bdg-loc:focus-visible .bdg-loc__box { transform: scale(1.06); }
+.bdg-loc:hover .bdg-loc__dot, .bdg-loc:focus-visible .bdg-loc__dot { transform: scale(1.2); }
+.bdg-loc:focus-visible .bdg-loc__ph { outline: 3px solid #fff; outline-offset: 3px; }
+@media (prefers-reduced-motion: reduce) { .bdg-loc__box { animation: none; } .bdg-loc__box, .bdg-loc__dot { transition: none; } }

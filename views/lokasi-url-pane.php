@@ -3,7 +3,8 @@
 $lku = $lokasiUrlState ?? ['db' => ['locations' => [], 'links' => []], 'tours' => [], 'selected' => $selectedId, 'tourBase' => '', 'drone' => ['node' => '', 'pan' => 0, 'tilt' => 0, 'fov' => 0], 'csrf' => ''];
 $lkuTotal = count((array) ($lku['db']['locations'] ?? []));
 ?>
-<link rel="stylesheet" href="<?= e(projectUrl('smart-kit/frontends/badung-ui/css/badung-nearby.css')) ?>">
+<?php $lkuMarkerCss = is_file($projectRoot . '/smart-kit/frontends/badung-ui/css/badung-nearby.css') ? projectUrl('smart-kit/frontends/badung-ui/css/badung-nearby.css') : 'assets/css/lokasi-url-marker.css?v=' . (int) @filemtime(__DIR__ . '/../assets/css/lokasi-url-marker.css'); ?>
+<link rel="stylesheet" href="<?= e($lkuMarkerCss) ?>">
 <section class="card section lku" id="lku">
     <div class="section-heading">
         <div><span class="step">UL</span><div><h2>URL Lokasi</h2><p>Alamat tur tiap lokasi dan hotspot “lokasi terdekat” di panorama drone. Hotspot membuka tur tujuan di tab yang sama, dan bahasa pengunjung tetap terbawa.</p></div></div>
@@ -26,6 +27,16 @@ $lkuTotal = count((array) ($lku['db']['locations'] ?? []));
             </div>
             <aside class="lku-side" aria-label="Hotspot lokasi terdekat">
                 <h3 id="lkuSideTitle">Hotspot lokasi terdekat</h3>
+                <form class="lku-add" id="lkuAdd" autocomplete="off">
+                    <label><span>Nama lokasi tujuan</span><input type="text" id="lkuAddName" list="lkuAddNames" maxlength="120" placeholder="mis. Pantai Teluk Ninik"><datalist id="lkuAddNames"></datalist></label>
+                    <label><span>URL</span><input type="text" id="lkuAddUrl" placeholder="contoh.govirtual.id/nama-lokasi" spellcheck="false" inputmode="url"></label>
+                    <p class="lku-add-note" id="lkuAddNote" aria-live="polite"></p>
+                    <div class="lku-add-row">
+                        <label><span>Menit</span><input type="number" id="lkuAddMin" min="0" max="999" placeholder="0" inputmode="numeric"></label>
+                        <label><span>Jarak</span><input type="text" id="lkuAddKm" placeholder="1.5 km" maxlength="16"></label>
+                        <button type="submit" class="oi-load-secondary">Tambah</button>
+                    </div>
+                </form>
                 <div class="lku-links" id="lkuLinks"></div>
                 <p class="lku-note">Judul tiap hotspot masuk ke <a id="lkuAuditLink" href="?tab=audit&amp;lokasi=<?= e($selectedId) ?>">Audit › Terjemahan</a> untuk diterjemahkan ke bahasa lain.</p>
             </aside>
@@ -40,7 +51,9 @@ $lkuTotal = count((array) ($lku['db']['locations'] ?? []));
                 <button type="button" data-lku-filter="local">Tur lokal</button>
                 <button type="button" data-lku-filter="check">Perlu dicek</button>
             </div>
+            <button type="button" class="oi-load-secondary lku-addloc" id="lkuAddLoc">+ Tambah lokasi</button>
         </div>
+        <label class="lku-base"><span>Alamat server tur online</span><input type="text" id="lkuBase" placeholder="https://badung.govirtual.id" spellcheck="false" inputmode="url" maxlength="120"><small>Semua tur satu server, jadi URL lokasi cukup <code>/nama-lokasi</code>. Alamat ini dipakai CMS untuk mengambil pratinjau video dari tur online bila filenya tidak ada di komputer.</small></label>
         <div class="lku-table">
             <div class="lku-row lku-row-head" aria-hidden="true"><span>#</span><span>Judul</span><span>URL</span><span>Status</span></div>
             <div class="lku-rows" id="lkuRows"></div>

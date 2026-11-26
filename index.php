@@ -1161,6 +1161,7 @@ if ($activeTab === 'urlloc') {
         'db' => lokasiDbRead(lokasiDbFile($assetsRoot)),
         'tours' => array_values(array_map('strval', array_keys($detectedTours))),   // id lokasi yang punya tur lokal
         'selected' => $selectedId,
+        'selectedName' => trim((string) ($lokasiRecord['bahasa']['id']['lokasi'] ?? '')),   // judul dari tab Data, dipakai bila lokasi ini belum ada di Daftar URL
         'tourBase' => isset($detectedTours[$selectedId]) ? projectUrl(trim((string) $detectedTours[$selectedId]['path'], '/') . '/') : '',
         'drone' => ['node' => (string) ($lokasiRecord['drone'] ?? ''), 'pan' => (float) ($lokasiRecord['drone_pan'] ?? 0), 'tilt' => (float) ($lokasiRecord['drone_tilt'] ?? 0), 'fov' => (float) ($lokasiRecord['drone_fov'] ?? 0)],
         'csrf' => (string) ($_SESSION['cms_csrf'] ?? ''),
@@ -1169,6 +1170,10 @@ if ($activeTab === 'urlloc') {
         $lokasiUrlState['restore'] = lokasiRestoreScan($projectRoot, $assetsRoot, $selectedId, $lokasiUrlState['db']);
         lokasiMemorySync($assetsRoot, $lokasiUrlState['db']);
     } catch (Throwable) { $lokasiUrlState['restore'] = null; }
+}
+$videoOnlineBases = [];   // tab Video: alamat tur online (dari Daftar URL) sebagai cadangan pratinjau bila file video tidak ada di komputer ini (file besar tidak ikut git)
+if ($activeTab === 'video') {
+    try { require_once __DIR__ . '/includes/lokasi-url.php'; $videoOnlineBases = lokasiOnlineTourUrls(lokasiDbRead(lokasiDbFile($assetsRoot)), $selectedId); } catch (Throwable) { $videoOnlineBases = []; }
 }
 $auditId = $selectedId;
 $auditResult = $activeTab === 'audit' && isset($detectedTours[$auditId]) ? auditTour($projectRoot, $detectedTours[$auditId]) : null;

@@ -25,11 +25,14 @@ try {
     $data = lokasiDbNormalize((array) ($payload['data'] ?? []));
     if ($data['locations'] === []) respond(422, ['success' => false, 'message' => 'Daftar URL Lokasi kosong; tidak disimpan.']);
     lokasiDbWrite($file, $data);
+    $assetsRoot = projectRuntimeDirectory($project);
+    $loaderFixed = false;
+    try { $loaderFixed = lokasiLoaderRepair($assetsRoot); } catch (Throwable) { /* pemuat bisa dipasang lewat Load Titik URL */ }   // Simpan pertama di project baru: main-loader.js belum memuat lokasi-database.js
     $added = lokasiSyncTranslations($projectRoot, $data);
     $count = array_sum($added);
     respond(200, [
         'success' => true,
-        'message' => 'URL Lokasi dan hotspot disimpan.' . ($count > 0 ? ' ' . $count . ' judul baru masuk ke Audit › Terjemahan (' . count($added) . ' tur).' : ''),
+        'message' => 'URL Lokasi dan hotspot disimpan.' . ($loaderFixed ? ' Pemuat tur (main-loader.js) dipasang.' : '') . ($count > 0 ? ' ' . $count . ' judul baru masuk ke Audit › Terjemahan (' . count($added) . ' tur).' : ''),
         'translationsAdded' => $added,
         'data' => $data,
     ]);
