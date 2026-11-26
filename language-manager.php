@@ -300,12 +300,34 @@ function languageCanAutoTranslate(string $text): bool
 {
     $plain = trim(html_entity_decode(strip_tags($text), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
     if ($plain === '' || mb_strlen($plain) > 450) return false;
-    if (preg_match('~(?:<iframe|<script|javascript:|https?://|player\.|function\s*\(|\$\()~i', $text)) return false;
+    if (preg_match('~(?:<iframe|<script|javascript:|player\.|function\s*\(|\$\()~i', $text)) return false;
     if (preg_match('/^[\d\s\p{P}\p{S}]+$/u', $plain)) return false;
     return true;
 }
 
+const LANGUAGE_URL_PATTERN = '~(?:https?://|www\.)[^\s"\'<>)\]]+|(?:mailto|tel):[^\s"\'<>]+~iu';
+
+/** Terjemahkan teks; link di dalamnya tidak pernah diterjemahkan, selalu sama persis di semua bahasa. */
 function translatePanoText(string $text, string $target): string
+{
+    $urls = [];
+    if (preg_match_all(LANGUAGE_URL_PATTERN, $text, $found)) $urls = $found[0];
+    if ($urls === []) return translatePanoTextRaw($text, $target);
+    // Teks yang hanya berisi URL: salin apa adanya.
+    if (trim((string) preg_replace(LANGUAGE_URL_PATTERN, '', $text)) === '') return $text;
+    // Teks campuran: link diganti token sebelum diterjemahkan, lalu dikembalikan persis sama di semua bahasa.
+    $masked = $text;
+    foreach ($urls as $index => $url) $masked = preg_replace('~' . preg_quote($url, '~') . '~', 'XURL' . $index . 'X', $masked, 1);
+    $translated = translatePanoTextRaw($masked, $target);
+    if ($translated === '') return '';
+    foreach ($urls as $index => $url) {
+        $translated = preg_replace_callback('~XURL\s*' . $index . '\s*X~iu', static fn(array $m): string => $url, $translated, -1, $replaced);
+        if ($replaced !== 1) return ''; // token rusak: jangan simpan hasil dengan link tak pasti
+    }
+    return $translated;
+}
+
+function translatePanoTextRaw(string $text, string $target): string
 {
     static $cache = [];
     $key = $target . "\0" . $text;

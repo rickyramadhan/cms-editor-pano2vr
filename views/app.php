@@ -2089,14 +2089,32 @@ if (panoSaveButton) {
     // Terjemahan otomatis: tombol ✦ per baris dan tombol besar "Terjemahkan Semua" (dengan indikator progres).
     const translateLanguages = <?= json_encode($auditResult['languages'] ?? []) ?>;
     const translateTargets = <?= json_encode(array_reduce(array_keys($languageRegistry), static function(array $map, string $code) use ($languageRegistry): array { $map[$code] = $languageRegistry[$code]['translate']; $map[$languageRegistry[$code]['pano']] = $languageRegistry[$code]['translate']; return $map; }, []), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+    // Link tidak pernah diterjemahkan: diganti token sebelum dikirim, lalu dikembalikan persis sama di semua bahasa.
+    window.cmsTranslateKeepingLinks = async (text, translate) => {
+        const pattern = /(?:https?:\/\/|www\.)[^\s"'<>)\]]+|(?:mailto|tel):[^\s"'<>]+/gi;
+        const urls = text.match(pattern) || [];
+        if (!urls.length) return translate(text);
+        if (text.replace(pattern, '').trim() === '') return text.trim();
+        let masked = text; urls.forEach((url, index) => { masked = masked.replace(url, 'XURL' + index + 'X'); });
+        let result = await translate(masked);
+        urls.forEach((url, index) => {
+            const token = new RegExp('XURL\s*' + index + '\s*X', 'i');
+            if (!token.test(result)) throw new Error('link berubah saat diterjemahkan');
+            result = result.replace(token, () => url);
+        });
+        return result;
+    };
     const translateRowFields = async row => {
         const source = row.dataset.source; let filled = 0;
         for (const field of row.querySelectorAll('[data-translation-index]')) {
             if (field.value.trim()) continue;
             const language = translateLanguages[Number(field.dataset.translationIndex)], target = translateTargets[language] || language;
-            const response = await fetch('https://translate.googleapis.com/translate_a/single?client=gtx&sl=id&tl=' + encodeURIComponent(target) + '&dt=t&q=' + encodeURIComponent(source));
-            if (!response.ok) throw new Error('Terjemahan ' + (language || '') + ' gagal.');
-            const data = await response.json(); field.value = (data[0] || []).map(part => part[0] || '').join(''); filled++;
+            field.value = await cmsTranslateKeepingLinks(source, async text => {
+                const response = await fetch('https://translate.googleapis.com/translate_a/single?client=gtx&sl=id&tl=' + encodeURIComponent(target) + '&dt=t&q=' + encodeURIComponent(text));
+                if (!response.ok) throw new Error('Terjemahan ' + (language || '') + ' gagal.');
+                const data = await response.json(); return (data[0] || []).map(part => part[0] || '').join('');
+            });
+            filled++;
         }
         refreshTranslationRow(row); return filled;
     };
@@ -2307,7 +2325,7 @@ if (translateButton) {
                 for (const [field, text] of [['lokasi', sourceLocation], ['welcomeText', sourceWelcome]]) {
                     if (!text) continue;
                     const target = document.querySelector('[name="' + field + '[' + fieldCode + ']"]');
-                    target.value = await translateText(text, apiCode);
+                    target.value = await cmsTranslateKeepingLinks(text, part => translateText(part, apiCode));
                     // nilai yang diisi lewat kode tidak memicu event: beri tahu penjaga perubahan agar tombol Simpan aktif
                     target.dispatchEvent(new Event('input', { bubbles: true }));
                 }
@@ -2812,7 +2830,7 @@ if (objectList) {
             const codes = Object.keys(objectTranslateTargets).filter(code => code in objectLabelTemplates(name));
             const fields = {}; codes.forEach(code => { const field = objectForm.querySelector('[data-object-lang="' + code + '"]'); if (field && record === objectRecords[selectedObject]) { fields[code] = field; field.classList.add('is-translating'); } });
             const names = {};
-            await Promise.all(codes.map(async code => { try { names[code] = await translateObjectName(name, code); } catch (_) {} }));
+            await Promise.all(codes.map(async code => { try { names[code] = await cmsTranslateKeepingLinks(name, part => translateObjectName(part, code)); } catch (_) {} }));
             Object.values(fields).forEach(field => field.classList.remove('is-translating'));
             if (String(record.title || '').trim() !== name) return;   // judul berubah lagi saat menunggu → hasil basi dibuang
             const templates = objectLabelTemplates(name, names), raw = objectLabelTemplates(name);
@@ -2869,10 +2887,12 @@ if (objectList) {
             translate.disabled=true;translate.textContent='Menerjemahkan…';
             try {
                 for (const [code,target] of Object.entries(<?= json_encode(array_map(static fn(array $language): string => $language['translate'], array_filter($languageRegistry, static fn(string $code): bool => $code !== 'id', ARRAY_FILTER_USE_KEY)), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>)) {
-                    const response=await fetch('https://api.mymemory.translated.net/get?q='+encodeURIComponent(source)+'&langpair=id|'+target);
-                    const result=await response.json();
-                    if (!response.ok||!result.responseData?.translatedText) throw new Error('Terjemahan '+code.toUpperCase()+' gagal.');
-                    record.labelTeks[code]=result.responseData.translatedText;
+                    record.labelTeks[code]=await cmsTranslateKeepingLinks(source, async part => {
+                        const response=await fetch('https://api.mymemory.translated.net/get?q='+encodeURIComponent(part)+'&langpair=id|'+target);
+                        const result=await response.json();
+                        if (!response.ok||!result.responseData?.translatedText) throw new Error('Terjemahan '+code.toUpperCase()+' gagal.');
+                        return result.responseData.translatedText;
+                    });
                 }
                 renderObjectForm();
             } catch(error) { cmsToast('Auto translate gagal: '+error.message);translate.disabled=false;translate.textContent='✦ Auto Translate'; }
