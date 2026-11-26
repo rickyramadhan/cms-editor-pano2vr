@@ -114,7 +114,9 @@ function shStatus(array $st, array $tours): array
         $rows[] = [
             'id' => $id, 'path' => $t['path'], 'name' => (string) (($content['REGION']['place'] ?? '') ?: ($content['REGION']['name'] ?? shHumanize($id)))   /* nama tempat (place); name = nama wilayah untuk header HUD */, 'url' => shWebUrl($t['dir']),
             'pack' => ['exists' => $scenes > 0, 'scenes' => (int) $scenes, 'content' => is_array($content), 'hubLocal' => is_file($packDir . '/hub.json'),
-                'type' => (string) ($content['REGION']['type'] ?? ''), 'counts' => ['layanan' => $count('SERVICES'), 'fakta' => $count('FACTS'), 'acara' => $count('EVENTS'), 'rute' => $count('ROUTES'), 'stempel' => $count('STAMPS')]],
+                'type' => (string) ($content['REGION']['type'] ?? ''), 'counts' => ['layanan' => $count('SERVICES'), 'fakta' => $count('FACTS'), 'acara' => $count('EVENTS'), 'rute' => $count('ROUTES'), 'stempel' => $count('STAMPS'),
+                    // Pengingat kurasi: layanan aktif (tidak ditolak) yang belum berlencana "Terverifikasi"
+                    'belumVerif' => count(array_filter((array) ($content['SERVICES'] ?? []), static fn($s) => is_array($s) && empty($s['hidden']) && empty($s['verified'])))]],
             'applied' => $applied !== '', 'appliedSrc' => $applied,
             'ready' => shReadiness(is_array($content) ? $content : null, (int) $scenes, is_file($packDir . '/pins.json') ? count((array) json_decode((string) file_get_contents($packDir . '/pins.json'), true)) : 0), 'runtimeReady' => $runtimeReady,
         ];

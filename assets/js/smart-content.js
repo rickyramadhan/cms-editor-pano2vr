@@ -274,6 +274,16 @@
     const counts = { menunggu: 0, disetujui: 0, ditolak: 0 };
     rows().forEach((s) => { counts[svcState(s)]++; });
     const provN = rows().filter((s) => svcState(s) === 'disetujui' && s.curation?.provisional).length;
+    // Pengingat verifikasi: tempat aktif yang belum berlencana "Terverifikasi" (jam/harga/kontak belum dicek ke pengelola)
+    const isUnverified = (s) => !s.hidden && !s.verified;
+    const unvN = rows().filter(isUnverified).length;
+    const activeN = rows().filter((s) => !s.hidden).length;
+    const setVerified = (s, on) => {
+      if (on && !confirm('Tandai "' + (s.name || s.id) + '" terverifikasi?\n\nPengunjung akan melihat lencana "Terverifikasi". Pastikan jam, harga, dan kontaknya sudah dicek ke pengelola.')) return;
+      s.verified = !!on;
+      if (on) s.checked = todayStr();
+      mutate();
+    };
 
     /* ---- unggah foto (satu input untuk seluruh panel) ---- */
     let uploadFor = null;
@@ -348,8 +358,11 @@
         s.img ? h('button', { type: 'button', class: 'translate', onclick: () => { delete s.img; mutate(); } }, 'Hapus foto') : null);
       return h('article', { class: 'sv-card is-' + st + (open ? ' is-open' : '') },
         thumb,
-        h('div', { class: 'sv-body' }, title, h('span', { class: 'sv-meta' }, [catLabel(s.cat), s.area || s.addr || '', kmText(s)].filter(Boolean).join(' · ')), s.curation?.note ? h('span', { class: 'sv-meta sv-note' }, 'Catatan: ' + s.curation.note) : null, links.length ? h('div', { class: 'sv-links' }, links) : null),
+        h('div', { class: 'sv-body' }, title,
+          s.verified ? h('span', { class: 'sv-ver is-ok' }, '✓ Terverifikasi' + (s.checked ? ' · ' + s.checked : '')) : !s.hidden ? h('span', { class: 'sv-ver', title: 'Jam, harga, dan kontak belum dicek ke pengelola. Pengunjung tidak melihat lencana "Terverifikasi".' }, '⚠ Belum terverifikasi') : null,
+          h('span', { class: 'sv-meta' }, [catLabel(s.cat), s.area || s.addr || '', kmText(s)].filter(Boolean).join(' · ')), s.curation?.note ? h('span', { class: 'sv-meta sv-note' }, 'Catatan: ' + s.curation.note) : null, !s.verified && s.note ? h('span', { class: 'sv-meta' }, 'Data: ' + s.note) : null, links.length ? h('div', { class: 'sv-links' }, links) : null),
         h('div', { class: 'sv-actions' },
+          !s.hidden ? h('button', { type: 'button', class: s.verified ? '' : 'ver', title: s.verified ? 'Hapus lencana "Terverifikasi"' : 'Sudah dicek ke pengelola: tampilkan lencana "Terverifikasi" untuk pengunjung', onclick: () => setVerified(s, !s.verified) }, s.verified ? 'Batal verifikasi' : '✓ Tandai terverifikasi') : null,
           st !== 'disetujui' ? h('button', { type: 'button', class: 'ok', onclick: () => setState(s, 'disetujui') }, '✓ Setujui') : null,
           st !== 'ditolak' ? h('button', { type: 'button', class: 'no', onclick: () => setState(s, 'ditolak') }, 'Tolak') : null,
           st !== 'menunggu' ? h('button', { type: 'button', onclick: () => setState(s, 'menunggu') }, 'Pulihkan') : null,
@@ -359,19 +372,23 @@
     };
     const draw = () => {
       const q = CUR.q.trim().toLowerCase();
-      const list = sorted().map((x) => x.s).filter((s) => (!CUR.cat || s.cat === CUR.cat) && (!CUR.st || svcState(s) === CUR.st) && (!q || JSON.stringify([s.name, s.addr, s.area, s.sub, s.id]).toLowerCase().includes(q)));
+      const list = sorted().map((x) => x.s).filter((s) => (!CUR.cat || s.cat === CUR.cat) && (!CUR.st || (CUR.st === 'belum-verif' ? isUnverified(s) : svcState(s) === CUR.st)) &&(!q || JSON.stringify([s.name, s.addr, s.area, s.sub, s.id]).toLowerCase().includes(q)));
       listBox.replaceChildren(...(list.length ? list.map(card) : [h('div', { class: 'sh-empty' }, rows().length ? 'Tidak ada tempat yang cocok dengan filter.' : 'Belum ada tempat. Tekan "＋ Tambah tempat".')]));
     };
     const used = [...new Set(rows().map((s) => s.cat))].sort((a, b) => catOrder(a) - catOrder(b));
     const search = h('input', { type: 'search', placeholder: 'Cari nama / alamat…', value: CUR.q, oninput: (e) => { CUR.q = e.target.value; draw(); } });
     const catSel = h('select', { 'aria-label': 'Kategori', onchange: (e) => { CUR.cat = e.target.value; draw(); } }, h('option', { value: '' }, 'Semua kategori'), used.map((c) => h('option', { value: c, selected: CUR.cat === c ? true : null }, `${catLabel(c)} (${rows().filter((s) => s.cat === c).length})`)));
-    const stSel = h('select', { 'aria-label': 'Status', onchange: (e) => { CUR.st = e.target.value; draw(); } }, h('option', { value: '' }, 'Semua status'), Object.entries(ST_LABEL).map(([k, t]) => h('option', { value: k, selected: CUR.st === k ? true : null }, `${t} (${counts[k]})`)));
+    const stSel = h('select', { 'aria-label': 'Status', onchange: (e) => { CUR.st = e.target.value; draw(); } }, h('option', { value: '' }, 'Semua status'), Object.entries(ST_LABEL).map(([k, t]) => h('option', { value: k, selected: CUR.st === k ? true : null }, `${t} (${counts[k]})`)), h('option', { value: 'belum-verif', selected: CUR.st === 'belum-verif' ? true : null }, `Belum terverifikasi (${unvN})`));
+    const verifyWarn = unvN ? h('div', { class: 'sv-verify-warn', role: 'status' },
+      h('span', null, h('b', null, `⚠ ${unvN} dari ${activeN} tempat belum terverifikasi.`), ' Jam, harga, dan kontaknya belum dicek ke pengelola, jadi pengunjung tidak melihat lencana "Terverifikasi". Setelah dicek, tekan "✓ Tandai terverifikasi" di kartunya.'),
+      CUR.st !== 'belum-verif' ? h('button', { type: 'button', class: 'translate', onclick: () => { CUR.st = 'belum-verif'; rerender(); } }, 'Tampilkan yang belum terverifikasi') : null) : null;
     const only = h('label', { class: 'sh-check' }, h('input', { type: 'checkbox', checked: content.GUIDE?.onlyApproved === true, onchange: (e) => { if (e.target.checked) (content.GUIDE ||= {}).onlyApproved = true; else if (content.GUIDE) { delete content.GUIDE.onlyApproved; if (!Object.keys(content.GUIDE).length) delete content.GUIDE; } mark(); } }), 'Tampilkan di Tourism Guide hanya tempat berstatus Disetujui');
     draw();
     return h('div', { class: 'card sh-card sv-panel' },
       h('div', { class: 'sv-head' }, h('div', null, h('h3', null, 'Kurasi tempat untuk konfirmasi PIC'),
         h('p', null, 'Daftar hotel, sewa motor/mobil, kuliner, dan lainnya di sekitar lokasi. Unggah foto, tambah atau hapus tempat, lalu kirim ke PIC untuk ditentukan layak atau tidak. "Disetujui" = tampil di Tourism Guide (tanda "sementara" = data awal yang belum dikonfirmasi PIC); "Ditolak" menyembunyikannya (data tetap tersimpan). Lencana "Terverifikasi" untuk pengunjung tidak berubah oleh persetujuan ini.')),
         h('div', { class: 'sv-stats' }, h('span', { class: 'sv-stat sv-stat--wait' }, 'Menunggu', h('b', null, String(counts.menunggu))), h('span', { class: 'sv-stat sv-stat--ok', title: provN ? provN + ' di antaranya disetujui sementara (data awal, belum dikonfirmasi PIC)' : '' }, provN ? 'Disetujui (' + provN + ' sementara)' : 'Disetujui', h('b', null, String(counts.disetujui))), h('span', { class: 'sv-stat sv-stat--no' }, 'Ditolak', h('b', null, String(counts.ditolak))))),
+      verifyWarn,
       h('div', { class: 'sv-bar' }, search, catSel, stSel, h('button', { type: 'button', class: 'save', onclick: addPlace }, '＋ Tambah tempat')),
       h('div', { class: 'sv-bar sv-bar--tools' },
         h('button', { type: 'button', class: 'translate', title: 'CSV berisi kolom keputusan_pic untuk diisi PIC', disabled: !rows().length || null, onclick: exportCsv }, '⬇ Ekspor untuk PIC (CSV)'),
@@ -481,7 +498,8 @@
     function build() {
       sec = sections.find((s) => s.id === ST.sec) || sections[0];
       const navIcons = ['user-round', 'lightbulb', 'store', 'map-pinned', 'badge-help', 'shield-check', 'route', 'calendar-days', 'images', 'stamp', 'layers-3'];
-      const nav = h('nav', { class: 'sc-nav', 'aria-label': 'Bagian konten' }, sections.map((s, i) => { const n = countOf(s); return h('button', { type: 'button', class: s.id === ST.sec ? 'is-on' : '', onclick: () => { ST.sec = s.id; box.replaceChildren(...build().filter(Boolean)); } }, h('span', null, h('i', { 'data-lucide': navIcons[i] || 'file-text', 'aria-hidden': 'true' }), s.label), n ? h('b', null, String(n)) : null); }));
+      const unverified = (d.content.SERVICES || []).filter((x) => x && !x.hidden && !x.verified).length;
+      const nav = h('nav', { class: 'sc-nav', 'aria-label': 'Bagian konten' }, sections.map((s, i) => { const n = countOf(s); const warn = s.guideCategories && unverified; return h('button', { type: 'button', class: s.id === ST.sec ? 'is-on' : '', onclick: () => { ST.sec = s.id; box.replaceChildren(...build().filter(Boolean)); } }, h('span', null, h('i', { 'data-lucide': navIcons[i] || 'file-text', 'aria-hidden': 'true' }), s.label, warn ? h('em', { class: 'sc-nav__warn', title: unverified + ' layanan belum terverifikasi' }, '⚠ ' + unverified) : null), n ? h('b', null, String(n)) : null); }));
       paint();
       queueMicrotask(() => window.lucide?.createIcons());
       return [headerBar(locs, box, main, saveBtn, d), !d.hasPack ? h('div', { class: 'card sh-card sh-warn' }, 'Paket lokasi ini belum dibangun, jadi daftar scene kosong. Buka tab "Lokasi & Paket" lalu tekan "Bangun / perbarui paket".') : null, h('div', { class: 'sc-layout' }, nav, h('div', { class: 'sc-main' }, panel))];

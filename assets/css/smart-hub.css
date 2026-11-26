@@ -337,6 +337,15 @@ html, body, button, input, select, textarea { font-family: "Plus Jakarta Sans", 
 .sv-actions button.no { border-color: #f0c4c1; color: #b3261e; }
 .sv-edit { display: grid; gap: 10px; padding: 12px 14px 14px; border-top: 1px solid var(--sh-line, #e5e9f0); background: #fafbfd; }
 .sv-edit[hidden] { display: none; }
+/* Pengingat verifikasi layanan (lencana "Terverifikasi" untuk pengunjung) */
+.sv-verify-warn { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: space-between; padding: 10px 14px; border: 1px solid #fde68a; border-radius: 10px; background: #fffbeb; color: #92400e; font-size: 12.5px; line-height: 1.55; }
+.sv-verify-warn > span { flex: 1 1 320px; }
+.sv-ver { justify-self: start; padding: 2px 8px; border-radius: 99px; background: #fff7df; color: #8a5a00; font-size: 11px; font-weight: 800; }
+.sv-ver.is-ok { background: #e8f6ee; color: #17784a; }
+.sv-actions button.ver { border-color: #17784a; color: #17784a; }
+.sh-unverified { display: inline-flex; padding: 2px 8px; border-radius: 99px; background: #fff7df; color: #8a5a00; font-size: 10.5px; font-weight: 800; white-space: nowrap; }
+.sc-nav__warn { flex: none; margin-left: 6px; white-space: nowrap; padding: 1px 6px; border-radius: 99px; background: #fff7df; color: #8a5a00; font-size: 10px; font-style: normal; font-weight: 800; }
+.sc-nav button.is-on .sc-nav__warn { background: #fff; }
 .sv-card { min-width: 0; }
 .sv-card.is-open { grid-column: 1 / -1; }
 .sv-edit .sc-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
