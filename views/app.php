@@ -49,7 +49,7 @@
             <a class="<?= $activeTab === 'smart' ? 'active' : '' ?>" href="?tab=smart"><span aria-hidden="true"><i data-lucide="blocks"></i></span>Smart Hub</a>
             <a class="<?= $activeTab === 'aihub' ? 'active' : '' ?>" href="?tab=aihub"><span aria-hidden="true"><i data-lucide="bot"></i></span>AI Guide Hub</a>
             <a class="<?= $activeTab === 'inspector' ? 'active' : '' ?>" href="?tab=inspector"><span aria-hidden="true"><i data-lucide="scan-search"></i></span>Inspector</a>
-            <?php if ($cmsRuntimeReady): ?><a class="<?= in_array($activeTab, ['lokasi', 'voice', 'video', 'audit', 'object', 'urlloc', 'skin'], true) ? 'active' : '' ?>" href="?tab=lokasi&lokasi=<?= e($selectedId) ?>"><span aria-hidden="true"><i data-lucide="settings-2"></i></span>Configuration</a><?php endif; ?>
+            <?php if ($cmsRuntimeReady): ?><a class="<?= in_array($activeTab, ['lokasi', 'voice', 'video', 'audit', 'object', 'urlloc', 'kalibrasi', 'skin'], true) ? 'active' : '' ?>" href="?tab=lokasi&lokasi=<?= e($selectedId) ?>"><span aria-hidden="true"><i data-lucide="settings-2"></i></span>Configuration</a><?php endif; ?>
             <span class="cms-nav-label">Media &amp; Tools</span>
             <?php if ($cmsRuntimeReady): ?><a class="<?= in_array($activeTab, ['languages', 'translations'], true) ? 'active' : '' ?>" href="?tab=languages"><span aria-hidden="true"><i data-lucide="languages"></i></span>Bahasa &amp; Terjemahan</a><?php endif; ?>
             <?php if ($cmsRuntimeReady): ?><a class="<?= $activeTab === 'video360' ? 'active' : '' ?>" href="?tab=video360"><span aria-hidden="true"><i data-lucide="circle-play"></i></span>Video 360</a><?php endif; ?>
@@ -147,6 +147,7 @@
                 <a<?= $tabTopic('audit') ?> class="<?= $activeTab === 'audit' ? 'active' : '' ?> <?= isset($detectedTours[$selectedId]) ? '' : 'disabled' ?>" href="?tab=audit&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'audit' ? 'aria-current="page"' : '' ?>><i data-lucide="clipboard-check" aria-hidden="true"></i><span><small>Peralatan</small>Audit</span><?= $tabFlag('audit') ?></a>
                 <a<?= $tabTopic('object') ?> class="<?= $activeTab === 'object' ? 'active' : '' ?> <?= isset($database[$selectedId]) ? '' : 'disabled' ?>" href="?tab=object&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'object' ? 'aria-current="page"' : '' ?>><i data-lucide="scan-search" aria-hidden="true"></i><span><small>Konten</small>Object Informasi</span><?= $tabFlag('object') ?></a>
                 <a class="<?= $activeTab === 'urlloc' ? 'active' : '' ?>" href="?tab=urlloc&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'urlloc' ? 'aria-current="page"' : '' ?>><i data-lucide="map-pinned" aria-hidden="true"></i><span><small>Konten</small>URL Lokasi</span></a>
+                <a class="<?= $activeTab === 'kalibrasi' ? 'active' : '' ?> <?= isset($detectedTours[$selectedId]) ? '' : 'disabled' ?>" href="?tab=kalibrasi&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'kalibrasi' ? 'aria-current="page"' : '' ?>><i data-lucide="crosshair" aria-hidden="true"></i><span><small>Hotspot</small>Kalibrasi</span></a>
                 <a class="location-tab-project <?= $activeTab === 'skin' ? 'active' : '' ?>" href="?tab=skin&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'skin' ? 'aria-current="page"' : '' ?>><i data-lucide="panel-top" aria-hidden="true"></i><span><small>Project</small>Template Skin</span></a>
             </nav>
             <?php if ($selectedId !== 'baru' && isset($detectedTours[$selectedId])): ?><a class="location-local-tour" href="<?= e(projectUrl(trim($detectedTours[$selectedId]['path'], '/') . '/')) ?>" target="_blank" rel="noopener"><i data-lucide="external-link" aria-hidden="true"></i><span>Kunjungi tur lokal</span></a><?php endif; ?>
@@ -795,6 +796,7 @@
             <div class="actions"><button type="button" class="save" id="uploadVideo">Upload & Timpa Video</button></div>
         </section>
     <?php elseif ($activeTab === 'urlloc'): require __DIR__ . '/lokasi-url-pane.php'; ?>
+    <?php elseif ($activeTab === 'kalibrasi'): require __DIR__ . '/hotspot-calibration-pane.php'; ?>
     <?php elseif ($activeTab === 'inventaris'): $jenis = ($_GET['jenis'] ?? '') === 'video360' ? 'video360' : 'oi';
         $oiOffNote = 'Tidak aktif: tidak dipakai di tur, hanya data pendukung untuk AI Guide Node.';
         $oiActiveTotal = count(array_filter($inventoryObjects, static fn(array $r): bool => !empty($r['active']))); $oiOffTotal = count($inventoryObjects) - $oiActiveTotal;

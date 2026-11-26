@@ -1077,7 +1077,7 @@ try {
 
 $selectedId = cleanKey((string) ($_GET['lokasi'] ?? array_key_first($detectedTours) ?? array_key_first($database) ?? ''));
 $requestedTab = (string) ($_GET['tab'] ?? 'dashboard');
-$activeTab = in_array($requestedTab, ['dashboard', 'inventaris', 'translations', 'lokasi', 'languages', 'custom', 'skin', 'object', 'urlloc', 'voice', 'video', 'video360', 'audit', 'smart', 'aihub', 'inspector', 'loading'], true) ? $requestedTab : 'dashboard';
+$activeTab = in_array($requestedTab, ['dashboard', 'inventaris', 'translations', 'lokasi', 'languages', 'custom', 'skin', 'object', 'urlloc', 'kalibrasi', 'voice', 'video', 'video360', 'audit', 'smart', 'aihub', 'inspector', 'loading'], true) ? $requestedTab : 'dashboard';
 $smartHubState = null;
 if ($activeTab === 'smart') {
     // Smart Hub: integrasi Smart Kit untuk wilayah project aktif (lihat smart-hub.php)
@@ -1170,6 +1170,19 @@ if ($activeTab === 'urlloc') {
         $lokasiUrlState['restore'] = lokasiRestoreScan($projectRoot, $assetsRoot, $selectedId, $lokasiUrlState['db']);
         lokasiMemorySync($assetsRoot, $lokasiUrlState['db']);
     } catch (Throwable) { $lokasiUrlState['restore'] = null; }
+}
+$hcalState = null;   // tab "Kalibrasi Hotspot": mesin ukur berjalan di browser (assets/js/hotspot-calibration*.js); di sini hanya alamat tur, jurnal urungkan, dan csrf (includes/hotspot-calibration.php)
+if ($activeTab === 'kalibrasi' && isset($detectedTours[$selectedId])) {
+    require_once __DIR__ . '/includes/hotspot-calibration.php';
+    $hcalTourDir = $projectRoot . '/' . str_replace('/', DIRECTORY_SEPARATOR, (string) $detectedTours[$selectedId]['path']);
+    $hcalRecord = is_array($database[$selectedId] ?? null) ? $database[$selectedId] : [];
+    $hcalState = [
+        'location' => $selectedId,
+        'name' => trim((string) ($hcalRecord['bahasa']['id']['lokasi'] ?? '')) ?: humanizeLocationId($selectedId),
+        'tourBase' => projectUrl(trim((string) $detectedTours[$selectedId]['path'], '/') . '/'),
+        'undo' => hcJournalSummary($hcalTourDir),
+        'csrf' => (string) ($_SESSION['cms_csrf'] ?? ''),
+    ];
 }
 $videoOnlineBases = [];   // tab Video: alamat tur online (dari Daftar URL) sebagai cadangan pratinjau bila file video tidak ada di komputer ini (file besar tidak ikut git)
 if ($activeTab === 'video') {

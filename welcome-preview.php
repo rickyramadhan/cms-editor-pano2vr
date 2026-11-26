@@ -104,7 +104,7 @@ $e = static fn(string $value): string => htmlspecialchars($value, ENT_QUOTES, 'U
     .wp-bg { position: fixed; inset: 0; background: <?= $background !== '' ? 'url("' . $e($background) . '") center / cover no-repeat' : 'linear-gradient(160deg,#27425f,#0e1b2b)' ?>; }
     .wp-bg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(5,12,22,.12), rgba(5,12,22,.38)); }
     /* pratinjau: kartu selalu tampil, tanpa animasi masuk, dan tanpa bendera bahasa */
-    .ob-wel { opacity: 1 !important; visibility: visible !important; transform: translate(-50%, 0) !important; transition: none !important; }
+    .ob-wel { opacity: 1 !important; visibility: visible !important; transform: translate(-50%, 0) scale(var(--wel-k, 1)) !important; transform-origin: 50% 100% !important; transition: none !important; }   /* --wel-k: skala desktop dari tema (kartu 80%) */
     .ob-wel *, .ob-wel::before, .ob-wel::after { animation: none !important; }
     .ob-wel__lang { display: none !important; }
     .ob-wel.ob-wel { bottom: 62px !important; }   /* ruang untuk ornamen di bawah kartu (di tur nyata ada tinggi layar) */

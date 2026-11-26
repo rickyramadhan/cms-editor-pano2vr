@@ -139,8 +139,9 @@ function panoMemoryPlan(DOMDocument $dom, array $data): array
         $element = $xpath->query('//panorama[@id=' . panoMemoryLiteral($nodeId) . ']//hotspot[@id=' . panoMemoryLiteral($hotspotId) . ']')?->item(0);
         if (!$element instanceof DOMElement) continue;
         foreach ((array) $fields as $field => $value) {
-            if (!in_array($field, ['title', 'url', 'target'], true)) continue;
-            if ($element->getAttribute($field) !== (string) $value) $plan['hotspots'][] = ['node' => $nodeId, 'hotspot' => $hotspotId, 'field' => (string) $field, 'from' => $element->getAttribute($field), 'value' => (string) $value];
+            if (!in_array($field, ['title', 'url', 'target', 'pan', 'tilt'], true)) continue;   // pan/tilt: posisi hasil Kalibrasi Hotspot (includes/hotspot-calibration.php)
+            $differs = in_array($field, ['pan', 'tilt'], true) ? abs((float) $element->getAttribute($field) - (float) $value) > 0.0005 : $element->getAttribute($field) !== (string) $value;
+            if ($differs) $plan['hotspots'][] = ['node' => $nodeId, 'hotspot' => $hotspotId, 'field' => (string) $field, 'from' => $element->getAttribute($field), 'value' => (string) $value];
         }
     }
     // panorama awal tur (tour@start + arah pandang awalnya): export ulang dari Pano2VR mengembalikannya ke pengaturan Pano2VR
