@@ -17,8 +17,8 @@
     editor.hidden = pane !== 'editor';
     konten.hidden = pane !== 'konten';
     section?.classList.toggle('is-konten', pane === 'konten');
-    // panorama editor menghitung ukuran saat tampil lagi
-    if (pane === 'editor') requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+    // editor panorama menghitung ulang ukuran dan kunci gulir halaman (lepas di Daftar Konten, terpasang lagi di Editor)
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
   };
   tabs.forEach((t, i) => {
     t.addEventListener('click', () => show(t.dataset.oiPane));

@@ -1077,7 +1077,7 @@ try {
 
 $selectedId = cleanKey((string) ($_GET['lokasi'] ?? array_key_first($detectedTours) ?? array_key_first($database) ?? ''));
 $requestedTab = (string) ($_GET['tab'] ?? 'dashboard');
-$activeTab = in_array($requestedTab, ['dashboard', 'inventaris', 'translations', 'lokasi', 'languages', 'custom', 'skin', 'object', 'voice', 'video', 'video360', 'audit', 'smart', 'aihub', 'inspector', 'loading'], true) ? $requestedTab : 'dashboard';
+$activeTab = in_array($requestedTab, ['dashboard', 'inventaris', 'translations', 'lokasi', 'languages', 'custom', 'skin', 'object', 'urlloc', 'voice', 'video', 'video360', 'audit', 'smart', 'aihub', 'inspector', 'loading'], true) ? $requestedTab : 'dashboard';
 $smartHubState = null;
 if ($activeTab === 'smart') {
     // Smart Hub: integrasi Smart Kit untuk wilayah project aktif (lihat smart-hub.php)
@@ -1153,6 +1153,23 @@ if ($activeTab === 'object' && isset($detectedTours[$selectedId]) && $selectedWe
 }
 $oiConfigContent = is_file($assetsRoot . '/oi-config.js') ? (string) file_get_contents($assetsRoot . '/oi-config.js') : '';
 $oiPreviewBaseUrl = projectUrl('webview/objinfo/');   // halaman isi Objek Info: <alamat>/<info-id>?lang=id
+$lokasiUrlState = null;   // tab "URL Lokasi": daftar URL lokasi + hotspot lokasi terdekat di panorama drone (includes/lokasi-url.php)
+if ($activeTab === 'urlloc') {
+    require_once __DIR__ . '/includes/lokasi-url.php';
+    $lokasiRecord = is_array($database[$selectedId] ?? null) ? $database[$selectedId] : [];
+    $lokasiUrlState = [
+        'db' => lokasiDbRead(lokasiDbFile($assetsRoot)),
+        'tours' => array_values(array_map('strval', array_keys($detectedTours))),   // id lokasi yang punya tur lokal
+        'selected' => $selectedId,
+        'tourBase' => isset($detectedTours[$selectedId]) ? projectUrl(trim((string) $detectedTours[$selectedId]['path'], '/') . '/') : '',
+        'drone' => ['node' => (string) ($lokasiRecord['drone'] ?? ''), 'pan' => (float) ($lokasiRecord['drone_pan'] ?? 0), 'tilt' => (float) ($lokasiRecord['drone_tilt'] ?? 0), 'fov' => (float) ($lokasiRecord['drone_fov'] ?? 0)],
+        'csrf' => (string) ($_SESSION['cms_csrf'] ?? ''),
+    ];
+    try {   // tombol "Load Titik URL": periksa yang hilang, lalu ingat keadaan file sekarang sebagai salinan pemulihan (tidak pernah menimpa salinan yang lebih lengkap)
+        $lokasiUrlState['restore'] = lokasiRestoreScan($projectRoot, $assetsRoot, $selectedId, $lokasiUrlState['db']);
+        lokasiMemorySync($assetsRoot, $lokasiUrlState['db']);
+    } catch (Throwable) { $lokasiUrlState['restore'] = null; }
+}
 $auditId = $selectedId;
 $auditResult = $activeTab === 'audit' && isset($detectedTours[$auditId]) ? auditTour($projectRoot, $detectedTours[$auditId]) : null;
 $voiceAudioAvailability = [];

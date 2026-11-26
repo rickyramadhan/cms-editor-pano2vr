@@ -1478,3 +1478,82 @@ body.oi-preview-open { overflow:hidden; }
 .okc-unplaced > .okc-lead, .okc-unplaced > .okc-list { margin:0 16px 16px; }
 .okc-unplaced > .okc-lead { margin-bottom:12px; }
 @media (max-width:640px) { .okc-item { grid-template-columns:minmax(0,1fr); } .okc-thumb { width:100%;height:160px; } .okc-list { grid-template-columns:minmax(0,1fr); } }
+
+/* ---- Tab "URL Lokasi": daftar URL + hotspot lokasi terdekat di panorama drone (views/lokasi-url-pane.php, assets/js/lokasi-url.js) ---- */
+/* kepala tab: judul + deskripsi boleh membungkus, tombol aksi tidak menyusut dan teksnya satu baris */
+.lku .section-heading > div:first-child { min-width:0;flex:1 1 320px; }
+.lku .object-head-actions { flex:none;align-items:center; }
+.lku .object-head-actions .oi-load-btn,.lku .object-head-actions .object-save { flex:none;white-space:nowrap; }
+.lku .object-head-actions .object-save:disabled:not(.is-saving) { cursor:not-allowed;box-shadow:none; }
+.lku .object-head-actions .object-save:disabled kbd { opacity:.6; }
+.lku-hs { display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start; }
+.lku-stage { position:relative;height:clamp(420px,calc(100vh - 340px),720px);border:1px solid var(--ui-line);border-radius:var(--ui-radius);overflow:hidden;background:#0d1b2a; }
+.lku-pano { position:absolute;inset:0;--lk:1;cursor:grab; }
+.lku-pano:active { cursor:grabbing; }
+.lku-loading,.lku-empty { position:absolute;inset:0;display:grid;place-items:center;padding:24px;text-align:center;color:#e8eef7;font-size:14px;line-height:1.55;background:rgba(13,27,42,.78); }
+.lku-empty { background:var(--ui-bg);color:var(--ui-muted); }
+.lku-loading[hidden],.lku-empty[hidden],.lku-pano[hidden] { display:none; }
+.lku-hint { margin:10px 2px 0;color:var(--ui-muted);font-size:13px; }
+.lku-hs-root { position:absolute;left:0;top:0;width:0;height:0; }
+.lku-hs-root .bdg-loc > * { pointer-events:auto;cursor:grab; }
+.lku-hs-root.is-off { opacity:.4; }
+.lku-hs-root.is-selected .bdg-loc__ph { box-shadow:0 0 0 3px #ffd34d,0 10px 26px rgba(0,0,0,.3); }
+.lku-pin-no { position:absolute;left:calc(-30px * var(--lk));top:calc(-8px * var(--lk));min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#ffd34d;color:#3b2a00;font:800 11px/18px system-ui,sans-serif;text-align:center;pointer-events:none !important; }
+.lku-side { display:flex;flex-direction:column;gap:12px;min-width:0; }
+.lku-side h3 { margin:0;font-size:15px; }
+.lku-links { display:flex;flex-direction:column;gap:10px;max-height:calc(clamp(420px,calc(100vh - 340px),720px) - 40px);overflow:auto;padding-right:2px; }
+.lku-link { padding:12px;border:1px solid var(--ui-line);border-radius:var(--ui-radius);background:var(--ui-surface);cursor:pointer;transition:border-color .15s,box-shadow .15s; }
+.lku-link:hover { border-color:#c9ced7; }
+.lku-link.is-selected { border-color:var(--ui-accent);box-shadow:0 0 0 3px var(--ui-accent-soft); }
+.lku-link.is-hidden { opacity:.62; }
+.lku-link header { display:flex;align-items:center;gap:8px;min-width:0; }
+.lku-link header strong { flex:1;min-width:0;font-size:14px;line-height:1.3; }
+.lku-badge { flex:none;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#ffd34d;color:#3b2a00;font-size:12px;font-weight:800; }
+.lku-icon,.lku-text { border:0;background:none;color:var(--ui-accent-strong);font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;padding:4px 6px;border-radius:8px; }
+.lku-icon:hover,.lku-text:hover:not([disabled]) { background:var(--ui-accent-soft); }
+.lku-text[disabled] { color:var(--ui-muted);opacity:.55;cursor:default; }
+.lku-fields { display:grid;grid-template-columns:90px 1fr;gap:8px;margin:10px 0 8px; }
+.lku label > span,.lku-fields label > span { display:block;margin:0 0 3px;color:var(--ui-muted);font-size:11.5px;font-weight:700; }
+.lku input[type=text],.lku input[type=number],.lku input:not([type]),.lku input[type=search] { width:100%;box-sizing:border-box;min-height:36px;padding:0 10px;border:1px solid var(--ui-line);border-radius:10px;background:var(--ui-surface);color:var(--ui-text);font:inherit;font-size:13.5px; }
+.lku input:focus-visible { outline:2px solid var(--ui-accent);outline-offset:1px; }
+.lku-tr { display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:2px 0 6px; }
+.lku-tr-label { margin-right:2px;color:var(--ui-muted);font-size:11.5px;font-weight:700; }
+.lku-tr-new { color:#8a5200;font-size:11.5px; }
+.lku-chip { display:inline-flex;align-items:center;min-height:22px;padding:0 9px;border-radius:11px;background:var(--ui-bg);color:var(--ui-muted);font-size:11.5px;font-weight:800;white-space:nowrap; }
+.lku-chip.is-ok { background:var(--success-soft);color:var(--success); }
+.lku-chip.is-miss,.lku-chip.is-warn { background:#fff4dc;color:#8a5200; }
+.lku-chip.is-here { background:var(--ui-accent-soft);color:var(--ui-accent-strong); }
+.lku-foot { display:flex;align-items:center;justify-content:space-between;gap:8px; }
+.lku-pos { color:var(--ui-muted);font-size:12px; }
+.lku-note { margin:0;color:var(--ui-muted);font-size:12.5px;line-height:1.5; }
+.lku-none { margin:8px 0;color:var(--ui-muted);font-size:13.5px;line-height:1.5; }
+.lku-bar { display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin:0 0 12px; }
+.lku-bar input[type=search] { flex:1 1 260px;max-width:420px; }
+.lku-table { border:1px solid var(--ui-line);border-radius:var(--ui-radius);overflow:hidden;background:var(--ui-surface); }
+.lku-rows { display:flex;flex-direction:column; }
+.lku-filters { display:inline-flex;gap:4px;padding:4px;border:1px solid var(--ui-line);border-radius:12px;background:var(--ui-bg); }
+.lku-filters button { min-height:32px;padding:0 14px;border:0;border-radius:8px;background:transparent;color:var(--ui-muted);font:inherit;font-size:13px;font-weight:700;cursor:pointer; }
+.lku-filters button:hover { color:var(--ui-text); }
+.lku-filters button.active { background:var(--ui-surface);color:var(--ui-accent-strong);box-shadow:0 1px 3px rgba(16,24,40,.12); }
+.lku-row-head { align-items:center;padding-top:9px;padding-bottom:9px;border-top:0;background:var(--ui-bg);color:var(--ui-muted);font-size:11.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase; }
+.lku-row-head span:first-child { text-align:right; }
+.lku-row label > span { position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap; }
+.lku-row { display:grid;grid-template-columns:34px minmax(180px,1fr) minmax(220px,1.3fr) minmax(150px,auto);gap:12px;align-items:center;padding:10px 14px;border-top:1px solid var(--ui-line); }
+.lku-row:first-child { border-top:0; }
+.lku-row.is-current { background:var(--ui-accent-soft); }
+.lku-no { color:var(--ui-muted);font-size:12px;font-weight:800;text-align:right; }
+.lku-chips { display:flex;flex-wrap:wrap;gap:6px;align-self:center;justify-content:flex-end; }
+@media (max-width:1100px) { .lku-hs { grid-template-columns:minmax(0,1fr); } .lku-links { max-height:none; } }
+@media (max-width:760px) { .lku-row-head { display:none; } .lku-row label > span { position:static;width:auto;height:auto;clip:auto; } .lku-row { grid-template-columns:minmax(0,1fr); } .lku-no { text-align:left; } .lku-chips { justify-content:flex-start; } }
+
+/* Load Titik URL: daftar pemeriksaan di dialog (memakai kelas .oi-load-* dari Load Objek Info) */
+.lku-chk-list { display:grid;gap:8px;margin:0;padding:0;list-style:none; }
+.lku-chk { display:grid;grid-template-columns:22px minmax(0,1fr);gap:12px;padding:11px 14px;border:1px solid var(--ui-line);border-radius:12px;background:#fff; }
+.lku-chk.is-miss { border-color:#e3c27a;background:#fffaf0; }
+.lku-chk.is-bad { border-color:#f0c5c1;background:#fdf6f5; }
+.lku-chk-dot { width:18px;height:18px;margin-top:2px;border-radius:50%;background:var(--success);box-shadow:inset 0 0 0 4px #fff,0 0 0 2px var(--success); }
+.lku-chk.is-miss .lku-chk-dot { background:#b45309;box-shadow:inset 0 0 0 4px #fff,0 0 0 2px #b45309; }
+.lku-chk.is-bad .lku-chk-dot { background:var(--danger);box-shadow:inset 0 0 0 4px #fff,0 0 0 2px var(--danger); }
+.lku-chk.is-info .lku-chk-dot { background:#98a2b3;box-shadow:inset 0 0 0 4px #fff,0 0 0 2px #98a2b3; }
+.lku-chk b { display:block;font-size:14.5px; }
+.lku-chk span { display:block;margin-top:2px;color:var(--ui-muted);font-size:13px;line-height:1.5; }

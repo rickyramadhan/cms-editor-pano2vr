@@ -49,7 +49,7 @@
             <a class="<?= $activeTab === 'smart' ? 'active' : '' ?>" href="?tab=smart"><span aria-hidden="true"><i data-lucide="blocks"></i></span>Smart Hub</a>
             <a class="<?= $activeTab === 'aihub' ? 'active' : '' ?>" href="?tab=aihub"><span aria-hidden="true"><i data-lucide="bot"></i></span>AI Guide Hub</a>
             <a class="<?= $activeTab === 'inspector' ? 'active' : '' ?>" href="?tab=inspector"><span aria-hidden="true"><i data-lucide="scan-search"></i></span>Inspector</a>
-            <?php if ($cmsRuntimeReady): ?><a class="<?= in_array($activeTab, ['lokasi', 'voice', 'video', 'audit', 'object', 'skin'], true) ? 'active' : '' ?>" href="?tab=lokasi&lokasi=<?= e($selectedId) ?>"><span aria-hidden="true"><i data-lucide="settings-2"></i></span>Configuration</a><?php endif; ?>
+            <?php if ($cmsRuntimeReady): ?><a class="<?= in_array($activeTab, ['lokasi', 'voice', 'video', 'audit', 'object', 'urlloc', 'skin'], true) ? 'active' : '' ?>" href="?tab=lokasi&lokasi=<?= e($selectedId) ?>"><span aria-hidden="true"><i data-lucide="settings-2"></i></span>Configuration</a><?php endif; ?>
             <span class="cms-nav-label">Media &amp; Tools</span>
             <?php if ($cmsRuntimeReady): ?><a class="<?= in_array($activeTab, ['languages', 'translations'], true) ? 'active' : '' ?>" href="?tab=languages"><span aria-hidden="true"><i data-lucide="languages"></i></span>Bahasa &amp; Terjemahan</a><?php endif; ?>
             <?php if ($cmsRuntimeReady): ?><a class="<?= $activeTab === 'video360' ? 'active' : '' ?>" href="?tab=video360"><span aria-hidden="true"><i data-lucide="circle-play"></i></span>Video 360</a><?php endif; ?>
@@ -61,7 +61,7 @@
     </aside>
     <div class="cms-navigation-scrim" id="cmsNavigationScrim" hidden></div>
     <main class="shell">
-    <?php $tabLabels = ['dashboard'=>'Dashboard','languages'=>'Manajemen Bahasa','translations'=>'Translation Center','lokasi'=>'Data Lokasi','voice'=>'Voice Over','video'=>'Video','audit'=>'Audit','object'=>'Object Informasi','video360'=>'Video 360','inventaris'=>'Inventaris OI & Video 360','custom'=>'Custom CSS','skin'=>'Template Skin','smart'=>'Smart Hub','aihub'=>'AI Guide Hub','inspector'=>'Inspector','loading'=>'Optimasi Loading']; $pageLabel = $tabLabels[$activeTab] ?? 'Data Lokasi'; ?>
+    <?php $tabLabels = ['dashboard'=>'Dashboard','languages'=>'Manajemen Bahasa','translations'=>'Translation Center','lokasi'=>'Data Lokasi','voice'=>'Voice Over','video'=>'Video','audit'=>'Audit','object'=>'Object Informasi','urlloc'=>'URL Lokasi','video360'=>'Video 360','inventaris'=>'Inventaris OI & Video 360','custom'=>'Custom CSS','skin'=>'Template Skin','smart'=>'Smart Hub','aihub'=>'AI Guide Hub','inspector'=>'Inspector','loading'=>'Optimasi Loading']; $pageLabel = $tabLabels[$activeTab] ?? 'Data Lokasi'; ?>
     <header class="topbar">
         <button type="button" class="cms-menu-button" id="openCmsNavigation" aria-controls="cmsNavigation" aria-expanded="false" aria-label="Buka menu"><i data-lucide="menu" aria-hidden="true"></i></button>
         <div class="cms-page-heading"><nav class="cms-breadcrumbs" aria-label="Breadcrumb"><a href="?tab=dashboard">CMS Virtual Tour</a><span>/</span><span aria-current="page"><?= e($pageLabel) ?></span></nav><h1><?= e($pageLabel) ?></h1><small><?= e($activeProject['name']) ?></small></div>
@@ -146,6 +146,7 @@
                 <a<?= $tabTopic('video') ?> class="<?= $activeTab === 'video' ? 'active' : '' ?> <?= isset($detectedTours[$selectedId]) ? '' : 'disabled' ?>" href="?tab=video&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'video' ? 'aria-current="page"' : '' ?>><i data-lucide="video" aria-hidden="true"></i><span><small>Media</small>Video</span><?= $tabFlag('video') ?></a>
                 <a<?= $tabTopic('audit') ?> class="<?= $activeTab === 'audit' ? 'active' : '' ?> <?= isset($detectedTours[$selectedId]) ? '' : 'disabled' ?>" href="?tab=audit&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'audit' ? 'aria-current="page"' : '' ?>><i data-lucide="clipboard-check" aria-hidden="true"></i><span><small>Peralatan</small>Audit</span><?= $tabFlag('audit') ?></a>
                 <a<?= $tabTopic('object') ?> class="<?= $activeTab === 'object' ? 'active' : '' ?> <?= isset($database[$selectedId]) ? '' : 'disabled' ?>" href="?tab=object&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'object' ? 'aria-current="page"' : '' ?>><i data-lucide="scan-search" aria-hidden="true"></i><span><small>Konten</small>Object Informasi</span><?= $tabFlag('object') ?></a>
+                <a class="<?= $activeTab === 'urlloc' ? 'active' : '' ?>" href="?tab=urlloc&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'urlloc' ? 'aria-current="page"' : '' ?>><i data-lucide="map-pinned" aria-hidden="true"></i><span><small>Konten</small>URL Lokasi</span></a>
                 <a class="location-tab-project <?= $activeTab === 'skin' ? 'active' : '' ?>" href="?tab=skin&amp;lokasi=<?= e($selectedId) ?>" <?= $activeTab === 'skin' ? 'aria-current="page"' : '' ?>><i data-lucide="panel-top" aria-hidden="true"></i><span><small>Project</small>Template Skin</span></a>
             </nav>
             <?php if ($selectedId !== 'baru' && isset($detectedTours[$selectedId])): ?><a class="location-local-tour" href="<?= e(projectUrl(trim($detectedTours[$selectedId]['path'], '/') . '/')) ?>" target="_blank" rel="noopener"><i data-lucide="external-link" aria-hidden="true"></i><span>Kunjungi tur lokal</span></a><?php endif; ?>
@@ -791,6 +792,7 @@
             <div class="voice-progress" id="videoProgress" data-cms-toast>Pilih satu atau dua video (WebM atau MP4) untuk diunggah.</div>
             <div class="actions"><button type="button" class="save" id="uploadVideo">Upload & Timpa Video</button></div>
         </section>
+    <?php elseif ($activeTab === 'urlloc'): require __DIR__ . '/lokasi-url-pane.php'; ?>
     <?php elseif ($activeTab === 'inventaris'): $jenis = ($_GET['jenis'] ?? '') === 'video360' ? 'video360' : 'oi';
         $oiOffNote = 'Tidak aktif: tidak dipakai di tur, hanya data pendukung untuk AI Guide Node.';
         $oiActiveTotal = count(array_filter($inventoryObjects, static fn(array $r): bool => !empty($r['active']))); $oiOffTotal = count($inventoryObjects) - $oiActiveTotal;
@@ -3059,6 +3061,7 @@ if (objectList) {
             if (fitting || !stage) return;
             const root = document.documentElement;
             if (innerWidth < 1100) { stage.style.height = ''; root.style.overflowY = ''; return; }
+            if (section.classList.contains('is-konten')) { root.style.overflowY = ''; return; }   // Daftar Konten: halaman biasa, boleh digulir
             const px = value => parseFloat(value) || 0, sectionStyle = getComputedStyle(section), shellStyle = shell ? getComputedStyle(shell) : null;
             const tail = px(sectionStyle.marginBottom) + (shellStyle ? px(shellStyle.paddingBottom) + px(shellStyle.marginBottom) : 0);
             const before = stage.offsetHeight, MIN = 380;
