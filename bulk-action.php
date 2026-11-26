@@ -82,6 +82,23 @@ function translateText(string $text, string $target): string
     return $translated;
 }
 
+/** Terjemahkan, tetapi link di dalam teks dijaga persis sama (diganti token sebelum dikirim, dikembalikan sesudahnya). */
+function translateKeepingLinks(string $text, string $target): string
+{
+    $pattern = '~(?:https?://|www\.)[^\s"\'<>)\]]+|(?:mailto|tel):[^\s"\'<>]+~iu';
+    if (!preg_match_all($pattern, $text, $found)) return translateText($text, $target);
+    $urls = $found[0];
+    if (trim((string) preg_replace($pattern, '', $text)) === '') return $text;
+    $masked = $text;
+    foreach ($urls as $index => $url) $masked = preg_replace('~' . preg_quote($url, '~') . '~', 'XURL' . $index . 'X', $masked, 1);
+    $translated = translateText($masked, $target);
+    foreach ($urls as $index => $url) {
+        $translated = preg_replace_callback('~XURL\s*' . $index . '\s*X~iu', static fn(array $m): string => $url, $translated, -1, $replaced);
+        if ($replaced !== 1) throw new RuntimeException('Link berubah saat diterjemahkan; teks dilewati.');
+    }
+    return $translated;
+}
+
 function copyDirectory(string $source, string $destination): void
 {
     if (!is_dir($source)) return;
@@ -150,7 +167,7 @@ try {
                     $target = (string) $settings['translate'];
                     foreach (['lokasi', 'welcomeText'] as $field) {
                         $text = trim((string) ($source[$field] ?? ''));
-                        if ($text !== '') $database[$id]['bahasa'][$language][$field] = translateText($text, $target);
+                        if ($text !== '') $database[$id]['bahasa'][$language][$field] = translateKeepingLinks($text, $target);
                     }
                 }
                 $results[] = ['id' => $id, 'success' => true, 'location' => $database[$id]];
