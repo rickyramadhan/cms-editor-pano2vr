@@ -375,5 +375,5 @@
     return !!focus;
   }
 
-  window.__HSCAL = { version: 1, KINDS, run, reset, show, prepare, _collect: collect, _look: look };   // _collect/_look: kait uji
+  window.__HSCAL = { version: 1, KINDS, run, reset, show, prepare, _collect: collect, _look: look, _visibleRects: visibleRects, _blockNav: blockNav };   // _collect/_look: kait uji; _visibleRects/_blockNav: dipakai agen editor hotspot langsung (hotspot-live-agent.js)
 })();

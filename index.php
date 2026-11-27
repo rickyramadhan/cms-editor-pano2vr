@@ -1190,6 +1190,25 @@ if ($activeTab === 'video') {
 }
 $auditId = $selectedId;
 $auditResult = $activeTab === 'audit' && isset($detectedTours[$auditId]) ? auditTour($projectRoot, $detectedTours[$auditId]) : null;
+$hotspotLiveState = null;   // Audit › Hotspot › "Edit di panorama": editor langsung di tur asli (assets/js/hotspot-live-editor.js); di sini hanya alamat tur, daftar panorama, jenis hotspot yang bisa ditambah, dan csrf
+if ($auditResult !== null && $selectedPanoramas !== []) {
+    $hlSkins = [];
+    foreach ($auditResult['hotspots'] as $hlHotspot) {   // jenis = skin hotspot yang sudah ada; hotspot baru disalin dari satu contoh per skin
+        $hlSkin = trim((string) ($hlHotspot['skinId'] ?? ''));
+        $hlKey = strtolower($hlSkin);
+        if ($hlSkin === '' || str_contains($hlKey, '360_video_experience') || str_starts_with($hlKey, 'box_ui_location')) continue;   // hanya hotspot ke-panorama
+        if (!isset($hlSkins[$hlSkin]) || ($hlSkins[$hlSkin]['hasUrl'] === false && trim((string) $hlHotspot['url']) !== '')) $hlSkins[$hlSkin] = ['skin' => $hlSkin, 'node' => (string) $hlHotspot['nodeId'], 'id' => (string) $hlHotspot['id'], 'hasUrl' => trim((string) $hlHotspot['url']) !== ''];
+    }
+    $hotspotLiveState = [
+        'location' => $auditId,
+        'tourBase' => projectUrl(trim((string) $detectedTours[$auditId]['path'], '/') . '/'),
+        'csrf' => (string) ($_SESSION['cms_csrf'] ?? ''),
+        'engineVer' => (string) @filemtime(__DIR__ . '/assets/js/hotspot-calibration-engine.js'),
+        'agentVer' => (string) @filemtime(__DIR__ . '/assets/js/hotspot-live-agent.js'),
+        'panoramas' => array_map(static fn(array $p): array => ['nodeId' => $p['nodeId'], 'value' => $p['value'], 'name' => $p['title'] !== '' ? $p['title'] : 'Panorama ' . $p['nodeId'], 'thumb' => $p['thumbnail']], $selectedPanoramas),
+        'skins' => array_values(array_map(static fn(array $s): array => ['skin' => $s['skin'], 'node' => $s['node'], 'id' => $s['id']], $hlSkins)),
+    ];
+}
 $voiceAudioAvailability = [];
 foreach ($languageRegistry as $code => $language) {
     $fileCode = $language['audio'];
